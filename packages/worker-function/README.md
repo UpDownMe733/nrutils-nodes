@@ -15,7 +15,7 @@ wait. The worker function node runs the code in its own thread, so Node-RED keep
 - Worker function nodes that are wired together send messages thread to thread, not through Node-RED.
 - Big buffers can move to the thread with no copy.
 
-![The same 5 seconds of heavy code: in a core Function node the heartbeat stops, in a worker function node it keeps going](https://raw.githubusercontent.com/UpDownMe733/nrutils-nodes/main/packages/worker-function/images/demo.gif)
+![The edit dialog of the worker function node, with code that counts primes in the worker thread](https://raw.githubusercontent.com/UpDownMe733/nrutils-nodes/main/packages/worker-function/images/editor.png)
 
 ## Contents
 
