@@ -1,0 +1,7 @@
+{
+	"name": "nrutils-nodes-demo",
+	"private": true,
+	"dependencies": {
+		"@nrutils/node-red-worker-function": "file:../packages/worker-function"
+	}
+}

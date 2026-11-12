@@ -1,0 +1,348 @@
+[
+    {
+        "id": "wfdemo.tab",
+        "type": "tab",
+        "label": "worker function demo",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "wfdemo.c1",
+        "type": "comment",
+        "z": "wfdemo.tab",
+        "name": "1. Heavy CPU work in a worker thread",
+        "info": "Click the inject node. The worker function node counts the primes below 10 000 000 in its own thread.\nThe status shows the progress. The heartbeat in the Debug sidebar does not stop, because the event loop of Node-RED is free.",
+        "x": 200,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "wfdemo.i1",
+        "type": "inject",
+        "z": "wfdemo.tab",
+        "name": "10 000 000",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "10000000",
+        "payloadType": "num",
+        "x": 150,
+        "y": 100,
+        "wires": [
+            [
+                "wfdemo.primes"
+            ]
+        ]
+    },
+    {
+        "id": "wfdemo.primes",
+        "type": "worker-function",
+        "z": "wfdemo.tab",
+        "name": "count primes",
+        "func": "// Counts the primes below msg.payload. The loop runs in the worker thread,\n// so the heartbeat in the Debug sidebar does not stop.\nworker.parentPorts.subscribe('input', (msg) => {\n    const limit = Number(msg.payload) || 0;\n    const started = Date.now();\n    let count = 0;\n    for (let n = 2; n < limit; n++) {\n        let prime = true;\n        for (let d = 2; d * d <= n; d++) {\n            if (n % d === 0) { prime = false; break; }\n        }\n        if (prime) count++;\n        if (n % 500000 === 0) {\n            worker.parentPorts.publish('status', { fill: 'yellow', shape: 'ring', text: Math.round(100 * n / limit) + ' %' });\n        }\n    }\n    worker.parentPorts.publish('status', { fill: 'green', shape: 'dot', text: count + ' primes' });\n    msg.payload = { limit, count, ms: Date.now() - started };\n    worker.parentPorts.publish('send', msg);\n});\n",
+        "outputs": 1,
+        "libs": [],
+        "x": 360,
+        "y": 100,
+        "wires": [
+            [
+                "wfdemo.d1"
+            ]
+        ],
+        "noerr": 0,
+        "transfer": false
+    },
+    {
+        "id": "wfdemo.d1",
+        "type": "debug",
+        "z": "wfdemo.tab",
+        "name": "primes result",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 580,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "wfdemo.i2",
+        "type": "inject",
+        "z": "wfdemo.tab",
+        "name": "each 1 s",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "1",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 160,
+        "wires": [
+            [
+                "wfdemo.d2"
+            ]
+        ]
+    },
+    {
+        "id": "wfdemo.d2",
+        "type": "debug",
+        "z": "wfdemo.tab",
+        "name": "heartbeat",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 360,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "wfdemo.c2",
+        "type": "comment",
+        "z": "wfdemo.tab",
+        "name": "2. Thread to thread: stage A to stage B",
+        "info": "Stage A gets the flow message and publishes it on worker.outputPorts.\nStage B gets it on worker.inputPorts, adds a field and publishes send. The message goes from thread to thread, not through Node-RED.",
+        "x": 200,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "wfdemo.i3",
+        "type": "inject",
+        "z": "wfdemo.tab",
+        "name": "timestamp",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 300,
+        "wires": [
+            [
+                "wfdemo.stageA"
+            ]
+        ]
+    },
+    {
+        "id": "wfdemo.stageA",
+        "type": "worker-function",
+        "z": "wfdemo.tab",
+        "name": "stage A",
+        "func": "// Takes each flow message and sends it to the wired worker nodes, thread to thread.\n// The message does not go through Node-RED, so this node has no output to the flow.\nconst { threadId } = require('worker_threads');\n\nworker.parentPorts.subscribe('input', (msg) => {\n    msg.stageA = { thread: threadId };\n    worker.outputPorts.publish('input', msg);\n});\n",
+        "outputs": 1,
+        "libs": [],
+        "x": 340,
+        "y": 300,
+        "wires": [
+            [
+                "wfdemo.stageB"
+            ]
+        ],
+        "noerr": 0,
+        "transfer": false
+    },
+    {
+        "id": "wfdemo.stageB",
+        "type": "worker-function",
+        "z": "wfdemo.tab",
+        "name": "stage B",
+        "func": "// Gets each message from stage A, thread to thread, adds a field and sends it to the flow.\nconst { threadId } = require('worker_threads');\n\nworker.inputPorts.subscribe('input', (msg, senderTrace) => {\n    msg.stageB = { from: senderTrace.nodeId, thread: threadId };\n    worker.parentPorts.publish('send', msg);\n});\n",
+        "outputs": 1,
+        "libs": [],
+        "x": 500,
+        "y": 300,
+        "wires": [
+            [
+                "wfdemo.d3"
+            ]
+        ],
+        "noerr": 0,
+        "transfer": false
+    },
+    {
+        "id": "wfdemo.d3",
+        "type": "debug",
+        "z": "wfdemo.tab",
+        "name": "stage B result",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 690,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "wfdemo.c3",
+        "type": "comment",
+        "z": "wfdemo.tab",
+        "name": "3. A throw in a handler goes to a Catch node",
+        "x": 530,
+        "y": 420,
+        "wires": []
+    },
+    {
+        "id": "wfdemo.i4",
+        "type": "inject",
+        "z": "wfdemo.tab",
+        "name": "throw",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "once": false,
+        "payload": "1",
+        "payloadType": "num",
+        "x": 170,
+        "y": 460,
+        "wires": [
+            [
+                "wfdemo.thrower"
+            ]
+        ]
+    },
+    {
+        "id": "wfdemo.thrower",
+        "type": "worker-function",
+        "z": "wfdemo.tab",
+        "name": "throws in handler",
+        "func": "// A throw in a handler goes to node.error. A Catch node gets the error with the position\n// and the input message. The worker keeps running.\nworker.parentPorts.subscribe('input', (msg) => {\n    throw new Error('handler failed for payload ' + msg.payload);\n});\n",
+        "outputs": 0,
+        "noerr": 0,
+        "libs": [],
+        "x": 430,
+        "y": 460,
+        "wires": [],
+        "transfer": false
+    },
+    {
+        "id": "wfdemo.catch",
+        "type": "catch",
+        "z": "wfdemo.tab",
+        "name": "",
+        "scope": [
+            "wfdemo.thrower"
+        ],
+        "uncaught": false,
+        "x": 370,
+        "y": 520,
+        "wires": [
+            [
+                "wfdemo.d4"
+            ]
+        ]
+    },
+    {
+        "id": "wfdemo.d4",
+        "type": "debug",
+        "z": "wfdemo.tab",
+        "name": "caught error and msg",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "complete": "true",
+        "targetType": "msg",
+        "x": 620,
+        "y": 520,
+        "wires": []
+    },
+    {
+        "id": "wfdemo.c4",
+        "type": "comment",
+        "z": "wfdemo.tab",
+        "name": "4. Live status: busy NN %, then idle",
+        "x": 490,
+        "y": 620,
+        "wires": []
+    },
+    {
+        "id": "wfdemo.i5",
+        "type": "inject",
+        "z": "wfdemo.tab",
+        "name": "busy loop 5 s",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "once": false,
+        "payload": "1",
+        "payloadType": "num",
+        "x": 180,
+        "y": 660,
+        "wires": [
+            [
+                "wfdemo.busy"
+            ]
+        ]
+    },
+    {
+        "id": "wfdemo.busy",
+        "type": "worker-function",
+        "z": "wfdemo.tab",
+        "name": "busy loop",
+        "func": "// This node publishes no status, so the node shows busy NN %, then idle.\nworker.parentPorts.subscribe('input', async (msg) => {\n    const end = Date.now() + 5000;\n    while (Date.now() < end);    // a long loop: the worker is busy, Node-RED is not\n    msg.payload = 'busy loop done';\n    worker.parentPorts.publish('send', msg);\n});\n",
+        "outputs": 1,
+        "noerr": 0,
+        "libs": [],
+        "x": 400,
+        "y": 660,
+        "wires": [
+            [
+                "wfdemo.d5"
+            ]
+        ],
+        "transfer": false
+    },
+    {
+        "id": "wfdemo.d5",
+        "type": "debug",
+        "z": "wfdemo.tab",
+        "name": "busy result",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "x": 600,
+        "y": 660,
+        "wires": []
+    }
+]

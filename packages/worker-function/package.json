@@ -1,0 +1,45 @@
+{
+	"name": "@nrutils/node-red-worker-function",
+	"version": "0.1.0",
+	"description": "A Node-RED Function node that runs its code in a worker thread. Built on @nrutils/node-red-utils.",
+	"keywords": [
+		"node-red"
+	],
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/UpDownMe733/nrutils-nodes.git",
+		"directory": "packages/worker-function"
+	},
+	"homepage": "https://github.com/UpDownMe733/nrutils-nodes/tree/main/packages/worker-function#readme",
+	"bugs": {
+		"url": "https://github.com/UpDownMe733/nrutils-nodes/issues"
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"files": [
+		"*.js",
+		"*.html",
+		"icons/",
+		"examples/"
+	],
+	"scripts": {
+		"test": "node --test test/*.test.js"
+	},
+	"node-red": {
+		"version": ">=4.0.0",
+		"nodes": {
+			"worker-function": "worker-function.js"
+		}
+	},
+	"peerDependencies": {
+		"@nrutils/node-red-utils": "^0.2.0"
+	},
+	"devDependencies": {
+		"node-red": "^5.0.9"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}

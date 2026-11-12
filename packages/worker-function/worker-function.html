@@ -1,0 +1,624 @@
+<style>
+#worker-function-bar { display: flex; align-items: center; justify-content: space-between; height: 24px; margin-top: 4px; padding: 0 8px; overflow: hidden; white-space: nowrap; font-size: 12px; border: 1px solid var(--red-ui-secondary-border-color, #ccc); border-radius: 3px; background: var(--red-ui-secondary-background, #f3f3f3); }
+#worker-function-bar .worker-function-bar-errors { color: var(--red-ui-text-color-success, #3a8f3a); }
+#worker-function-bar.worker-function-bar-bad .worker-function-bar-errors a { color: var(--red-ui-text-color-error, #c00); font-weight: bold; }
+#worker-function-bar .worker-function-bar-port { margin-left: 10px; opacity: 0.4; }
+#worker-function-bar .worker-function-bar-port-on { opacity: 1; font-weight: bold; }
+#worker-function-bar .worker-function-bar-warn { margin-left: 12px; color: var(--red-ui-text-color-warning, #c80); }
+</style>
+<script type="text/javascript">
+(function () {
+    // The default code of a new node
+    const SKELETON = [
+        '// This code runs one time in the worker thread, when the node starts.',
+        '',
+        '// IN: a message from the flow (the node forwards each one)',
+        "worker.parentPorts.subscribe('input', async (msg) => {",
+        '    // Your code here. For example: msg.payload = msg.payload * 2;',
+        '',
+        '    // OUT: to the flow, through Node-RED',
+        "    worker.parentPorts.publish('send', msg);",
+        '});',
+        '',
+        '// IN: a message from an upstream worker node, thread to thread',
+        '// senderTrace and receiverTrace hold the node id and the port and wire numbers',
+        "worker.inputPorts.subscribe('input', (msg, senderTrace, receiverTrace, type) => {",
+        '',
+        '});',
+        '',
+        '// OUT: to the wired worker nodes, thread to thread',
+        "// worker.outputPorts.publish('input', msg);",
+        '',
+        '// OUT: to the node itself',
+        "// worker.parentPorts.publish('status', { fill: 'green', shape: 'dot', text: 'ok' });",
+        "// worker.parentPorts.publish('warn', 'text for the Debug sidebar');",
+        "// worker.parentPorts.publish('error', 'text for a Catch node');",
+        '',
+        '// STOP: the node closes',
+        "worker.parentPorts.subscribe('close', () => {",
+        '',
+        '});',
+        ''
+    ].join('\n');
+
+    // Type hints for the names that the code has in scope
+    const TYPES = [
+        'interface WorkerPortGroup {',
+        '    /** Send a message of this type to the other side. */',
+        '    publish(type: string, data?: any, transferList?: Transferable[]): void;',
+        '    /** Get the messages of this type from the other side. */',
+        '    subscribe(type: string, handler: (data: any, senderTrace: any, receiverTrace: any, type: string) => void): void;',
+        '}',
+        'interface WorkerStatus { fill?: string; shape?: string; text?: string }',
+        'interface WorkerParentPorts extends WorkerPortGroup {',
+        '    /** Send a message to the flow. An array sends one message to each output. */',
+        "    publish(type: 'send', data: object | null | Array<object | null | Array<object | null>>, transferList?: Transferable[]): void;",
+        '    /** Show a status on the node. */',
+        "    publish(type: 'status', data: WorkerStatus | string): void;",
+        '    /** Send a text to the Debug sidebar and the log. */',
+        "    publish(type: 'warn', data: string): void;",
+        '    /** Raise an error on the node. A Catch node gets it. */',
+        "    publish(type: 'error', data: string | { message: string; msg?: object }): void;",
+        '    /** Send a text to the log, at this log level. */',
+        "    publish(type: 'log' | 'debug' | 'trace', data: string): void;",
+        '    publish(type: string, data?: any, transferList?: Transferable[]): void;',
+        '}',
+        'interface WorkerContextStore {',
+        '    get(key: string | string[], store?: string): Promise<any>;',
+        '    set(key: string | string[], value: any, store?: string): Promise<void>;',
+        '    keys(store?: string): Promise<string[]>;',
+        '}',
+        'declare const worker: {',
+        '    /** To and from this node on the main thread. */',
+        '    parentPorts: WorkerParentPorts;',
+        '    /** From the upstream worker nodes. */',
+        '    inputPorts: WorkerPortGroup;',
+        '    /** To the downstream worker nodes. */',
+        '    outputPorts: WorkerPortGroup;',
+        '};',
+        'declare const node: {',
+        '    id: string;',
+        '    name: string;',
+        '    /** The path of the node through the subflows, for example "<flow id>/<node id>". */',
+        '    path: string;',
+        '    outputCount: number;',
+        '    /** Send msg to a link in node (name or id). Resolves with the msg of its link out node in return mode. */',
+        '    linkcall(target: string, msg: object, options?: { timeout?: number }): Promise<any>;',
+        '};',
+        'declare const flow: WorkerContextStore;',
+        'declare const global: WorkerContextStore;',
+        'declare const context: WorkerContextStore & { flow: WorkerContextStore; global: WorkerContextStore };',
+        'declare const env: { get(name: string): Promise<any> };',
+        "declare const util: typeof import('util');",
+        '/** The helpers of RED.util that work in a worker thread. */',
+        'declare const RED: { util: {',
+        '    cloneMessage<T>(msg: T): T;',
+        '    compareObjects(a: any, b: any): boolean;',
+        '    encodeObject(msg: object, opts?: object): object;',
+        '    ensureBuffer(o: any): Uint8Array;',
+        '    ensureString(o: any): string;',
+        '    generateId(): string;',
+        '    getMessageProperty(msg: object, expr: string): any;',
+        '    setMessageProperty(msg: object, expr: string, value: any, createMissing?: boolean): boolean;',
+        '    getObjectProperty(obj: object, expr: string): any;',
+        '    setObjectProperty(obj: object, expr: string, value: any, createMissing?: boolean): boolean;',
+        '    normalisePropertyExpression(expr: string): (string | number)[];',
+        '    normaliseNodeTypeName(name: string): string;',
+        '    parseContextStore(key: string): { key: string; store?: string };',
+        '} };',
+        ''
+    ].join('\n');
+
+    // A Modules variable needs a valid name that does not hide a name in scope of the code,
+    // or a global that the Function node also protects
+    const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+    const RESERVED = ['worker', 'node', 'flow', 'global', 'context', 'env', 'require', 'util', 'RED',
+        'console', 'Buffer', 'Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'promisify'];
+    const validVar = function (name) { return IDENTIFIER.test(name) && RESERVED.indexOf(name) === -1; };
+
+    // The typed input type for a module that is not a Node.js built-in
+    const OTHER_MODULE = '_other_';
+
+    // The variable name for a module: 'node:fs/promises' gives 'fsPromises', '@scope/my-lib@2' gives 'scopeMyLib'
+    function varFromModule(module) {
+        return module.trim().replace(/^node:/, '').replace(/^@/, '').replace(/@.*$/, '')
+            .replace(/[-_/.]+(.?)/g, function (match, next) { return next.toUpperCase(); });
+    }
+
+    function moduleOf(input) {
+        const type = input.typedInput('type');
+        return type === OTHER_MODULE ? input.typedInput('value').trim() : type;
+    }
+
+    function readLibs() {
+        const libs = [];
+        $('#node-input-libs-container').editableList('items').each(function () {
+            const module = moduleOf($(this).find('.worker-function-lib-module'));
+            const name = $(this).find('.worker-function-lib-var').val().trim();
+            if (module) libs.push({ var: name, module: module });
+        });
+        return libs;
+    }
+
+    function showLibs(libs) {
+        const list = $('#node-input-libs-container');
+        list.editableList('empty');
+        (libs || []).forEach(function (lib) { list.editableList('addItem', lib); });
+    }
+
+    function prepareLibs() {
+        const builtins = RED.settings.workerFunctionBuiltinModules || [];
+        const types = builtins.map(function (name) {
+            return { value: name, label: name, icon: 'fa fa-cube', hasValue: false };
+        }).concat([{ value: OTHER_MODULE, label: RED._('editor:subflow.licenseOther'), icon: 'red/images/typedInput/az.svg' }]);
+
+        $('#node-input-libs-container').css('min-height', '120px').editableList({
+            header: $('<div style="display: flex; padding-left: 8px;"><div style="flex: 1;">Module</div><div style="flex: 1;">Variable</div></div>'),
+            addItem: function (row, index, lib) {
+                row.css('display', 'flex');
+                const module = lib.module || '';
+                const builtin = builtins.indexOf(module) !== -1;
+                const moduleInput = $('<input type="text" class="worker-function-lib-module" placeholder="npm module name" style="width: 100%;">')
+                    .appendTo($('<span style="flex: 1; margin-right: 10px;">').appendTo(row))
+                    .typedInput({ types: types, default: builtin ? module : OTHER_MODULE });
+                if (!builtin) moduleInput.typedInput('value', module);
+                const varInput = $('<input type="text" class="worker-function-lib-var red-ui-font-code" placeholder="variable name" style="width: 100%;">')
+                    .val(lib.var || '')
+                    .appendTo($('<span style="flex: 1;">').appendTo(row));
+                const checkVar = function () { varInput.toggleClass('input-error', !validVar(varInput.val().trim())); };
+                // A new module gives a new variable name, as in the Function node
+                moduleInput.on('change keyup paste', function () {
+                    varInput.val(varFromModule(moduleOf(moduleInput)));
+                    checkVar();
+                });
+                varInput.on('change keyup paste', checkVar);
+                if (module) checkVar();
+            },
+            removable: true
+        });
+    }
+
+    function errorCount(editor) {
+        return editor.getSession().getAnnotations().filter(function (a) { return a.type === 'error'; }).length;
+    }
+
+    // What the code does at its four ports, found from the text of the code
+    // (comments removed). Used by the bar under the code editor.
+    const PORT_CHECKS = [
+        { label: 'in: flow', test: /parentPorts\s*\.\s*subscribe\s*\(\s*['"`]input['"`]/ },
+        { label: 'in: workers', test: /inputPorts\s*\.\s*subscribe\s*\(/ },
+        { label: 'out: flow', test: /parentPorts\s*\.\s*publish\s*\(\s*['"`]send['"`]/ },
+        { label: 'out: workers', test: /outputPorts\s*\.\s*publish\s*\(/ }
+    ];
+
+    // The bar shows the error count of the code (a click goes to the first error)
+    // and the ports that the code uses. Monaco finds its errors some time after a change,
+    // so the bar reads the editor twice a second.
+    function startBar(node) {
+        const bar = $('#worker-function-bar');
+        const errors = bar.find('.worker-function-bar-errors');
+        const ports = bar.find('.worker-function-bar-ports');
+        let shown;
+        const refresh = function () {
+            const editor = node.editor;
+            if (!editor) return;
+            const code = editor.getValue().replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+            const found = PORT_CHECKS.map(function (check) { return check.test.test(code); });
+            const failures = editor.getSession().getAnnotations().filter(function (a) { return a.type === 'error'; });
+            const key = found.join() + '/' + failures.length;
+            if (key === shown) return;
+            shown = key;
+            bar.toggleClass('worker-function-bar-bad', failures.length > 0);
+            errors.empty().append(failures.length
+                ? $('<a href="#" title="Go to the first error">').text(failures.length + ' error' + (failures.length > 1 ? 's' : ''))
+                    .prepend('<i class="fa fa-exclamation-circle"></i> ')
+                    .on('click', function (e) {
+                        e.preventDefault();
+                        editor.gotoLine(failures[0].row + 1, failures[0].column || 0, true);
+                        editor.focus();
+                    })
+                : $('<span>').text('no errors').prepend('<i class="fa fa-check-circle"></i> '));
+            ports.empty();
+            PORT_CHECKS.forEach(function (check, i) {
+                $('<span class="worker-function-bar-port">').toggleClass('worker-function-bar-port-on', found[i]).text(check.label).appendTo(ports);
+            });
+            if (!found[0]) {
+                ports.append($('<span class="worker-function-bar-warn" title="The node sends each message of the flow to the worker. This code does not read them, so the node ignores them.">')
+                    .text("no 'input' handler")
+                    .prepend('<i class="fa fa-warning"></i> '));
+            }
+        };
+        node.barTimer = setInterval(refresh, 500);
+        refresh();
+    }
+
+    // The cursor and scroll position of the code editor of each node, for the next open.
+    // The view that Node-RED keeps for the stateId is not enough: when the editor has
+    // the focus, its blur event comes after destroy() and replaces the view with null.
+    const views = {};
+
+    function closeEditor(node) {
+        clearInterval(node.barTimer);
+        views[node.id] = node.editor.saveView();
+        node.editor.destroy();
+        delete node.editor;
+        if (node.typesLib) {
+            node.typesLib.dispose();
+            delete node.typesLib;
+        }
+    }
+
+    // The meter on the canvas node. It has a track along the bottom edge with a bar that grows with the load of the worker
+    // thread, a glow at 85 % and more, and a badge with the number of 'input' calls in progress (a handler that waits for
+    // I/O leaves the thread idle). The bar has one calm colour: red and amber already mean a fault in Node-RED.
+    // The tooltip of the node has the numbers. The runtime sends the meter when it changes, and every 10 seconds while
+    // the load is above 0. The editor redraws once a second, so a tab switch, a reload or a redraw of Node-RED does not lose it.
+    const NS = 'http://www.w3.org/2000/svg';
+    const METER_COLOR = '#1f7ae0';
+    const GLOW_FROM = 85;
+    const meters = {};      // node id -> { load, inProgress, at }
+
+    function svgElement(tag, attributes, parent) {
+        const element = document.createElementNS(NS, tag);
+        Object.keys(attributes).forEach(function (name) { element.setAttribute(name, attributes[name]); });
+        if (parent) parent.appendChild(element);
+        return element;
+    }
+
+    function drawMeter(id) {
+        const node = RED.nodes.node(id);
+        const group = document.getElementById(id);
+        if (!node || !group) return;
+        const body = group.querySelector('.red-ui-flow-node');
+        const meter = meters[id];
+        let drawing = group.querySelector('.worker-function-meter');
+        if (!meter) {
+            if (drawing) drawing.remove();
+            if (body) {
+                body.style.filter = '';
+                $(body).children('title').remove();
+            }
+            return;
+        }
+        const width = node.w || 100;
+        const height = node.h || 30;
+        if (!drawing) {
+            drawing = svgElement('g', { 'class': 'worker-function-meter' }, group);
+            drawing.style.pointerEvents = 'none';
+            svgElement('rect', { 'class': 'worker-function-track', rx: 2, height: 4, fill: 'rgba(0,0,0,0.45)', stroke: 'rgba(255,255,255,0.75)', 'stroke-width': 0.75 }, drawing);
+            const bar = svgElement('rect', { 'class': 'worker-function-bar', rx: 1, height: 2, fill: METER_COLOR }, drawing);
+            bar.style.transition = 'width 0.9s ease-out';
+            const badge = svgElement('g', { 'class': 'worker-function-badge' }, drawing);
+            svgElement('circle', { r: 8, fill: '#1f2937', stroke: '#fff', 'stroke-width': 1 }, badge);
+            svgElement('text', { 'text-anchor': 'middle', y: 3.5, fill: '#fff', 'font-size': 10, 'font-weight': 'bold' }, badge);
+        }
+        const track = drawing.querySelector('.worker-function-track');
+        track.setAttribute('x', 4);
+        track.setAttribute('y', height - 5);
+        track.setAttribute('width', width - 8);
+        const bar = drawing.querySelector('.worker-function-bar');
+        bar.setAttribute('x', 5);
+        bar.setAttribute('y', height - 4);
+        bar.style.width = Math.max(0, (width - 10) * meter.load / 100) + 'px';
+        const badge = drawing.querySelector('.worker-function-badge');
+        badge.setAttribute('transform', 'translate(' + (width - 4) + ',' + (height - 4) + ')');
+        badge.style.display = meter.inProgress > 0 ? '' : 'none';
+        badge.querySelector('text').textContent = meter.inProgress > 99 ? '99+' : meter.inProgress;
+        if (body) {
+            body.style.filter = meter.load >= GLOW_FROM ? 'drop-shadow(0 0 5px ' + METER_COLOR + ')' : '';
+            const text = 'Worker thread busy ' + meter.load + ' % of the last second'
+                + (meter.inProgress > 0 ? ', ' + meter.inProgress + ' input call' + (meter.inProgress > 1 ? 's' : '') + ' in progress' : '');
+            let title = $(body).children('title')[0];
+            if (!title) title = svgElement('title', {}, body);
+            title.textContent = text;
+        }
+    }
+
+    // A meter at 0 goes after 1.5 s (the bar shrinks first). A meter that gets no new value goes after 25 s
+    // (the runtime restarted or stopped).
+    function sweepMeters() {
+        const now = Date.now();
+        Object.keys(meters).forEach(function (id) {
+            const meter = meters[id];
+            const idle = meter.load === 0 && meter.inProgress === 0;
+            if (now - meter.at > (idle ? 1500 : 25000)) delete meters[id];
+            drawMeter(id);
+        });
+    }
+
+    function onMeter(topic, data) {
+        const id = topic.split('/').pop();
+        meters[id] = { load: data.load, inProgress: data.inProgress, at: Date.now() };
+        drawMeter(id);
+    }
+
+    let sweepTimer;
+
+    RED.nodes.registerType('worker-function', {
+        category: 'function',
+        color: '#f4c48c',
+        defaults: {
+            name: { value: '' },
+            func: { value: SKELETON },
+            outputs: { value: 1 },
+            transfer: { value: false },
+            meter: { value: false },
+            // The number of errors that the code editor found when the dialog closed
+            noerr: {
+                value: 0,
+                // Node-RED shows the returned text only for a validator with two parameters
+                validate: function (count, opt) { return !Number(count) || 'the code has ' + count + ' error(s)'; }
+            },
+            libs: {
+                value: [],
+                validate: function (libs) {
+                    return (libs || []).every(function (lib) { return lib.module && validVar(lib.var); });
+                }
+            }
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: 'worker-function.svg',
+        label: function () { return this.name || 'worker function'; },
+        paletteLabel: 'worker function',
+        labelStyle: function () { return this.name ? 'node_label_italic' : ''; },
+        onpaletteadd: function () {
+            RED.comms.subscribe('worker-function/meter/+', onMeter);
+            sweepTimer = setInterval(sweepMeters, 1000);
+        },
+        onpaletteremove: function () {
+            RED.comms.unsubscribe('worker-function/meter/+', onMeter);
+            clearInterval(sweepTimer);
+        },
+        oneditprepare: function () {
+            const node = this;
+            const modulesAllowed = RED.settings.functionExternalModules !== false;
+
+            const tabs = RED.tabs.create({
+                id: 'worker-function-tabs',
+                onchange: function (tab) {
+                    $('#worker-function-tabs-content').children().hide();
+                    $('#' + tab.id).show();
+                    RED.tray.resize();
+                }
+            });
+            tabs.addTab({ id: 'worker-function-tab-code', label: 'Code' });
+            tabs.addTab({ id: 'worker-function-tab-setup', label: 'Setup' });
+
+            $('#node-input-outputs').spinner({
+                min: 0,
+                max: 500,
+                change: function () {
+                    const value = Math.min(500, Math.max(0, parseInt(this.value, 10) || 0));
+                    if (String(value) !== this.value) $(this).spinner('value', value);
+                }
+            });
+
+            if (modulesAllowed) {
+                prepareLibs();
+                showLibs(node.libs);
+            } else $('.worker-function-libs-row').hide();
+
+            // The expand editor opens with the view of this stateId
+            const stateId = node.id + '/worker-function-code';
+            node.editor = RED.editor.createEditor({
+                id: 'node-input-func-editor',
+                mode: 'ace/mode/javascript',
+                value: $('#node-input-func').val(),
+                stateId: stateId,
+                // Type hints for the variables of the Modules list
+                extraLibs: node.libs || [],
+                focus: true
+            });
+            if (views[node.id]) node.editor.restoreView(views[node.id]);
+            startBar(node);
+            // Monaco only: the settings can select the Ace code editor
+            const ts = window.monaco && (monaco.typescript || monaco.languages.typescript);
+            if (ts) node.typesLib = ts.javascriptDefaults.addExtraLib(TYPES, 'file://types/worker-function/index.d.ts');
+
+            const libraryFields = ['name', 'outputs'];
+            if (modulesAllowed) {
+                libraryFields.push({
+                    name: 'libs',
+                    get: function () { return JSON.stringify(readLibs()); },
+                    set: function (text) { showLibs(text ? JSON.parse(text) : []); }
+                });
+            }
+            RED.library.create({
+                url: 'worker-functions',
+                type: 'worker-function',
+                editor: node.editor,
+                mode: 'ace/mode/javascript',
+                fields: libraryFields,
+                ext: 'js'
+            });
+
+            $('#worker-function-expand-js').on('click', function (e) {
+                e.preventDefault();
+                node.editor.saveView();
+                RED.editor.editJavaScript({
+                    value: node.editor.getValue(),
+                    width: 'Infinity',
+                    mode: 'ace/mode/javascript',
+                    stateId: stateId,
+                    extraLibs: node.libs || [],
+                    focus: true,
+                    complete: function (value, cursor, expandEditor) {
+                        // Read the view now: the late blur of the expand editor can replace it with null
+                        const view = expandEditor && expandEditor.saveView();
+                        node.editor.setValue(value, -1);
+                        setTimeout(function () {
+                            node.editor.restoreView(view);
+                            node.editor.focus();
+                        }, 250);
+                    },
+                    cancel: function () {
+                        setTimeout(function () { node.editor.focus(); }, 250);
+                    }
+                });
+            });
+            RED.popover.tooltip($('#worker-function-expand-js'), RED._('node-red:common.label.expand'));
+
+            tabs.activateTab('worker-function-tab-code');
+        },
+        oneditsave: function () {
+            $('#node-input-func').val(this.editor.getValue());
+            $('#node-input-noerr').val(errorCount(this.editor));
+            closeEditor(this);
+            if (RED.settings.functionExternalModules !== false) this.libs = readLibs();
+        },
+        oneditcancel: function () {
+            closeEditor(this);
+        },
+        oneditresize: function (size) {
+            // The code editor gets the height that the name row, the tab row and the expand row leave
+            let height = size.height;
+            $('#dialog-form > div:not(#worker-function-tabs-content)').each(function () {
+                height -= $(this).outerHeight(true);
+            });
+            height -= $('#worker-function-expand-row').outerHeight(true);
+            height -= $('#worker-function-bar').outerHeight(true);
+            $('#node-input-func-editor').css('height', Math.max(150, height - 10) + 'px');
+            this.editor.resize();
+            $('#node-input-libs-container').editableList('height', Math.max(120, height - 90));
+        }
+    });
+})();
+</script>
+
+<script type="text/html" data-template-name="worker-function">
+    <div id="worker-function-header" style="margin-bottom: 14px;">
+        <div style="font-size: 16px; font-weight: bold;">Worker function</div>
+        <div style="margin-top: 2px; color: var(--red-ui-secondary-text-color, #666);">A Function node that runs in a worker thread.</div>
+    </div>
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+        <input type="hidden" id="node-input-func">
+        <input type="hidden" id="node-input-noerr">
+    </div>
+    <div class="form-row">
+        <ul style="min-width: 500px; margin-bottom: 20px;" id="worker-function-tabs"></ul>
+    </div>
+    <div id="worker-function-tabs-content">
+        <div id="worker-function-tab-code">
+            <div id="worker-function-expand-row" style="text-align: right; margin-bottom: 4px;">
+                <button type="button" id="worker-function-expand-js" class="red-ui-button red-ui-button-small"><i class="fa fa-expand"></i></button>
+            </div>
+            <div class="node-text-editor" id="node-input-func-editor" style="height: 250px; min-height: 150px;"></div>
+            <div id="worker-function-bar">
+                <span class="worker-function-bar-errors"></span>
+                <span class="worker-function-bar-ports"></span>
+            </div>
+        </div>
+        <div id="worker-function-tab-setup" style="display: none;">
+            <div class="form-row">
+                <label for="node-input-outputs"><i class="fa fa-random"></i> Outputs</label>
+                <input id="node-input-outputs" style="width: 60px;" value="1">
+            </div>
+            <div class="form-row">
+                <label style="width: auto;" for="node-input-transfer"><input type="checkbox" id="node-input-transfer" style="width: auto; vertical-align: top; margin-right: 6px;"> Move the msg.payload buffer to the worker (no copy)</label>
+            </div>
+            <div class="form-row">
+                <label style="width: auto;" for="node-input-meter"><input type="checkbox" id="node-input-meter" style="width: auto; vertical-align: top; margin-right: 6px;"> Show a load meter on the node</label>
+            </div>
+            <div class="form-row worker-function-libs-row" style="margin-bottom: 0;">
+                <label><i class="fa fa-cubes"></i> Modules</label>
+            </div>
+            <div class="form-row worker-function-libs-row">
+                <ol id="node-input-libs-container"></ol>
+            </div>
+        </div>
+    </div>
+</script>
+
+<script type="text/html" data-help-name="worker-function">
+    <p>A Function node that runs its code in a worker thread. A worker thread is a second program that runs beside Node-RED,
+       so a long job does not block it.</p>
+    <p><code>subscribe(type, fn)</code> means: run <code>fn</code> for each message of this type.
+       <code>publish(type, data)</code> means: send a message of this type.
+       <code>async</code> on a handler lets you use <code>await</code> inside it.</p>
+<pre>worker.parentPorts.subscribe('input', async (msg) => {
+    const factor = await flow.get('factor') || 2;
+    msg.payload = msg.payload * factor;
+    worker.parentPorts.publish('send', msg);
+});</pre>
+    <p>The code runs <b>one time</b>, when the node starts. Call <code>subscribe</code> at the top level, before any <code>await</code>:
+       a <code>subscribe</code> call after an <code>await</code> can miss the first messages.
+       A handler without <code>await</code> ends before the next message starts.
+       A handler with <code>await</code> lets the next message start, so the order of the outputs can change.</p>
+
+    <h3>From the Function node</h3>
+    <table>
+        <tr><th>Function node</th><th>worker function</th></tr>
+        <tr><td>the <code>msg</code> of the flow</td><td><code>worker.parentPorts.subscribe('input', (msg) =&gt; { ... });</code></td></tr>
+        <tr><td><code>node.on('close', fn)</code></td><td><code>worker.parentPorts.subscribe('close', fn);</code> You have 2 seconds.</td></tr>
+        <tr><td><code>return msg;</code></td><td><code>worker.parentPorts.publish('send', msg);</code> A <code>return</code> in a handler does nothing.</td></tr>
+        <tr><td><code>node.send([a, b])</code></td><td><code>worker.parentPorts.publish('send', [a, b]);</code></td></tr>
+        <tr><td><code>node.warn(x)</code></td><td><code>worker.parentPorts.publish('warn', x);</code></td></tr>
+        <tr><td><code>node.log(x)</code></td><td><code>worker.parentPorts.publish('log', x);</code> Also <code>debug</code> and <code>trace</code>.</td></tr>
+        <tr><td><code>node.error(x, msg)</code></td><td><code>worker.parentPorts.publish('error', { message: x, msg });</code></td></tr>
+        <tr><td><code>node.status(s)</code></td><td><code>worker.parentPorts.publish('status', s);</code></td></tr>
+        <tr><td><code>flow.get('x')</code></td><td><code>await flow.get('x')</code></td></tr>
+    </table>
+    <p>The bar under the code editor shows the number of errors in the code (click it to go to the first one)
+       and the ports that the code uses. It warns when no handler reads the <code>input</code> messages of the flow.</p>
+    <p>Until the code publishes a <code>status</code>, the node shows the load of the worker thread:
+       <code>busy NN %</code> (to the nearest 10) or <code>idle</code>.</p>
+
+    <h3>The load meter on the canvas</h3>
+    <p>The option <b>Show a load meter on the node</b> in the Setup tab is off by default. When it is on, a bar along the bottom edge of the node shows how busy the worker thread was in the last second, 0 to 100 % in steps of 5.
+       The node glows at 85 % and more. A heavy job keeps the thread busy, so this is normal work, not a fault.
+       The meter has one colour on purpose: red in Node-RED always means a fault.
+       Hold the pointer on the node to read the numbers. The meter stays when the code sets its own status.</p>
+    <p>A handler that waits (<code>await fetch(...)</code>) leaves the thread idle, so the bar stays empty.
+       A round badge at the bottom right counts the calls of the <code>input</code> handler that have started and not ended.
+       The meter does not show inside a subflow.</p>
+
+    <h3>The wires</h3>
+    <ul>
+        <li><code>worker.parentPorts</code>: to and from this node and the flow.</li>
+        <li><code>worker.inputPorts</code>: from an upstream worker function node, thread to thread.
+            A handler gets <code>(msg, senderTrace, receiverTrace, type)</code>.
+            The traces hold the node id and the port and wire numbers of the sender and of the receiver.</li>
+        <li><code>worker.outputPorts</code>: to the worker function nodes that this node is wired to.
+            The Debug sidebar does not see these messages.</li>
+    </ul>
+
+    <h3>Names in scope</h3>
+    <dl class="message-properties">
+        <dt>worker, node</dt>
+        <dd><code>node</code> has <code>id</code>, <code>name</code>, <code>path</code>, <code>outputCount</code> and
+            <code>await node.linkcall(target, msg, [options])</code>. It sends <code>msg</code> to the link in node
+            with this name or id, and gives the message of its link out node in return mode.
+            <code>options.timeout</code> is in milliseconds (default 5000). It needs Node-RED 5.</dd>
+        <dt>context, flow, global</dt>
+        <dd><code>context</code> is the store of this node, <code>flow</code> the store of the tab, <code>global</code> the store of all flows.
+            Each has <code>get(key, [store])</code>, <code>set(key, value, [store])</code> and <code>keys([store])</code>.
+            Each returns a Promise.</dd>
+        <dt>env, require, util, RED</dt>
+        <dd><code>await env.get(name)</code>. <code>require</code> loads a Node built-in or a module of the Node-RED user directory.
+            The modules of the Modules list have their variable names. <code>util</code> is the Node.js module.
+            <code>RED.util</code> has the helpers that work in a thread, for example <code>cloneMessage</code>.</dd>
+    </dl>
+
+    <h3>Big data</h3>
+    <p>Each message goes to the thread as a copy. A <code>Buffer</code> arrives as a <code>Uint8Array</code>.
+       A transfer list moves an <code>ArrayBuffer</code> with no copy. The sender cannot use it after that:
+       <code>worker.parentPorts.publish('send', msg, [msg.payload.buffer]);</code></p>
+    <p>The option <b>Move the msg.payload buffer to the worker (no copy)</b> does this for the input.
+       It moves an <code>ArrayBuffer</code>, or a typed array, <code>Buffer</code> or <code>DataView</code> that covers its whole <code>ArrayBuffer</code>.
+       Other payloads go as a copy.</p>
+
+    <h3>Errors</h3>
+    <ul>
+        <li>A syntax error stops the worker. The node shows <code>worker error</code> until a full deploy.</li>
+        <li>A throw or a rejected Promise is a node error with <code>(line L, col C)</code>. A Catch node gets it, and the worker keeps running.
+            A throw in a handler gives the Catch node that message too.</li>
+        <li>Data that <code>send</code>, <code>status</code> or <code>error</code> cannot use gives a node error.</li>
+        <li>A message with <code>msg.req</code> and <code>msg.res</code> (from an HTTP In node) cannot go to a thread.
+            To use this node after an HTTP In node, remove both first with a Change node.
+            The HTTP Response node then cannot answer from that msg.</li>
+        <li>When the node closes, it clears its status.</li>
+    </ul>
+</script>

@@ -1,0 +1,9 @@
+node_modules/
+demo/node_modules/
+demo/package-lock.json
+demo/.config*.json
+demo/.flows*.backup
+demo/flows_cred.json
+demo/lib/
+demo/context/
+demo/node-red.log

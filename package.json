@@ -1,0 +1,11 @@
+{
+	"name": "nrutils-nodes",
+	"private": true,
+	"workspaces": [
+		"packages/*"
+	],
+	"scripts": {
+		"test": "npm test --workspaces",
+		"demo": "npm install --prefix demo && node-red --userDir demo --settings demo/settings.js"
+	}
+}
