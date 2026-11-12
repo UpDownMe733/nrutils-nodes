@@ -67,6 +67,18 @@ The node has full help in the editor sidebar.
 
 ## Code
 
+Write the code from the point of view of the worker. The worker is a separate thread, isolated from
+Node-RED: it cannot see the flow, the other nodes or the wires. Its only connection to the world is a
+set of message pipes, and the node creates them for you:
+
+- a pipe to its own node in Node-RED (`worker.parentPorts`), for the messages of the flow, status
+  and logs
+- a pipe from each upstream worker function node (`worker.inputPorts`)
+- a pipe to each downstream worker function node (`worker.outputPorts`)
+
+The worker listens on a pipe with `subscribe` and sends on it with `publish`. Even `flow.get()` is a
+message to Node-RED and back, which is why it returns a Promise.
+
 The code runs once, when the node starts. It subscribes to the messages of the flow and publishes
 the results:
 
@@ -93,7 +105,7 @@ A variable outside the handlers keeps its value from message to message, until t
 
 ## Ports and wires
 
-The code talks to the outside through three port groups. Each has `subscribe(type, handler)` and
+The pipes come in three groups. Each group has `subscribe(type, handler)` and
 `publish(type, data)`.
 
 | Group | Connects to |
