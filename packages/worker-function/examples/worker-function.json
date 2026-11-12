@@ -57,7 +57,8 @@
             ]
         ],
         "noerr": 0,
-        "transfer": false
+        "transfer": false,
+        "loadstatus": true
     },
     {
         "id": "wfdemo.d1",
@@ -329,7 +330,8 @@
                 "wfdemo.d5"
             ]
         ],
-        "transfer": false
+        "transfer": false,
+        "loadstatus": true
     },
     {
         "id": "wfdemo.d5",

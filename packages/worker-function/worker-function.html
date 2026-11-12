@@ -342,6 +342,7 @@
             func: { value: SKELETON },
             outputs: { value: 1 },
             transfer: { value: false },
+            loadstatus: { value: false },
             meter: { value: false },
             // The number of errors that the code editor found when the dialog closed
             noerr: {
@@ -520,6 +521,9 @@
                 <label style="width: auto;" for="node-input-transfer"><input type="checkbox" id="node-input-transfer" style="width: auto; vertical-align: top; margin-right: 6px;"> Move the msg.payload buffer to the worker (no copy)</label>
             </div>
             <div class="form-row">
+                <label style="width: auto;" for="node-input-loadstatus"><input type="checkbox" id="node-input-loadstatus" style="width: auto; vertical-align: top; margin-right: 6px;"> Show the load in the node status (busy NN % or idle)</label>
+            </div>
+            <div class="form-row">
                 <label style="width: auto;" for="node-input-meter"><input type="checkbox" id="node-input-meter" style="width: auto; vertical-align: top; margin-right: 6px;"> Show a load meter on the node</label>
             </div>
             <div class="form-row worker-function-libs-row" style="margin-bottom: 0;">
@@ -563,8 +567,8 @@
     </table>
     <p>The bar under the code editor shows the number of errors in the code (click it to go to the first one)
        and the ports that the code uses. It warns when no handler reads the <code>input</code> messages of the flow.</p>
-    <p>Until the code publishes a <code>status</code>, the node shows the load of the worker thread:
-       <code>busy NN %</code> (to the nearest 10) or <code>idle</code>.</p>
+    <p>The option <b>Show the load in the node status</b> in the Setup tab is off by default. When it is on, the node shows the load of the worker thread
+       until the code publishes a <code>status</code>: <code>busy NN %</code> (to the nearest 10) or <code>idle</code>.</p>
 
     <h3>The load meter on the canvas</h3>
     <p>The option <b>Show a load meter on the node</b> in the Setup tab is off by default. When it is on, a bar along the bottom edge of the node shows how busy the worker thread was in the last second, 0 to 100 % in steps of 5.

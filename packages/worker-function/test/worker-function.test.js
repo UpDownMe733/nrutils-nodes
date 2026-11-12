@@ -133,7 +133,7 @@ const FLOW = [
     { id: 'tab', type: 'tab', label: 'test', env: [{ name: 'WF_TAB_ENV', value: 'tab env value', type: 'str' }] },
     inject('i-echo', 21, ['echo']), wf('echo', 'echo', [['collect-echo']]), collect('echo'),
     inject('i-split', 0, ['split']), wf('split', 'split', [['collect-out1'], ['collect-out2']]), collect('out1'), collect('out2'),
-    inject('i-report', 0, ['report']), wf('report', 'report', [[]]),
+    inject('i-report', 0, ['report']), wf('report', 'report', [[]], { loadstatus: true }),
     { id: 'status-report', type: 'status', z: 'tab', scope: ['report'], wires: [['collect-status']] }, collect('status'),
     { id: 'status-all', type: 'status', z: 'tab', scope: null, wires: [['collect-allstatus']] }, collect('allstatus'),
     { id: 'catch-report', type: 'catch', z: 'tab', scope: ['report', 'reject'], uncaught: false, wires: [['collect-catch']] }, collect('catch'),
@@ -146,7 +146,7 @@ const FLOW = [
     { id: 'catch-clone', type: 'catch', z: 'tab', scope: ['clone'], uncaught: false, wires: [['clone-answer']] },
     { id: 'clone-answer', type: 'function', z: 'tab', outputs: 1, wires: [['clone-response']], func: 'msg.payload = msg.error.message; return msg;' },
     { id: 'clone-response', type: 'http response', z: 'tab', wires: [] },
-    wf('syntax', 'syntax', [[]]), inject('i-syntax', 0, ['syntax']),
+    wf('syntax', 'syntax', [[]], { loadstatus: true }), inject('i-syntax', 0, ['syntax']),
     { id: 'status-syntax', type: 'status', z: 'tab', scope: ['syntax'], wires: [['collect-syntax']] }, collect('syntax'),
     wf('syntaxTab', 'syntaxTab', [[]]),
     wf('reject', 'reject', [[]]),
@@ -161,11 +161,12 @@ const FLOW = [
     { id: 'link-double', type: 'function', z: 'tab', outputs: 1, wires: [['link-return']], func: 'msg.payload *= 2; return msg;' },
     { id: 'link-return', type: 'link out', z: 'tab', mode: 'return', links: [], wires: [] },
     { id: 'link-hang', type: 'link in', z: 'tab', name: 'hang', links: [], wires: [[]] },
-    inject('i-linkclose', 0, ['linkclose']), wf('linkclose', 'linkclose', [[]]),
+    inject('i-linkclose', 0, ['linkclose']), wf('linkclose', 'linkclose', [[]], { loadstatus: true }),
     { id: 'status-linkclose', type: 'status', z: 'tab', scope: null, wires: [['collect-allstatus']] },
     inject('i-default', 5, ['default']), wf('default', SKELETON, [['collect-default']]), collect('default'),
     ...[1, 2, 3, 4, 5].map((n) => inject('i-bad-' + n, n, ['baddata'])), wf('baddata', 'baddata', [['collect-baddata']]), collect('baddata'),
-    inject('i-busy', 0, ['busy']), wf('busy', 'busy', [[]]),
+    { id: 'status-default', type: 'status', z: 'tab', scope: ['default'], wires: [['collect-defaultstatus']] }, collect('defaultstatus'),
+    inject('i-busy', 0, ['busy']), wf('busy', 'busy', [[]], { loadstatus: true }),
     { id: 'status-busy', type: 'status', z: 'tab', scope: ['busy'], wires: [['collect-busystatus']] }, collect('busystatus'),
     // Sends a pooled small Buffer or a large one, and later stores the length that the sender sees
     // 'part' sends a view on a part of a large ArrayBuffer and later stores the length of that ArrayBuffer
@@ -319,6 +320,13 @@ describe('worker-function in a real Node-RED', { timeout: 60000 }, () => {
             "the 'status' data must be an object or a string; got null"]);
         await sleep(300);
         assert.deepEqual((await results('baddata')).map((m) => m.payload), ['ok']);
+    });
+
+    it('a node without the loadstatus option shows no automatic status', async () => {
+        await injectNode('i-default');
+        await results('default');
+        await sleep(2500);
+        assert.deepEqual(await (await fetch(`${base}/results/defaultstatus`)).json(), []);
     });
 
     it('a busy loop shows busy, then idle, as the node status', async () => {

@@ -149,14 +149,15 @@ const registerNode = NodeRedNodeBase.createNode('worker-function', [nodeRedWorke
     let inProgress = 0;
     // Off by default: the node sends no meter data unless its Setup tab has the option on.
     const publishMeter = () => config.meter && RED.comms.publish(`worker-function/meter/${thisNode.id}`, { load, inProgress }, load > 0 || inProgress > 0);
-    // Until the code sets its own status, the status shows the load
-    let loadOnStatus = true;
+    // Off by default. With the option on, the status shows the load until the code sets its own status.
+    let loadOnStatus = config.loadstatus === true;
     let shownStatus;
     worker.subscribe('inProgress', (count) => {
         inProgress = count;
         publishMeter();
     });
-    const stopLoad = watchLoad(worker, (percent) => {
+    // No sampling timer when neither the meter nor the load status is on
+    const stopLoad = config.meter || loadOnStatus ? watchLoad(worker, (percent) => {
         load = percent;
         publishMeter();
         const status = loadStatus(percent);
@@ -164,7 +165,7 @@ const registerNode = NodeRedNodeBase.createNode('worker-function', [nodeRedWorke
             shownStatus = status.text;
             thisNode.status(status);
         }
-    });
+    }) : () => {};
     worker.subscribe('status', (status) => {
         if (typeof status !== 'string' && !isObject(status)) {
             thisNode.error(`the 'status' data must be an object or a string; got ${typeOf(status)}`, {});

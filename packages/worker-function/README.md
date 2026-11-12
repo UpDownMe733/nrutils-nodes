@@ -11,7 +11,7 @@ For short code, keep using the core Function node. Each message is copied to the
 ## Features
 
 - Write JavaScript as in the Function node, with `node`, `context`, `flow`, `global`, `env`, `RED.util` and the Modules list
-- Live status on the node: `busy NN %` or `idle`, plus an optional load meter
+- Optional load display: `busy NN %` or `idle` in the node status, and a load meter on the node
 - Errors report the line and column, and reach Catch nodes
 - Wire worker function nodes together and messages go thread to thread, not through Node-RED
 - Move big buffers to the thread without a copy

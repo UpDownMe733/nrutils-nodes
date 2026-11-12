@@ -57,7 +57,8 @@
             ]
         ],
         "noerr": 0,
-        "transfer": false
+        "transfer": false,
+        "loadstatus": true
     },
     {
         "id": "wfdemo.d1",
@@ -330,6 +331,7 @@
             ]
         ],
         "transfer": false,
+        "loadstatus": true,
         "meter": true
     },
     {
@@ -394,6 +396,7 @@
             ]
         ],
         "transfer": false,
+        "loadstatus": true,
         "meter": true
     },
     {
