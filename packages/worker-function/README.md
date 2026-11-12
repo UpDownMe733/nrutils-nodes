@@ -2,7 +2,7 @@
 
 _A Function node for Node-RED that runs your code in a worker thread, so heavy work does not block Node-RED._
 
-![Two worker function nodes at 85 % and 100 % load, while the heartbeat in the Debug sidebar still comes every second](https://raw.githubusercontent.com/UpDownMe733/nrutils-nodes/main/packages/worker-function/images/flow.png)
+![The same 5 seconds of heavy code: in a core Function node the heartbeat stops, in a worker function node it keeps going](https://raw.githubusercontent.com/UpDownMe733/nrutils-nodes/main/packages/worker-function/images/demo.gif)
 
 A Function node that parses, compresses or crunches numbers blocks Node-RED while it runs: the editor freezes, dashboards stall and other flows wait. The worker function node runs the same kind of code in its own thread, and Node-RED stays responsive.
 
