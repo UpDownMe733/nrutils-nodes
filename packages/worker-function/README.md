@@ -23,7 +23,7 @@ wait. The worker function node runs the code in its own thread, so Node-RED keep
 - [Install](#install)
 - [Node](#node)
 - [Code](#code)
-- [Worker to worker](#worker-to-worker)
+- [Ports and wires](#ports-and-wires)
 - [Big buffers](#big-buffers)
 - [Errors](#errors)
 - [Limits](#limits)
@@ -91,20 +91,88 @@ worker.parentPorts.subscribe('input', async (msg) => {
 
 A variable outside the handlers keeps its value from message to message, until the node restarts.
 
-## Worker to worker
+## Ports and wires
 
-When a worker function node is wired to another, the two threads connect directly:
+The code talks to the outside through three port groups. Each has `subscribe(type, handler)` and
+`publish(type, data)`.
+
+| Group | Connects to |
+|---|---|
+| `worker.parentPorts` | this node in Node-RED: the messages of the flow, status, logs |
+| `worker.inputPorts` | upstream worker function nodes, thread to thread |
+| `worker.outputPorts` | downstream worker function nodes, thread to thread |
+
+### Through Node-RED
+
+Every message on the input wire arrives as `input`. `send` goes out through Node-RED to every node
+on the wires, as `node.send()` does:
 
 ```js
-// upstream node
-worker.outputPorts.publish('input', msg);
+worker.parentPorts.subscribe('input', (msg) => { /* each message of the flow */ });
 
-// downstream node
-worker.inputPorts.subscribe('input', (msg) => { /* ... */ });
+worker.parentPorts.publish('send', msg);              // output 1
+worker.parentPorts.publish('send', [null, msg]);      // output 2 only
+worker.parentPorts.publish('send', [[m1, m2], msg]);  // two messages on output 1, one on output 2
 ```
 
-These messages do not pass through Node-RED, so the Debug sidebar does not see them.
-`worker.outputPorts[p][w]` sends to one output `p` or one wire `w`.
+### Send to other worker nodes
+
+When a worker function node is wired to another, their threads connect directly. These messages do
+not pass through Node-RED, so the Debug sidebar does not see them. A wire to a node that is not a
+worker function gets only what `send` sends.
+
+```js
+worker.outputPorts.publish('input', msg);         // all outputs, all wires
+worker.outputPorts[1].publish('input', msg);      // output 2, all its wires
+worker.outputPorts[1][0].publish('input', msg);   // output 2, first wire only
+```
+
+Outputs and wires count from 0. Wires on an output are numbered in the order they appear in the
+flow, and the numbers stay the same across deploys. A publish to an output with no worker on it is
+dropped, as in Node-RED when an output has no wire.
+
+### Receive from other worker nodes
+
+A node has one input, so the handler gets the messages of all upstream workers. To act on one
+sender, check `senderTrace`. It holds the `nodeId`, `portIndex` (output) and `connectionIndex`
+(wire) of the sender. `receiverTrace` holds the same for this node.
+
+```js
+// from all upstream workers
+worker.inputPorts.subscribe('input', (msg, senderTrace) => { /* ... */ });
+
+// from one upstream node only
+worker.inputPorts.subscribe('input', (msg, senderTrace) => {
+    if (senderTrace.nodeId !== 'a1b2c3d4e5f60708') return;
+    /* ... */
+});
+
+// from output 2 of the upstream nodes only
+worker.inputPorts.subscribe('input', (msg, senderTrace) => {
+    if (senderTrace.portIndex !== 1) return;
+    /* ... */
+});
+```
+
+Do not use the input wire numbers (`inputPorts[0][w]`) to pick a sender: they are given out as the
+connections are made and change after a deploy.
+
+### Message types
+
+The type is any name. The sender and the receiver must use the same name. Use one name for each
+kind of data:
+
+```js
+// upstream
+worker.outputPorts.publish('frame', image);
+worker.outputPorts.publish('settings', { threshold: 40 });
+
+// downstream
+worker.inputPorts.subscribe('frame', (image) => { /* ... */ });
+worker.inputPorts.subscribe('settings', (settings) => { /* ... */ });
+```
+
+A handler for the type `default` gets every type.
 
 ## Big buffers
 
