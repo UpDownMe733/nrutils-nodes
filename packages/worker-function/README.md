@@ -79,7 +79,7 @@ set of message pipes, and the node creates them for you:
 The worker listens on a pipe with `subscribe` and sends on it with `publish`. Even `flow.get()` is a
 message to Node-RED and back, which is why it returns a Promise.
 
-![Above ground, the Node-RED flow: camera, decode, detect, result. Below ground, the worker threads of decode and detect, each joined to its node by a parentPorts pipe, and joined to each other by an outputPorts to inputPorts pipe that lies under the wire between the two nodes](https://raw.githubusercontent.com/UpDownMe733/nrutils-nodes/main/packages/worker-function/images/pipes.png)
+![Top: the Node-RED flow camera, decode, detect, result. Below: a worker thread for decode and for detect, each joined to its node by parentPorts, and joined to each other by outputPorts to inputPorts, under the wire between the two nodes](https://raw.githubusercontent.com/UpDownMe733/nrutils-nodes/main/packages/worker-function/images/pipes.png)
 
 The code runs once, when the node starts. It subscribes to the messages of the flow and publishes
 the results:
