@@ -126,6 +126,7 @@ Restart Node-RED after a change to `settings.js`.
 | Sandbox | A name for the launcher. See [Sandbox](#sandbox). Empty: no sandbox. |
 | System prompt | Text that the node adds to the Claude Code system prompt. |
 | Model | Empty (the SDK default), `haiku`, `sonnet` or `opus`. `msg.model` replaces it. |
+| Cache time | `5 minutes` or `60 minutes`. How long the prompt cache lives between two requests of a run. Default 60 minutes. |
 | Prompt | A mustache template over the message. Default `{{payload}}`. |
 | Tools | A comma list of the tools of the agent. A new node has `Read, Grep, Glob`. Empty: all tools. |
 | Project settings | Load `CLAUDE.md` and `.claude/settings.json` of the folder. Off by default. |
@@ -140,6 +141,11 @@ Restart Node-RED after a change to `settings.js`.
 Without Project settings or Full environment, a run loads no settings, no `CLAUDE.md`, no skills
 and no outside MCP servers. That keeps the first request of a run small. Auto memory is always off.
 The node also turns off the Claude attribution lines in commit messages and pull requests.
+
+The node gives Cache time to the CLI as the settings `promptCacheTtl` and `subagentPromptCacheTtl`.
+It removes `FORCE_PROMPT_CACHING_5M` and `CLAUDE_CODE_PROMPT_CACHE_TTL` from the environment of the run,
+so the node property decides. A 60-minute cache write costs 2× input, against 1.25× for 5 minutes.
+A node from an older version gets 60 minutes. Before, the CLI chose: 1 hour on a subscription, 5 minutes with an API key.
 
 The node has full help in the editor sidebar.
 
