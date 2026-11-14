@@ -49,6 +49,11 @@ Worker nodes connect thread to thread only inside one copy of node-red-utils. Th
 4. Add a row to the Nodes table.
 5. Run `npm install` at the root (it updates `package-lock.json`) and `npm test`.
 
+## Agent nodes
+
+- `agent-watch` loads `shared.js` of `claude-agent` (a peer dependency). Thus both nodes use one event emitter and one copy of the settings code.
+- The tests of `claude-agent` and `agent-watch` set `packages/claude-agent/test/fixtures/fake-claude.js` as the launcher. It speaks the stream-json protocol of the Claude Code CLI and calls no service. A test must never call the real Claude service.
+
 ## Pull requests
 
 - Open an issue first for a new node.
