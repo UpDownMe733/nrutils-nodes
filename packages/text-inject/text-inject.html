@@ -1,0 +1,105 @@
+<script type="text/javascript" src="node-red-resourceendpoint/node-red-popup/NodeRedPopupFrontend.js"></script>
+<script type="text/javascript" src="node-red-resourceendpoint/node-red-editorcomms/EditorCommsFrontend.js"></script>
+
+<script type="text/javascript">
+(function () {
+    // Text in each popup, by node id. The editor rebuilds a popup on a tab change or a deploy; this keeps the text.
+    const drafts = {};
+
+    function send(node, text, status) {
+        node.nodeRedEditorComms.publish('send', text)
+            .then((length) => status.setStatusText('sent ' + length + ' chars at ' + new Date().toLocaleTimeString()))
+            .catch((err) => status.setStatusText(
+                err.status === 404 ? 'No runtime node: deploy it, and check that it is not disabled' :
+                err.status === 0 ? 'No connection to Node-RED' : 'Error: ' + err.message));
+    }
+
+    RED.nodes.registerType('text-inject', {
+        category: 'common',
+        color: '#a6bbcf',
+        defaults: {
+            name: { value: '' },
+            nru_popupConfig: { value: { width: 420, height: 260, autoCloseTime: 0 } }
+        },
+        inputs: 0,
+        outputs: 1,
+        icon: 'text-inject.svg',
+        label: function () { return this.name || 'text inject'; },
+
+        // Runs each time the editor builds the popup
+        nru_popupInit: function () {
+            const node = this;
+            const div = document.getElementById('nru_popup.' + node.id + '.div');
+            const status = document.getElementById('nru_popup.' + node.id + '.statusText');
+            if (!div || !status) return;
+            div.textContent = '';
+            // Keep mouse, key and wheel events in the popup. If they reach the node, Node-RED gives the focus to the canvas,
+            // and the text box gets no keys.
+            if (!div.textInjectEventsKept) {
+                div.textInjectEventsKept = true;
+                // contextmenu: else the canvas menu replaces the browser's Cut/Copy/Paste menu.
+                // drag and drop: else a text drag shows the flow-import drop target.
+                for (const type of ['mousedown', 'click', 'dblclick', 'touchstart', 'touchend', 'keydown', 'keyup', 'keypress', 'wheel',
+                    'contextmenu', 'dragenter', 'dragover', 'drop']) {
+                    div.addEventListener(type, (e) => e.stopPropagation());
+                }
+                // The popup ends a resize or move on a mouseup at the document. Stop the mouseup at the node, but give it to the
+                // document, so that a drag released over the text box ends.
+                div.addEventListener('mouseup', (e) => {
+                    e.stopPropagation();
+                    document.dispatchEvent(new MouseEvent('mouseup', { clientX: e.clientX, clientY: e.clientY, button: e.button }));
+                });
+            }
+            div.style.display = 'flex';
+            div.style.flexDirection = 'column';
+
+            const text = document.createElement('textarea');
+            text.style.cssText = 'flex:1;width:100%;box-sizing:border-box;resize:none;font-family:monospace;font-size:12px';
+            text.placeholder = 'Type or dictate (Win+H). Ctrl+Enter sends.';
+            text.value = drafts[node.id] || '';
+            text.addEventListener('input', () => { drafts[node.id] = text.value; });
+            text.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    send(node, text.value, status);
+                }
+            });
+
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;gap:4px;margin-top:4px';
+            const sendButton = document.createElement('button');
+            sendButton.type = 'button';
+            sendButton.className = 'red-ui-button';
+            sendButton.textContent = 'Send';
+            sendButton.addEventListener('click', () => send(node, text.value, status));
+            const clearButton = document.createElement('button');
+            clearButton.type = 'button';
+            clearButton.className = 'red-ui-button';
+            clearButton.textContent = 'Clear';
+            clearButton.addEventListener('click', () => { text.value = ''; delete drafts[node.id]; text.focus(); });
+            row.append(sendButton, clearButton);
+
+            div.append(text, row);
+        }
+    });
+})();
+</script>
+
+<script type="text/html" data-template-name="text-inject">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+</script>
+
+<script type="text/html" data-help-name="text-inject">
+    <p>Sends text that you type in its popup, the same as an inject node.</p>
+    <p>Click the node to open the popup. Type or dictate the text (Windows dictation: Win+H), then click <b>Send</b> or press Ctrl+Enter.</p>
+    <h3>Outputs</h3>
+    <dl class="message-properties">
+        <dt>payload <span class="property-type">string</span></dt>
+        <dd>the text in the popup.</dd>
+    </dl>
+    <p>Deploy the node one time before you send. A change of the text does not need a deploy.</p>
+    <p>The popup keeps the text after a send. A reload of the editor page clears it.</p>
+</script>
