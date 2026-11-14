@@ -1,0 +1,54 @@
+[
+    {
+        "id": "tidemo.tab",
+        "type": "tab",
+        "label": "text inject demo",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "tidemo.c1",
+        "type": "comment",
+        "z": "tidemo.tab",
+        "name": "Type a text and send it",
+        "info": "Deploy, then click the text inject node. Type or dictate a text in the popup, then click Send or press Ctrl+Enter.\nThe text shows in the Debug sidebar. The popup keeps the text, so you can change it and send again.",
+        "x": 200,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "tidemo.t1",
+        "type": "text-inject",
+        "z": "tidemo.tab",
+        "name": "",
+        "nru_popupConfig": {
+            "width": 420,
+            "height": 260,
+            "autoCloseTime": 0
+        },
+        "x": 140,
+        "y": 100,
+        "wires": [
+            [
+                "tidemo.d1"
+            ]
+        ]
+    },
+    {
+        "id": "tidemo.d1",
+        "type": "debug",
+        "z": "tidemo.tab",
+        "name": "text",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 330,
+        "y": 100,
+        "wires": []
+    }
+]
