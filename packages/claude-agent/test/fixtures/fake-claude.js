@@ -6,8 +6,13 @@
 //   ask <question>  asks the operator through the ask_operator tool, then gives the answer as the result
 //   maxturns        ends with the error result error_max_turns
 //   wait            gives no result: the run waits until somebody stops it
+//   slowdone        gives the result after one second
+//   Stage           a call of the agent-watch narrator: one line for each stage of the prompt.
+//                   It appends one line to narrator-calls.log in its folder. If the prompt has the
+//                   word narratorfail, the call fails. If it has the word slowdone, it answers after two seconds.
 //   any other text  gives a JSON result: the prompt, the folder, the sandbox variables and some arguments
 
+const fs = require('fs');
 const readline = require('readline');
 
 const args = process.argv.slice(2);
@@ -40,12 +45,24 @@ function result(text, subtype = 'success') {
     });
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function narrate(prompt) {
+    fs.appendFileSync('narrator-calls.log', prompt.split('\n')[0] + '\n');
+    if (/\bnarratorfail\b/.test(prompt)) return result('', 'error_during_execution');
+    if (/\bslowdone\b/.test(prompt)) await sleep(2000);
+    const stages = [...prompt.matchAll(/^Stage (\d+): /gm)].map((m) => `${m[1]}: The agent works on its task.`);
+    result(stages.join('\n'));
+}
+
 async function answer(prompt) {
+    if (/^Stage \d+: /.test(prompt)) return narrate(prompt);
     write({ type: 'system', subtype: 'init', session_id: sessionId, model });
     write({ type: 'assistant', session_id: sessionId, parent_tool_use_id: null,
         message: { id: 'message-' + ++count, role: 'assistant', content: [{ type: 'text', text: 'I work on: ' + prompt }] } });
     const word = prompt.split(' ')[0];
     if (word === 'wait') return;
+    if (word === 'slowdone') return sleep(1000).then(() => result('done'));
     if (word === 'maxturns') return result('', 'error_max_turns');
     if (word === 'ask') {
         const reply = await request({ subtype: 'mcp_message', server_name: 'operator', message: {
