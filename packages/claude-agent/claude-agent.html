@@ -1,0 +1,392 @@
+<script type="text/javascript" src="node-red-resourceendpoint/node-red-popup/NodeRedPopupFrontend.js"></script>
+<script type="text/javascript" src="node-red-resourceendpoint/node-red-editorcomms/EditorCommsFrontend.js"></script>
+
+<script type="text/javascript">
+(function () {
+    const NODE_COLOR = '#9fd8d0';
+    const activeRuns = {};      // nodeId to the active runs of the runtime node
+    const lastEnd = {};         // nodeId to the end of the last run: the result line, "stopped" or the error
+    const views = {};           // nodeId to the popup tab: 'chat' (the default) or 'timeline'. Survives a popup rebuild.
+    const OPERATOR_KINDS = ['prompt', 'message', 'answer'];
+    const AGENT_KINDS = ['text', 'question'];
+    const END_KINDS = ['result', 'error'];
+
+    function make(tag, text) {
+        const e = document.createElement(tag);
+        if (text) e.textContent = text;
+        return e;
+    }
+
+    // A popup element of the node: log, ask, run, text or send
+    function part(node, name) {
+        return document.getElementById('claude-agent-' + name + '-' + node.id);
+    }
+
+    function selectedRun(node) {
+        const runs = activeRuns[node.id] || [];
+        const select = part(node, 'run');
+        return runs.find((r) => select && r.runId === select.value) || runs[0];
+    }
+
+    // Show the selected run in the status line, the question block and the Send button.
+    function showRun(node) {
+        const run = selectedRun(node);
+        const status = document.getElementById('nru_popup.' + node.id + '.statusText');
+        if (status) {
+            status.setStatusText(run ? run.state + ', ' + run.turns + ' turns, ' + run.tokens
+                : lastEnd[node.id] || 'no active run');
+        }
+        const ask = part(node, 'ask');
+        if (!ask) return;
+        const waiting = !!(run && run.state === 'waiting' && run.question);
+        ask.textContent = '';
+        ask.style.display = waiting ? '' : 'none';
+        part(node, 'send').textContent = waiting ? 'Answer' : 'Send';
+        part(node, 'text').placeholder = waiting ? 'Your answer' : 'Message to the agent';
+        if (!waiting) return;
+        ask.appendChild(make('div', 'Agent asks: ' + run.question.question));
+        for (const option of run.question.options) {
+            const button = make('button', option);
+            button.type = 'button';
+            button.className = 'red-ui-button red-ui-button-small';
+            button.style.margin = '2px';
+            button.addEventListener('click', () => sendControl(node, 'answer', option));
+            ask.appendChild(button);
+        }
+    }
+
+    function showRuns(node, runs) {
+        activeRuns[node.id] = runs;
+        const select = part(node, 'run');
+        if (!select) return;
+        const keep = select.value;
+        select.textContent = '';
+        for (const run of runs) {
+            const option = make('option', run.runId);
+            option.value = run.runId;
+            select.appendChild(option);
+        }
+        if (runs.some((r) => r.runId === keep)) select.value = keep;
+        select.style.display = runs.length > 1 ? '' : 'none';
+        showRun(node);
+    }
+
+    function addEvent(node, e) {
+        if (e.kind === 'result') lastEnd[node.id] = e.text;
+        else if (e.kind === 'error') lastEnd[node.id] = 'error: ' + e.text;
+        else if (e.kind === 'state' && e.text === 'stopped') lastEnd[node.id] = 'stopped';
+        const log = part(node, 'log');
+        if (!log) return;
+        const runId = (activeRuns[node.id] || []).length > 1 ? e.runId + ' ' : '';
+        log.appendChild(make('div', new Date(e.time).toLocaleTimeString() + ' ' + runId + e.kind + ': ' + e.text));
+        while (log.childNodes.length > 200) log.removeChild(log.firstChild);
+        log.scrollTop = log.scrollHeight;
+        addChat(node, e);
+    }
+
+    // The chat tab: operator text on the right, agent text on the left, the end of a run as a grey line
+    function addChat(node, e) {
+        const chat = part(node, 'chat');
+        if (!chat) return;
+        let entry;
+        if (OPERATOR_KINDS.includes(e.kind) || AGENT_KINDS.includes(e.kind)) {
+            const operator = OPERATOR_KINDS.includes(e.kind);
+            entry = make('div', e.kind === 'question' ? 'Question: ' + e.text : e.text);
+            entry.style.cssText = 'max-width:85%;margin:3px 0;padding:4px 8px;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;' +
+                (operator ? 'align-self:flex-end;background:' + NODE_COLOR + ';color:#000' : 'align-self:flex-start;border:1px solid rgba(128,128,128,0.5)');
+        } else if (END_KINDS.includes(e.kind) || (e.kind === 'state' && e.text === 'stopped')) {
+            entry = make('div', e.kind === 'error' ? 'error: ' + e.text : e.text);
+            entry.style.cssText = 'align-self:center;margin:3px 0;font-size:10px;opacity:0.6';
+        } else return;
+        chat.appendChild(entry);
+        while (chat.childNodes.length > 200) chat.removeChild(chat.firstChild);
+        chat.scrollTop = chat.scrollHeight;
+    }
+
+    // Show one tab of the popup
+    function showView(node, view) {
+        views[node.id] = view;
+        part(node, 'log').style.display = view === 'timeline' ? '' : 'none';
+        part(node, 'chat').style.display = view === 'chat' ? 'flex' : 'none';
+        part(node, 'tab-timeline').classList.toggle('selected', view === 'timeline');
+        part(node, 'tab-chat').classList.toggle('selected', view === 'chat');
+        const shown = view === 'chat' ? part(node, 'chat') : part(node, 'log');
+        shown.scrollTop = shown.scrollHeight;
+    }
+
+    function sendControl(node, cmd, text) {
+        const run = selectedRun(node);
+        if (!run && cmd !== 'message') return RED.notify('No active run', 'warning');
+        const request = run ? node.nodeRedEditorComms.publish('control', { cmd: cmd, runId: run.runId, text: text })
+            : node.nodeRedEditorComms.publish('start', { text: text });
+        request
+            .then((res) => { if (res && res.error) RED.notify(res.error, 'warning'); })
+            .catch((err) => RED.notify(err.status === 404 ? 'Deploy the node first' : err.message, 'warning'));
+    }
+
+    RED.nodes.registerType('claude-agent', {
+        category: 'agents',
+        color: NODE_COLOR,
+        defaults: {
+            name: { value: '' },
+            systemPrompt: { value: '' },
+            model: { value: '' },
+            prompt: { value: '{{payload}}' },
+            cwd: { value: '' },
+            sandbox: {
+                value: '',
+                // The rule comes from claudeAgent.sandboxPattern in settings.js. The runtime checks the name again.
+                validate: function (v) {
+                    const rule = (RED.settings.claudeAgent || {}).sandboxPattern;
+                    try { return !v || !rule || new RegExp(rule).test(v); } catch (e) { return true; }
+                }
+            },
+            tools: { value: 'Read, Grep, Glob' },
+            projectSettings: { value: false },
+            fullEnvironment: { value: false },
+            maxTurns: { value: 30, validate: RED.validators.number() },
+            maxCostUsd: { value: 2, validate: RED.validators.number(true) },
+            timeoutMin: { value: 30, validate: RED.validators.number(true) },
+            maxParallel: { value: 1, validate: RED.validators.number() },
+            outputSchema: {
+                value: '',
+                validate: function (v) {
+                    try { return !v || (JSON.parse(v), true); } catch (e) { return false; }
+                }
+            },
+            mcpServers: {
+                value: '',
+                validate: function (v) {
+                    try { return !v || (JSON.parse(v), true); } catch (e) { return false; }
+                }
+            },
+            nru_popupConfig: { value: { width: 460, height: 300, autoCloseTime: 0 } }
+        },
+        inputs: 1,
+        outputs: 3,
+        outputLabels: ['result', 'question', 'events'],
+        icon: 'claude-agent.svg',
+        label: function () { return this.name || 'claude-agent'; },
+        paletteLabel: 'claude-agent',
+
+        // Runs each time the editor builds the popup
+        nru_popupInit: function () {
+            const node = this;
+            const div = document.getElementById('nru_popup.' + node.id + '.div');
+            if (!div) return;
+            div.textContent = '';
+            // Keep mouse, key and wheel events in the popup. If they reach the node, Node-RED gives the focus to the canvas,
+            // and the text box gets no keys.
+            if (!div.claudeAgentEventsKept) {
+                div.claudeAgentEventsKept = true;
+                for (const type of ['mousedown', 'mouseup', 'click', 'dblclick', 'touchstart', 'touchend', 'keydown', 'keyup', 'keypress', 'wheel']) {
+                    div.addEventListener(type, (e) => e.stopPropagation());
+                }
+            }
+            div.style.display = 'flex';
+            div.style.flexDirection = 'column';
+
+            const tabs = make('div');
+            tabs.style.cssText = 'display:flex;gap:4px;margin-bottom:4px';
+            for (const [view, label] of [['chat', 'Chat'], ['timeline', 'Timeline']]) {
+                const tab = make('button', label);
+                tab.id = 'claude-agent-tab-' + view + '-' + node.id;
+                tab.type = 'button';
+                tab.className = 'red-ui-button red-ui-button-small';
+                tab.addEventListener('click', () => showView(node, view));
+                tabs.appendChild(tab);
+            }
+            const log = make('div');
+            log.id = 'claude-agent-log-' + node.id;
+            log.style.cssText = 'flex:1;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap';
+            const chat = make('div');
+            chat.id = 'claude-agent-chat-' + node.id;
+            chat.style.cssText = 'flex:1;overflow:auto;flex-direction:column;font-size:12px';
+            const ask = make('div');
+            ask.id = 'claude-agent-ask-' + node.id;
+            ask.style.cssText = 'display:none;margin-top:4px;padding:4px;background:#fff3cd;color:#000;border-left:3px solid #e0a800';
+            const select = make('select');
+            select.id = 'claude-agent-run-' + node.id;
+            select.style.display = 'none';
+            select.addEventListener('change', () => showRun(node));
+            const text = make('input');
+            text.id = 'claude-agent-text-' + node.id;
+            text.type = 'text';
+            text.style.flex = '1';
+            text.placeholder = 'Message to the agent';
+            const send = make('button', 'Send');
+            send.id = 'claude-agent-send-' + node.id;
+            const interrupt = make('button', 'Interrupt');
+            const stop = make('button', 'Stop');
+            for (const b of [send, interrupt, stop]) {
+                b.type = 'button';
+                b.className = 'red-ui-button red-ui-button-small';
+            }
+            send.addEventListener('click', () => {
+                const run = selectedRun(node);
+                sendControl(node, run && run.state === 'waiting' ? 'answer' : 'message', text.value);
+                text.value = '';
+            });
+            text.addEventListener('keydown', (e) => { if (e.key === 'Enter') send.click(); });
+            interrupt.addEventListener('click', () => sendControl(node, 'interrupt'));
+            stop.addEventListener('click', () => sendControl(node, 'stop'));
+            const row = make('div');
+            row.style.cssText = 'display:flex;gap:4px;margin-top:4px';
+            for (const e of [select, text, send, interrupt, stop]) row.appendChild(e);
+            div.appendChild(tabs);
+            div.appendChild(log);
+            div.appendChild(chat);
+            showView(node, views[node.id] || 'chat');
+            div.appendChild(ask);
+            div.appendChild(row);
+
+            node.nodeRedEditorComms.publish('get-log').then((state) => {
+                for (const e of state.events) addEvent(node, e);
+                showRuns(node, state.runs);
+            }).catch(() => showRuns(node, []));
+        },
+        nodeRedEditorComms_subscriptions: {
+            event: function (e) { addEvent(this, e); },
+            runs: function (runs) { showRuns(this, runs); }
+        }
+    });
+})();
+</script>
+
+<script type="text/html" data-template-name="claude-agent">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-cwd">Folder</label>
+        <input type="text" id="node-input-cwd" placeholder="Empty: the work root">
+    </div>
+    <div class="form-row">
+        <label for="node-input-sandbox">Sandbox</label>
+        <input type="text" id="node-input-sandbox" placeholder="Empty: no sandbox">
+    </div>
+    <div class="form-row">
+        <label for="node-input-systemPrompt">System prompt</label>
+        <textarea id="node-input-systemPrompt" rows="4" style="width:70%"></textarea>
+    </div>
+    <div class="form-row">
+        <label for="node-input-model">Model</label>
+        <select id="node-input-model">
+            <option value="">default</option>
+            <option value="haiku">haiku</option>
+            <option value="sonnet">sonnet</option>
+            <option value="opus">opus</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-prompt">Prompt</label>
+        <textarea id="node-input-prompt" rows="3" style="width:70%"></textarea>
+    </div>
+    <div class="form-row">
+        <label for="node-input-tools">Tools</label>
+        <input type="text" id="node-input-tools" placeholder="empty: all tools">
+    </div>
+    <div class="form-row">
+        <label for="node-input-projectSettings">Project settings</label>
+        <input type="checkbox" id="node-input-projectSettings" style="width:auto">
+        Load CLAUDE.md and .claude/settings.json of the folder
+    </div>
+    <div class="form-row">
+        <label for="node-input-fullEnvironment">Full environment</label>
+        <input type="checkbox" id="node-input-fullEnvironment" style="width:auto">
+        Load the user and project settings, skills and MCP servers
+    </div>
+    <div class="form-row">
+        <label for="node-input-maxTurns">Max turns</label>
+        <input type="text" id="node-input-maxTurns">
+    </div>
+    <div class="form-row">
+        <label for="node-input-maxCostUsd">Max cost ($)</label>
+        <input type="text" id="node-input-maxCostUsd" placeholder="empty: no limit">
+    </div>
+    <div class="form-row">
+        <label for="node-input-timeoutMin">Timeout (min)</label>
+        <input type="text" id="node-input-timeoutMin" placeholder="empty: no limit">
+    </div>
+    <div class="form-row">
+        <label for="node-input-maxParallel">Max parallel</label>
+        <input type="text" id="node-input-maxParallel">
+    </div>
+    <div class="form-row">
+        <label for="node-input-outputSchema">Output schema</label>
+        <textarea id="node-input-outputSchema" rows="4" style="width:70%" placeholder="optional JSON schema"></textarea>
+    </div>
+    <div class="form-row">
+        <label for="node-input-mcpServers">MCP servers</label>
+        <textarea id="node-input-mcpServers" rows="4" style="width:70%" placeholder="optional JSON object"></textarea>
+    </div>
+    <div class="form-tips">Optional JSON object: server name to { command, args, env }. The agent gets these MCP servers and the "operator" server.</div>
+</script>
+
+<script type="text/html" data-help-name="claude-agent">
+    <p>Runs one Claude Code agent for each start message. The node is one stage of an agent workflow. A wire gives the result to the next stage.</p>
+    <p>The agent runs with all permissions: it gets no permission prompt. Run Node-RED or the launcher as a separate OS user, or in a container. See the README.</p>
+    <p>A run loads no user settings, skills, outside MCP servers or auto memory, unless you set <b>Project settings</b> or <b>Full environment</b>.</p>
+
+    <h3>Properties</h3>
+    <dl class="message-properties">
+        <dt>Name</dt><dd>The label of the node. It is also the key in <code>msg.stages</code>.</dd>
+        <dt>Folder</dt><dd>The work folder of the agent. It must be the work root (<code>claudeAgent.workRoot</code> in <code>settings.js</code>, default the home folder of Node-RED) or a folder below it. Empty: the work root. <code>msg.cwd</code> replaces it.</dd>
+        <dt>Sandbox</dt><dd>A name that the node gives to the launcher program (<code>claudeAgent.launcher</code>) in the environment variable <code>NODE_RED_CLAUDE_SANDBOX</code>, with the folder in <code>NODE_RED_CLAUDE_CWD</code>. The launcher can then start the CLI in that container or machine. Empty: no sandbox.</dd>
+        <dt>System prompt</dt><dd>It is added to the Claude Code system prompt. Empty: no extra instructions.</dd>
+        <dt>Model</dt><dd>Empty: the default model.</dd>
+        <dt>Prompt</dt><dd>A mustache template over the message, for example <code>{{payload}}</code> or <code>{{stages.triage.problem}}</code>. An object value becomes JSON.</dd>
+        <dt>Tools</dt><dd>A comma list of the tools of the agent. Empty: all tools. The agent gets no permission prompt.</dd>
+        <dt>Project settings</dt><dd>When set, the run loads <code>CLAUDE.md</code> and <code>.claude/settings.json</code> of the folder. Default off.</dd>
+        <dt>Full environment</dt><dd>When set, the run loads the user and project settings, the user <code>CLAUDE.md</code>, the skills and the MCP servers of the OS user that runs the CLI. Auto memory stays off. Default off.</dd>
+        <dt>Max turns</dt><dd>Default 30.</dd>
+        <dt>Max cost ($)</dt><dd>The cost limit of one run. Default 2. Empty: no limit.</dd>
+        <dt>Timeout (min)</dt><dd>The time limit of one run, also while it waits for an answer. Default 30. Empty: no limit.</dd>
+        <dt>Max parallel</dt><dd>The number of runs at the same time. More start messages wait in a queue.</dd>
+        <dt>Output schema</dt><dd>Optional JSON schema. When set, the result payload is an object that agrees with the schema.</dd>
+        <dt>MCP servers</dt><dd>Optional JSON object: server name to <code>{ command, args, env }</code>. The agent gets these servers and the <code>operator</code> server.</dd>
+    </dl>
+
+    <h3>Inputs</h3>
+    <p>A start message has no <code>msg.agent.cmd</code>. The rendered prompt is the task.</p>
+    <dl class="message-properties">
+        <dt class="optional">cwd <span class="property-type">string</span></dt><dd>The work folder for this run.</dd>
+        <dt class="optional">model <span class="property-type">string</span></dt><dd><code>haiku</code>, <code>sonnet</code> or <code>opus</code>. This run uses that model in place of the model of the node. The node ignores a different value.</dd>
+        <dt class="optional">agent.resume <span class="property-type">string</span></dt><dd>A session id. The run continues that session. The node ignores <code>msg.agent.sessionId</code> on a start message.</dd>
+    </dl>
+    <p>A control message has <code>msg.agent = { cmd, runId }</code> and a text <code>msg.payload</code>. You can omit <code>runId</code> when the node has one active run.</p>
+    <ul>
+        <li><code>answer</code>: the answer to the open question.</li>
+        <li><code>message</code>: a new user message for the session.</li>
+        <li><code>interrupt</code>: stop the current turn. The run stays open for a <code>message</code>.</li>
+        <li><code>stop</code>: end the run. This is not an error. Output 1 sends nothing.</li>
+    </ul>
+
+    <h3>Outputs</h3>
+    <ol class="node-ports">
+        <li>Result
+            <dl class="message-properties">
+                <dt>payload <span class="property-type">string | object</span></dt><dd>The final text, or the schema object.</dd>
+                <dt>stages <span class="property-type">object</span></dt><dd>The payload of each stage. This node adds its payload under its name, else under its node id. Earlier entries stay.</dd>
+                <dt>agent <span class="property-type">object</span></dt><dd><code>{ runId, sessionId, model, turns, durationMs, tokens, weighted, usage }</code>. <code>weighted</code> is the price-weighted total in sonnet input tokens (see the README). Put <code>sessionId</code> into <code>msg.agent.resume</code> to continue the session.</dd>
+            </dl>
+        </li>
+        <li>Question
+            <dl class="message-properties">
+                <dt>payload <span class="property-type">object</span></dt><dd><code>{ question, options }</code> from <code>ask_operator</code>.</dd>
+            </dl>
+        </li>
+        <li>Events
+            <dl class="message-properties">
+                <dt>payload <span class="property-type">object</span></dt><dd><code>{ runId, seq, time, kind, text }</code>. The node cuts <code>text</code> after 300 characters.</dd>
+            </dl>
+        </li>
+    </ol>
+
+    <h3>Details</h3>
+    <p>Each run has the tool <code>ask_operator(question, options)</code>. The run waits for an answer from output 2, from a control message, or from the popup.</p>
+    <p>A failed run goes to a <code>catch</code> node. <code>msg.agent.reason</code> is one of <code>max_turns</code>, <code>max_cost</code>, <code>timeout</code>, <code>schema</code>, <code>sdk_error</code> or <code>node_closed</code>.</p>
+    <p>Click the node to open the popup. It has two tabs: Chat shows the text of the operator and of the agent; Timeline shows all events. The status line shows the state, the turns and the tokens used. The popup has Send, Interrupt and Stop. The Enter key also sends. When no run is active, Send starts a run with your text as the task; the run continues the last session of the node. When the agent asks a question, the popup shows it with one button for each option.</p>
+    <p>A deploy of the node ends its live runs and clears the popup log.</p>
+</script>

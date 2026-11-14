@@ -1,0 +1,54 @@
+{
+	"name": "@nrutils/node-red-claude-agent",
+	"version": "0.1.0",
+	"description": "A Node-RED node that runs one Claude Code agent for each message, with a live chat popup. Built on @nrutils/node-red-utils.",
+	"keywords": [
+		"node-red",
+		"claude",
+		"claude-code",
+		"agent",
+		"ai"
+	],
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/UpDownMe733/nrutils-nodes.git",
+		"directory": "packages/claude-agent"
+	},
+	"homepage": "https://github.com/UpDownMe733/nrutils-nodes/tree/main/packages/claude-agent#readme",
+	"bugs": {
+		"url": "https://github.com/UpDownMe733/nrutils-nodes/issues"
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"files": [
+		"*.js",
+		"*.html",
+		"icons/",
+		"examples/"
+	],
+	"scripts": {
+		"test": "node --test test/*.test.js"
+	},
+	"node-red": {
+		"version": ">=4.0.0",
+		"nodes": {
+			"claude-agent": "claude-agent.js"
+		}
+	},
+	"dependencies": {
+		"@anthropic-ai/claude-agent-sdk": "^0.3.322",
+		"mustache": "^4.2.0",
+		"zod": "^4.0.0"
+	},
+	"peerDependencies": {
+		"@nrutils/node-red-utils": "^0.3.0"
+	},
+	"devDependencies": {
+		"node-red": "^5.0.9"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}
