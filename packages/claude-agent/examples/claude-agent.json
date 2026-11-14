@@ -1,0 +1,264 @@
+[
+    {
+        "id": "cademo.tab",
+        "type": "tab",
+        "label": "claude agent demo",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "cademo.c1",
+        "type": "comment",
+        "z": "cademo.tab",
+        "name": "1. Ask an agent about its work folder",
+        "info": "Click the inject node. The agent may only read (tools Read, Grep, Glob). It looks at the work folder and answers.\nThe result shows in the Debug sidebar. Click the claude-agent node to follow the run in its popup.\nEach run costs money. The node stops a run at $0.20, 10 turns or 5 minutes.",
+        "x": 230,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "cademo.i1",
+        "type": "inject",
+        "z": "cademo.tab",
+        "name": "question",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "List the files in the work folder. Then say in one sentence what the folder is for.",
+        "payloadType": "str",
+        "x": 150,
+        "y": 100,
+        "wires": [
+            [
+                "cademo.a1"
+            ]
+        ]
+    },
+    {
+        "id": "cademo.a1",
+        "type": "claude-agent",
+        "z": "cademo.tab",
+        "name": "look",
+        "systemPrompt": "",
+        "model": "haiku",
+        "prompt": "{{payload}}",
+        "cwd": "",
+        "sandbox": "",
+        "tools": "Read, Grep, Glob",
+        "projectSettings": false,
+        "fullEnvironment": false,
+        "maxTurns": 10,
+        "maxCostUsd": 0.2,
+        "timeoutMin": 5,
+        "maxParallel": 1,
+        "outputSchema": "",
+        "mcpServers": "",
+        "nru_popupConfig": {
+            "width": 460,
+            "height": 300,
+            "autoCloseTime": 0
+        },
+        "x": 340,
+        "y": 100,
+        "wires": [
+            [
+                "cademo.d1"
+            ],
+            [
+                "cademo.d2"
+            ],
+            [
+                "cademo.d3"
+            ]
+        ]
+    },
+    {
+        "id": "cademo.d1",
+        "type": "debug",
+        "z": "cademo.tab",
+        "name": "result",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 530,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "cademo.d2",
+        "type": "debug",
+        "z": "cademo.tab",
+        "name": "question",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 540,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "cademo.d3",
+        "type": "debug",
+        "z": "cademo.tab",
+        "name": "events",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 530,
+        "y": 140,
+        "wires": []
+    },
+    {
+        "id": "cademo.c2",
+        "type": "comment",
+        "z": "cademo.tab",
+        "name": "2. The agent asks you a question",
+        "info": "Click the inject node, then click the claude-agent node. The agent asks you to pick a colour.\nClick a button in the popup to answer. The question also goes out on output 2.",
+        "x": 220,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "cademo.i2",
+        "type": "inject",
+        "z": "cademo.tab",
+        "name": "ask me",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "Ask the operator to pick a colour: red, green or blue. Then write one short sentence about that colour.",
+        "payloadType": "str",
+        "x": 150,
+        "y": 260,
+        "wires": [
+            [
+                "cademo.a2"
+            ]
+        ]
+    },
+    {
+        "id": "cademo.a2",
+        "type": "claude-agent",
+        "z": "cademo.tab",
+        "name": "colour",
+        "systemPrompt": "",
+        "model": "haiku",
+        "prompt": "{{payload}}",
+        "cwd": "",
+        "sandbox": "",
+        "tools": "Read",
+        "projectSettings": false,
+        "fullEnvironment": false,
+        "maxTurns": 10,
+        "maxCostUsd": 0.2,
+        "timeoutMin": 5,
+        "maxParallel": 1,
+        "outputSchema": "",
+        "mcpServers": "",
+        "nru_popupConfig": {
+            "width": 460,
+            "height": 300,
+            "autoCloseTime": 0
+        },
+        "x": 350,
+        "y": 260,
+        "wires": [
+            [
+                "cademo.d4"
+            ],
+            [],
+            []
+        ]
+    },
+    {
+        "id": "cademo.d4",
+        "type": "debug",
+        "z": "cademo.tab",
+        "name": "result",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 530,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "cademo.c3",
+        "type": "comment",
+        "z": "cademo.tab",
+        "name": "3. Errors",
+        "info": "A failed run (cost, turns, time limit, a folder outside the work root) goes to the Catch node.",
+        "x": 160,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "cademo.catch",
+        "type": "catch",
+        "z": "cademo.tab",
+        "name": "",
+        "scope": [
+            "cademo.a1",
+            "cademo.a2"
+        ],
+        "uncaught": false,
+        "x": 140,
+        "y": 380,
+        "wires": [
+            [
+                "cademo.d5"
+            ]
+        ]
+    },
+    {
+        "id": "cademo.d5",
+        "type": "debug",
+        "z": "cademo.tab",
+        "name": "error and reason",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 350,
+        "y": 380,
+        "wires": []
+    }
+]
