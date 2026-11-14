@@ -1,0 +1,145 @@
+[
+    {
+        "id": "awdemo.tab",
+        "type": "tab",
+        "label": "agent watch demo",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "awdemo.c1",
+        "type": "comment",
+        "z": "awdemo.tab",
+        "name": "Two agent stages and a watch node",
+        "info": "Click the inject node. The stage draft writes a text. The stage shorten makes it shorter.\nClick the agent-watch node to open its popup. It shows a line when a stage starts, asks, ends or fails.\nThe narrator adds one line about the work of each busy stage, every 30 seconds. Each narrator line is one small haiku call.\nThe result of the flow goes into the watch node: the green line.",
+        "x": 220,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "awdemo.i1",
+        "type": "inject",
+        "z": "awdemo.tab",
+        "name": "task",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "Write five good habits for a code review, one line each.",
+        "payloadType": "str",
+        "x": 130,
+        "y": 100,
+        "wires": [
+            [
+                "awdemo.a1"
+            ]
+        ]
+    },
+    {
+        "id": "awdemo.a1",
+        "type": "claude-agent",
+        "z": "awdemo.tab",
+        "name": "draft",
+        "systemPrompt": "",
+        "model": "haiku",
+        "prompt": "{{payload}}",
+        "cwd": "",
+        "sandbox": "",
+        "tools": "Read",
+        "projectSettings": false,
+        "fullEnvironment": false,
+        "maxTurns": 10,
+        "maxCostUsd": 0.2,
+        "timeoutMin": 5,
+        "maxParallel": 1,
+        "outputSchema": "",
+        "mcpServers": "",
+        "nru_popupConfig": {
+            "width": 460,
+            "height": 300,
+            "autoCloseTime": 0
+        },
+        "x": 300,
+        "y": 100,
+        "wires": [
+            [
+                "awdemo.a2"
+            ],
+            [],
+            []
+        ]
+    },
+    {
+        "id": "awdemo.a2",
+        "type": "claude-agent",
+        "z": "awdemo.tab",
+        "name": "shorten",
+        "systemPrompt": "",
+        "model": "haiku",
+        "prompt": "Make this text shorter, at most 40 words:\n{{payload}}",
+        "cwd": "",
+        "sandbox": "",
+        "tools": "Read",
+        "projectSettings": false,
+        "fullEnvironment": false,
+        "maxTurns": 10,
+        "maxCostUsd": 0.2,
+        "timeoutMin": 5,
+        "maxParallel": 1,
+        "outputSchema": "",
+        "mcpServers": "",
+        "nru_popupConfig": {
+            "width": 460,
+            "height": 300,
+            "autoCloseTime": 0
+        },
+        "x": 470,
+        "y": 100,
+        "wires": [
+            [
+                "awdemo.w1",
+                "awdemo.d1"
+            ],
+            [],
+            []
+        ]
+    },
+    {
+        "id": "awdemo.w1",
+        "type": "agent-watch",
+        "z": "awdemo.tab",
+        "name": "",
+        "narrator": true,
+        "nru_popupConfig": {
+            "width": 520,
+            "height": 300,
+            "autoCloseTime": 0
+        },
+        "x": 660,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "awdemo.d1",
+        "type": "debug",
+        "z": "awdemo.tab",
+        "name": "result",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 650,
+        "y": 140,
+        "wires": []
+    }
+]
