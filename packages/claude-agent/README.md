@@ -201,7 +201,7 @@ Click the node to open the popup. It has two tabs:
 - **Timeline**: all events of the runs.
 
 The status line shows the state, the turns and the tokens. When the agent asks a question, the
-popup shows it with one button for each option. **Send** sends a message to the run, or the answer.
+popup shows it with one button for each option. The message box has more than one line. Enter sends; Shift+Enter starts a new line. **Send** sends a message to the run, or the answer.
 When no run is active, Send starts a run that continues the last session of the node.
 **Interrupt** and **Stop** act on the selected run.
 
