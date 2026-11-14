@@ -34,7 +34,7 @@
 		}
 	},
 	"peerDependencies": {
-		"@nrutils/node-red-utils": "^0.2.0"
+		"@nrutils/node-red-utils": "^0.3.0"
 	},
 	"devDependencies": {
 		"node-red": "^5.0.9"
