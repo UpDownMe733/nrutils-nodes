@@ -11,7 +11,7 @@ const vm = require('vm');
 const html = fs.readFileSync(path.join(__dirname, '..', 'claude-agent.html'), 'utf8');
 const script = /<script type="text\/javascript">([\s\S]*?)<\/script>/.exec(html)[1];
 
-function setup() {
+function setup(extra) {
     const byId = {};
     const listeners = (e) => (e.listeners = e.listeners || {});
     const createElement = (tag) => {
@@ -47,14 +47,15 @@ function setup() {
         validators: { number: () => () => true },
         settings: {}
     };
-    vm.runInNewContext(script, { document, RED, window: {} });
+    vm.runInNewContext(script, { document, RED, window: {}, ...extra });
+    const getDef = () => def;
     const node = {
         id: 'n1',
         nodeRedEditorComms: { publish: (type, payload) => { calls.push({ type, payload }); return Promise.resolve({ events: [], runs: [] }); } }
     };
     def.nru_popupInit.call(node);
     const text = document.getElementById('claude-agent-text-n1');
-    return { text, calls };
+    return { text, calls, getDef };
 }
 
 const key = (text, init) => {
@@ -100,5 +101,28 @@ describe('claude-agent popup message box', () => {
         text.value = 'line one\nline two';
         key(text, { key: 'Enter', shiftKey: false });
         assert.deepEqual(starts(calls).map((c) => JSON.parse(JSON.stringify(c.payload))), [{ text: 'line one\nline two' }]);
+    });
+});
+
+describe('claude-agent edit dialog', () => {
+    const open = (cacheTtl) => {
+        const set = [];
+        const $ = (sel) => ({ val: (v) => set.push([sel, v]) });
+        const { getDef } = setup({ $ });
+        getDef().oneditprepare.call({ cacheTtl });
+        return set;
+    };
+
+    it('shows 60 minutes for a node without a Cache time', () => {
+        assert.deepEqual(open(undefined), [['#node-input-cacheTtl', '1h']]);
+    });
+
+    it('shows 60 minutes for an unknown Cache time', () => {
+        assert.deepEqual(open(''), [['#node-input-cacheTtl', '1h']]);
+    });
+
+    it('leaves a stored Cache time alone', () => {
+        assert.deepEqual(open('5m'), []);
+        assert.deepEqual(open('1h'), []);
     });
 });
