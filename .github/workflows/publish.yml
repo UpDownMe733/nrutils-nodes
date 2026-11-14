@@ -1,0 +1,44 @@
+name: Publish
+
+# A published GitHub release <node>-vX.Y.Z publishes version X.Y.Z of packages/<node> to npm.
+# For example, the release worker-function-v0.1.0 publishes @nrutils/node-red-worker-function 0.1.0.
+# npm trusted publishing: npm accepts this workflow by its OIDC identity. No npm token is stored.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Node 24 has npm 11, which trusted publishing needs.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: The release tag must be <node>-v plus the version in packages/<node>/package.json
+        id: tag
+        run: |
+          if [[ ! $GITHUB_REF_NAME =~ ^([a-z0-9][a-z0-9-]*)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::The tag $GITHUB_REF_NAME is not <node>-vX.Y.Z, for example worker-function-v0.1.0."
+            exit 1
+          fi
+          node=${BASH_REMATCH[1]} version=${BASH_REMATCH[2]}
+          if [ ! -f "packages/$node/package.json" ]; then
+            echo "::error::The tag $GITHUB_REF_NAME names the node $node, but packages/$node/package.json does not exist."
+            exit 1
+          fi
+          have=$(node -p "require('./packages/$node/package.json').version")
+          if [ "$have" != "$version" ]; then
+            echo "::error::The tag $GITHUB_REF_NAME gives version $version, but packages/$node/package.json has version $have."
+            exit 1
+          fi
+          echo "node=$node" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - run: npm test
+      - run: npm publish -w packages/${{ steps.tag.outputs.node }}
