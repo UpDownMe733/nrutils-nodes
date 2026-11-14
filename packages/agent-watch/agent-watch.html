@@ -64,12 +64,28 @@
             const div = document.getElementById('nru_popup.' + node.id + '.div');
             if (!div) return;
             div.textContent = '';
-            // Keep the wheel in the popup, so that the canvas does not zoom.
-            if (!div.agentWatchWheelKept) {
-                div.agentWatchWheelKept = true;
-                div.addEventListener('wheel', (e) => e.stopPropagation());
+            // Keep mouse, key and wheel events in the popup. If they reach the node, Node-RED gives the focus to the canvas,
+            // and Ctrl+C runs the copy of the flow instead of the copy of the browser.
+            // The code never calls preventDefault, so the browser selects and copies the text.
+            if (!div.agentWatchEventsKept) {
+                div.agentWatchEventsKept = true;
+                // contextmenu: else the canvas menu replaces the Copy menu of the browser.
+                // drag and drop: else a text drag shows the flow-import drop target.
+                for (const type of ['mousedown', 'click', 'dblclick', 'touchstart', 'touchend', 'keydown', 'keyup', 'keypress', 'wheel',
+                    'contextmenu', 'dragenter', 'dragover', 'drop']) {
+                    div.addEventListener(type, (e) => e.stopPropagation());
+                }
+                // The popup ends a resize or move on a mouseup at the document. Stop the mouseup at the node, but give it to the
+                // document, so that a drag released over the text ends.
+                div.addEventListener('mouseup', (e) => {
+                    e.stopPropagation();
+                    document.dispatchEvent(new MouseEvent('mouseup', { clientX: e.clientX, clientY: e.clientY, button: e.button }));
+                });
             }
-            const list = make('div', '', 'height:100%;overflow:auto;font-family:monospace;font-size:11px');
+            const list = make('div', '', 'height:100%;overflow:auto;font-family:monospace;font-size:11px'
+                // The status-label class of Node-RED sets user-select:none, and the popup inherits it.
+                + ';user-select:text;-webkit-user-select:text;cursor:text;outline:none');
+            list.tabIndex = -1;
             list.id = 'agent-watch-list-' + node.id;
             div.appendChild(list);
             showTotal(node, 0, 0);
