@@ -1,0 +1,124 @@
+<script type="text/javascript" src="node-red-resourceendpoint/node-red-popup/NodeRedPopupFrontend.js"></script>
+<script type="text/javascript" src="node-red-resourceendpoint/node-red-editorcomms/EditorCommsFrontend.js"></script>
+
+<script type="text/javascript">
+(function () {
+    const MAX_LINES = 300;
+    const LEVEL_STYLE = {
+        wait: 'color:#b36b00;background:rgba(224,168,0,0.18)',
+        error: 'color:#d0342c;background:rgba(208,52,44,0.12)',
+        result: 'background:rgba(46,160,90,0.14)'
+    };
+
+    function make(tag, text, css) {
+        const e = document.createElement(tag);
+        if (text) e.textContent = text;
+        if (css) e.style.cssText = css;
+        return e;
+    }
+
+    // Add one line to the list. Scroll down only when the user is at the bottom.
+    function addLine(node, line) {
+        const list = document.getElementById('agent-watch-list-' + node.id);
+        if (!list) return;
+        const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 8;
+        const row = make('div', '', 'display:flex;gap:8px;padding:1px 2px;' + (LEVEL_STYLE[line.level] || ''));
+        const d = new Date(line.time);
+        row.appendChild(make('span', String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'), 'flex:none'));
+        const stage = make('span', line.stage, 'flex:none;width:12ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:bold');
+        stage.title = line.stage;
+        row.appendChild(stage);
+        row.appendChild(make('span', line.text, 'flex:1;white-space:pre-wrap;overflow-wrap:anywhere'));
+        list.appendChild(row);
+        while (list.childNodes.length > MAX_LINES) list.removeChild(list.firstChild);
+        if (atBottom) list.scrollTop = list.scrollHeight;
+    }
+
+    // The total cost in USD, as the API reports it, goes in the status bar of the popup.
+    function weightedText(n) {
+        return (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(Math.round(n || 0))) + ' weighted';
+    }
+    function showTotal(node, total, weighted) {
+        const status = document.getElementById('nru_popup.' + node.id + '.statusText');
+        if (!status || !status.setStatusText) return;
+        status.setStatusText('Total cost: $' + (total || 0).toFixed(2) + ', ' + weightedText(weighted));
+    }
+
+    RED.nodes.registerType('agent-watch', {
+        category: 'agents',
+        color: '#9fd8d0',
+        defaults: {
+            name: { value: '' },
+            narrator: { value: true },
+            nru_popupConfig: { value: { width: 520, height: 300, autoCloseTime: 0 } }
+        },
+        inputs: 1,
+        outputs: 0,
+        icon: 'agent-watch.svg',
+        label: function () { return this.name || 'agent-watch'; },
+        paletteLabel: 'agent-watch',
+
+        // Runs each time the editor builds the popup
+        nru_popupInit: function () {
+            const node = this;
+            const div = document.getElementById('nru_popup.' + node.id + '.div');
+            if (!div) return;
+            div.textContent = '';
+            // Keep the wheel in the popup, so that the canvas does not zoom.
+            if (!div.agentWatchWheelKept) {
+                div.agentWatchWheelKept = true;
+                div.addEventListener('wheel', (e) => e.stopPropagation());
+            }
+            const list = make('div', '', 'height:100%;overflow:auto;font-family:monospace;font-size:11px');
+            list.id = 'agent-watch-list-' + node.id;
+            div.appendChild(list);
+            showTotal(node, 0, 0);
+            node.nodeRedEditorComms.publish('get-log').then((state) => {
+                showTotal(node, state.total, state.weighted);
+                for (const line of state.lines) addLine(node, line);
+                list.scrollTop = list.scrollHeight;
+            }).catch(() => {});
+        },
+        nodeRedEditorComms_subscriptions: {
+            line: function (line) { addLine(this, line); },
+            total: function (state) { showTotal(this, state.total, state.weighted); }
+        }
+    });
+})();
+</script>
+
+<script type="text/html" data-template-name="agent-watch">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-narrator">Narrator</label>
+        <input type="checkbox" id="node-input-narrator" style="width:auto">
+        Add a line about what the agents do, every 30 seconds
+    </div>
+</script>
+
+<script type="text/html" data-help-name="agent-watch">
+    <p>Shows a short running commentary of the <code>claude-agent</code> nodes on the same tab. The node has one input and no output. It needs no wire to the <code>claude-agent</code> nodes.</p>
+    <h3>Input</h3>
+    <p>Wire the end of a flow to the input to show its result in the popup: one line with a green background. <code>msg.topic</code> is the stage (default <code>Result</code>) and <code>msg.payload</code> is the text. An object is shown as JSON.</p>
+
+    <h3>Properties</h3>
+    <dl class="message-properties">
+        <dt>Name</dt><dd>The label of the node.</dd>
+        <dt>Narrator</dt><dd>When set, the node makes one call to the haiku model every 30 seconds, if the stages did something new. One call uses about 1,500 tokens. It gives one short line for each stage about what the agent does and for what purpose. Without it, the node gives only the free lines.</dd>
+    </dl>
+
+    <h3>Lines</h3>
+    <p>The free lines come directly from the events and cost no tokens: <code>Started.</code>, <code>Done. N turns, N tokens.</code>, <code>FAILED: reason.</code>, <code>WAITS: question to the operator: ...</code>, <code>Operator answered.</code> and <code>Stopped by the operator.</code></p>
+    <p>The status bar at the bottom of the popup shows the total cost in dollars since the deploy, as the API reports it (<code>Total cost: $0.42</code>): the ended runs (also the failed and stopped ones) of the <code>claude-agent</code> nodes on the tab and the calls of the narrator. It rises as each run ends. After the cost it shows the weighted total of the same runs and calls in sonnet input tokens (<code>118.2k weighted</code>; the README of the claude-agent node gives the formula).</p>
+    <p>The node keeps the last 300 lines. A deploy clears them.</p>
+
+    <h3>Status</h3>
+    <p>The status shows the stage and the newest line. Blue: a stage runs. Yellow: a stage waits for an answer of the operator. Red: the newest line is an error. Grey: no stage runs.</p>
+
+    <h3>Popup</h3>
+    <p>Click the node to open the popup. It lists the lines, the newest at the bottom. Lines of a question and lines of an error have a colour. The list scrolls down by itself, unless you scroll up.</p>
+    <p>If the narrator fails, the node writes one warning to the Node-RED log and continues with the free lines. The node never sends an error to a <code>catch</code> node.</p>
+</script>
