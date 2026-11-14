@@ -170,6 +170,11 @@
         label: function () { return this.name || 'claude-agent'; },
         paletteLabel: 'claude-agent',
 
+        // A node from before the Cache time property has no value. The dialog shows 60 minutes, as the runtime uses.
+        oneditprepare: function () {
+            if (this.cacheTtl !== '5m' && this.cacheTtl !== '1h') $('#node-input-cacheTtl').val('1h');
+        },
+
         // Runs each time the editor builds the popup
         nru_popupInit: function () {
             const node = this;
