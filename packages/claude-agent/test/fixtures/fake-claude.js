@@ -10,7 +10,9 @@
 //   Stage           a call of the agent-watch narrator: one line for each stage of the prompt.
 //                   It appends one line to narrator-calls.log in its folder. If the prompt has the
 //                   word narratorfail, the call fails. If it has the word slowdone, it answers after two seconds.
-//   any other text  gives a JSON result: the prompt, the folder, the sandbox variables and some arguments
+//   any other text  gives a JSON result: the prompt, the folder, the sandbox variables, the settings
+//                   of --settings, FORCE_PROMPT_CACHING_5M, CLAUDE_CODE_PROMPT_CACHE_TTL,
+//                   CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL and some arguments
 
 const fs = require('fs');
 const readline = require('readline');
@@ -23,6 +25,12 @@ const arg = (name) => {
     const joined = args.find((a) => a.startsWith(name + '='));
     return joined ? joined.slice(name.length + 1) : null;
 };
+// The --settings argument is a JSON text or the path of a JSON file.
+function readSettings() {
+    const value = arg('--settings');
+    if (!value) return null;
+    return JSON.parse(value.trim().startsWith('{') ? value : fs.readFileSync(value, 'utf8'));
+}
 const sessionId = 'fake-session';
 const model = arg('--model') || 'claude-sonnet-fake';
 const waiting = new Map();      // request id of a control request to the SDK -> resolve
@@ -73,6 +81,9 @@ async function answer(prompt) {
     }
     result(JSON.stringify({
         prompt, cwd: process.cwd(), model: arg('--model'), permissionMode: arg('--permission-mode'),
+        settings: readSettings(), forceCache5m: process.env.FORCE_PROMPT_CACHING_5M || null,
+        cacheTtlEnv: process.env.CLAUDE_CODE_PROMPT_CACHE_TTL || null,
+        subagentCacheTtlEnv: process.env.CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL || null,
         sandbox: process.env.NODE_RED_CLAUDE_SANDBOX || null, sandboxCwd: process.env.NODE_RED_CLAUDE_CWD || null
     }));
 }

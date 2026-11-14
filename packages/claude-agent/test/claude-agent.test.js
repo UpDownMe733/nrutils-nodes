@@ -56,6 +56,8 @@ function makeFlow(workRoot) {
         agent('run', [['collect-result'], [], ['collect-events']], { prompt: 'Task: {{payload}} {{topic}}', model: 'haiku', cwd: path.join(workRoot, 'project') }),
         collect('result'), collect('events'),
         inject('i-sandbox', 'hello', ['sandbox']),
+        inject('i-cache5m', 'hello', ['cache5m']), agent('cache5m', [['collect-cache5m'], [], []], { cacheTtl: '5m' }), collect('cache5m'),
+        inject('i-cachebogus', 'hello', ['cachebogus']), agent('cachebogus', [['collect-cachebogus'], [], []], { cacheTtl: 'bogus' }), collect('cachebogus'),
         agent('sandbox', [['collect-sandbox'], [], []], { sandbox: 'box-1', cwd: path.join(workRoot, 'remote') }), collect('sandbox'),
         inject('i-badname', 'hello', ['badname']), agent('badname', [[], [], []], { sandbox: 'bad name' }),
         inject('i-outside', 'hello', ['outside'], { cwd: ['/', 'str'] }), agent('outside', [[], [], []]),
@@ -109,7 +111,7 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
             claudeAgent: { launcher: ${JSON.stringify(FAKE)}, workRoot: ${JSON.stringify(workRoot)}, sandboxPattern: '^box-[0-9]+$' }
         };`);
         child = spawn(process.execPath, [require.resolve('node-red/red.js'), '-u', userDir, '-s', path.join(userDir, 'settings.js')],
-            { stdio: ['ignore', 'pipe', 'pipe'] });
+            { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FORCE_PROMPT_CACHING_5M: '1', CLAUDE_CODE_PROMPT_CACHE_TTL: '5m', CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL: '5m' } });
         child.stdout.on('data', d => { log += d; });
         child.stderr.on('data', d => { log += d; });
         await waitFor(async () => (await fetch(base + '/settings')).ok, 30000, 'Node-RED start');
@@ -143,6 +145,9 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal(got.model, 'haiku');
         assert.equal(got.permissionMode, 'bypassPermissions');
         assert.equal(got.sandbox, null);
+        assert.equal(got.settings.promptCacheTtl, '1h', 'a node without cacheTtl gets 1 hour');
+        assert.equal(got.settings.subagentPromptCacheTtl, '1h');
+        assert.equal(got.settings.autoMemoryEnabled, false);
         assert.equal(msg.topic, 'greet', 'the result keeps the other properties of the start message');
         assert.equal(msg.stages['run stage'], msg.payload, 'the node name is the key in msg.stages');
         assert.equal(msg.agent.sessionId, 'fake-session');
@@ -176,6 +181,31 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal(got.sandbox, 'box-1');
         assert.equal(got.sandboxCwd, path.join(workRoot, 'remote'));
         assert.equal(got.cwd, fs.realpathSync(workRoot), 'the launcher starts in the work root');
+    });
+
+    it('a node with the cache time 5m gives 5m for the main agent and the subagents', async () => {
+        await injectNode('i-cache5m');
+        const [msg] = await results('cache5m');
+        const got = JSON.parse(msg.payload);
+        assert.equal(got.settings.promptCacheTtl, '5m');
+        assert.equal(got.settings.subagentPromptCacheTtl, '5m');
+        assert.equal(got.settings.autoMemoryEnabled, false);
+    });
+
+    it('an unknown cache time gives 1h', async () => {
+        await injectNode('i-cachebogus');
+        const got = JSON.parse((await results('cachebogus'))[0].payload);
+        assert.equal(got.settings.promptCacheTtl, '1h');
+        assert.equal(got.settings.subagentPromptCacheTtl, '1h');
+    });
+
+    it('the cache time variables of Node-RED do not reach the run', async () => {
+        const [msg] = await results('result');
+        const got = JSON.parse(msg.payload);
+        assert.equal(got.forceCache5m, null);
+        assert.equal(got.cacheTtlEnv, null);
+        assert.equal(got.subagentCacheTtlEnv, null);
+        assert.equal(got.settings.promptCacheTtl, '1h');
     });
 
     it('a sandbox name against the rule of settings.js fails the run', async () => {

@@ -77,6 +77,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     // An empty field means no limit.
     const maxCostUsd = config.maxCostUsd === '' ? undefined : Number(config.maxCostUsd ?? 2);
     const timeoutMs = config.timeoutMin === '' ? 0 : Number(config.timeoutMin ?? 30) * 60000;
+    // The cache time of the prompt cache: 5 minutes or 1 hour. A node without the property, or with another value, gets 1 hour.
+    const cacheTtl = config.cacheTtl === '5m' ? '5m' : '1h';
     const stageKey = config.name || node.id;
     const runs = new Map();     // runId to run
     const queue = [];           // start messages that wait for a free slot: { msg, send, done, text }
@@ -254,11 +256,14 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             const tools = splitList(config.tools);
             const sdk = await loadSdk();
             if (run.ended) return;
+            // These variables would override the cache time of the node.
+            const env = { ...process.env };
+            for (const name of ['FORCE_PROMPT_CACHING_5M', 'CLAUDE_CODE_PROMPT_CACHE_TTL', 'CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL']) delete env[name];
             const options = {
                 pathToClaudeCodeExecutable: settings.launcher,
                 // A sandbox run: the launcher starts the CLI in the sandbox, in the folder NODE_RED_CLAUDE_CWD.
                 cwd: sandbox ? settings.workRoot : cwd,
-                env: { ...process.env, ...(sandbox && { NODE_RED_CLAUDE_SANDBOX: sandbox, NODE_RED_CLAUDE_CWD: cwd }) },
+                env: { ...env, ...(sandbox && { NODE_RED_CLAUDE_SANDBOX: sandbox, NODE_RED_CLAUDE_CWD: cwd }) },
                 model: (MSG_MODELS.has(msg.model) && msg.model) || config.model || undefined,
                 maxTurns,
                 maxBudgetUsd: maxCostUsd,
@@ -269,7 +274,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
                 skills: config.fullEnvironment ? undefined : [],
                 strictMcpConfig: !config.fullEnvironment,
                 // No auto memory. No Claude attribution line in commit messages and pull requests.
-                settings: { autoMemoryEnabled: false, attribution: { commit: '', pr: '' } },
+                // The cache time of the node, for the main agent and for the subagents.
+                settings: { autoMemoryEnabled: false, attribution: { commit: '', pr: '' }, promptCacheTtl: cacheTtl, subagentPromptCacheTtl: cacheTtl },
                 systemPrompt: { type: 'preset', preset: 'claude_code', append: config.systemPrompt || undefined },
                 tools: tools.length ? tools : undefined,
                 mcpServers: { ...extraServers, operator: sdk.createSdkMcpServer({ name: 'operator', tools: [askTool(sdk, run)] }) },

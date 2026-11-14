@@ -131,6 +131,7 @@
             name: { value: '' },
             systemPrompt: { value: '' },
             model: { value: '' },
+            cacheTtl: { value: '1h' },
             prompt: { value: '{{payload}}' },
             cwd: { value: '' },
             sandbox: {
@@ -286,6 +287,13 @@
         </select>
     </div>
     <div class="form-row">
+        <label for="node-input-cacheTtl">Cache time</label>
+        <select id="node-input-cacheTtl">
+            <option value="5m">5 minutes</option>
+            <option value="1h">60 minutes</option>
+        </select>
+    </div>
+    <div class="form-row">
         <label for="node-input-prompt">Prompt</label>
         <textarea id="node-input-prompt" rows="3" style="width:70%"></textarea>
     </div>
@@ -342,6 +350,7 @@
         <dt>Sandbox</dt><dd>A name that the node gives to the launcher program (<code>claudeAgent.launcher</code>) in the environment variable <code>NODE_RED_CLAUDE_SANDBOX</code>, with the folder in <code>NODE_RED_CLAUDE_CWD</code>. The launcher can then start the CLI in that container or machine. Empty: no sandbox.</dd>
         <dt>System prompt</dt><dd>It is added to the Claude Code system prompt. Empty: no extra instructions.</dd>
         <dt>Model</dt><dd>Empty: the default model.</dd>
+        <dt>Cache time</dt><dd>How long the prompt cache of the run lives between two requests: 5 or 60 minutes. Default 60. A 60-minute cache write costs more (2&times; input, against 1.25&times;), but a run that waits for the operator longer than 5 minutes reads the cache again.</dd>
         <dt>Prompt</dt><dd>A mustache template over the message, for example <code>{{payload}}</code> or <code>{{stages.triage.problem}}</code>. An object value becomes JSON.</dd>
         <dt>Tools</dt><dd>A comma list of the tools of the agent. Empty: all tools. The agent gets no permission prompt.</dd>
         <dt>Project settings</dt><dd>When set, the run loads <code>CLAUDE.md</code> and <code>.claude/settings.json</code> of the folder. Default off.</dd>
