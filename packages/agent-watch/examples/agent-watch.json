@@ -11,7 +11,7 @@
         "type": "comment",
         "z": "awdemo.tab",
         "name": "Two agent stages and a watch node",
-        "info": "Click the inject node. The stage draft writes a text. The stage shorten makes it shorter.\nClick the agent-watch node to open its popup. It shows a line when a stage starts, asks, ends or fails.\nThe narrator adds one line about the work of each busy stage, every 30 seconds. Each narrator line is one small haiku call.\nThe result of the flow goes into the watch node: the green line.",
+        "info": "Click the inject node. The stage draft writes a text. The stage shorten makes it shorter.\nClick the agent-watch node to open its popup. It shows a line when a stage starts, asks, ends or fails.\nSelect text in the popup and copy it with Ctrl+C or the right-click menu.\nThe narrator adds one line about the work of each busy stage, every 30 seconds. Each narrator line is one small haiku call.\nThe result of the flow goes into the watch node: the green line.",
         "x": 220,
         "y": 40,
         "wires": []
