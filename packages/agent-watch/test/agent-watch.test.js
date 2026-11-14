@@ -57,8 +57,22 @@ const FLOW = [
     inject('i-result', 'tab', 'all good', ['watch'], 'Report'),
     // A second tab: its watch node does not see the agents of the first tab
     { id: 'tab2', type: 'tab', label: 'other' },
-    { id: 'watch2', type: 'agent-watch', z: 'tab2', name: '', narrator: false, wires: [] }
+    { id: 'watch2', type: 'agent-watch', z: 'tab2', name: '', narrator: false, wires: [] },
+    // Three tabs with the narrator on: an active stage, a stage that ends during the narrator call
+    // and a narrator call that fails. A Catch node gives each error on its tab to the watch node as a line.
+    { id: 'tab3', type: 'tab', label: 'narrator' },
+    { id: 'watch3', type: 'agent-watch', z: 'tab3', name: '', narrator: true, wires: [] },
+    inject('i-busy', 'tab3', 'wait', ['busy']), agent('busy', 'tab3', [[], [], []]),
+    { id: 'tab4', type: 'tab', label: 'narrator late' },
+    { id: 'watch4', type: 'agent-watch', z: 'tab4', name: '', narrator: true, wires: [] },
+    inject('i-late', 'tab4', 'slowdone', ['late']), agent('late', 'tab4', [[], [], []]),
+    { id: 'tab5', type: 'tab', label: 'narrator fails' },
+    { id: 'watch5', type: 'agent-watch', z: 'tab5', name: '', narrator: true, wires: [] },
+    inject('i-broken1', 'tab5', 'wait narratorfail', ['broken1']), agent('broken1', 'tab5', [[], [], []]),
+    inject('i-broken2', 'tab5', 'wait narratorfail', ['broken2']), agent('broken2', 'tab5', [[], [], []]),
+    { id: 'catch5', type: 'catch', z: 'tab5', name: '', scope: null, uncaught: false, wires: [['watch5']] }
 ];
+const NARRATOR_LINE = 'The agent works on its task.';
 
 describe('agent-watch in a real Node-RED', { timeout: 60000 }, () => {
     let child, base, userDir;
@@ -71,8 +85,13 @@ describe('agent-watch in a real Node-RED', { timeout: 60000 }, () => {
             body: JSON.stringify({ nodeId, messageType: 'get-log' }) });
         return (await res.json()).result;
     };
-    const lineOf = (stage, text) => waitFor(async () => (await popup('watch')).lines.find((l) => l.stage === stage && l.text === text),
-        10000, `line "${stage}: ${text}"`);
+    const lineOf = (stage, text, nodeId = 'watch') => waitFor(async () => (await popup(nodeId)).lines
+        .find((l) => l.stage === stage && l.text === text), 10000, `line "${stage}: ${text}"`);
+    // The first line of the prompt of each narrator call, as the fake CLI writes it
+    const narratorCalls = () => {
+        const file = path.join(userDir, 'narrator-calls.log');
+        return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean) : [];
+    };
 
     before(async () => {
         userDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nrutils-nodes-test-'));
@@ -86,7 +105,8 @@ describe('agent-watch in a real Node-RED', { timeout: 60000 }, () => {
         fs.writeFileSync(path.join(userDir, 'settings.js'), `module.exports = {
             uiHost: '127.0.0.1', uiPort: ${port}, flowFile: 'flows.json', credentialSecret: false,
             diagnostics: { enabled: false }, telemetry: { enabled: false },
-            claudeAgent: { launcher: ${JSON.stringify(FAKE)}, workRoot: ${JSON.stringify(userDir)} }
+            claudeAgent: { launcher: ${JSON.stringify(FAKE)}, workRoot: ${JSON.stringify(userDir)} },
+            agentWatch: { narratorSeconds: 0.3 }
         };`);
         child = spawn(process.execPath, [require.resolve('node-red/red.js'), '-u', userDir, '-s', path.join(userDir, 'settings.js')],
             { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -140,5 +160,38 @@ describe('agent-watch in a real Node-RED', { timeout: 60000 }, () => {
 
     it('a watch node on another tab gets no line of these runs', async () => {
         assert.deepEqual((await popup('watch2')).lines, []);
+    });
+
+    it('the narrator adds a line for an active stage and adds the cost of its call to the totals', async () => {
+        await injectNode('i-busy');
+        await lineOf('busy stage', 'Started.', 'watch3');
+        assert.equal((await lineOf('busy stage', NARRATOR_LINE, 'watch3')).level, 'info');
+        assert.ok(narratorCalls().includes('Stage 1: busy stage'));
+        // The run has not ended: the totals are those of the narrator call, with the haiku model
+        const state = await popup('watch3');
+        assert.equal(state.total, 0.01);
+        assert.ok(Math.abs(state.weighted - 75) < 1e-9, 'haiku: (1000 + 100 * 5) * 0.05, got ' + state.weighted);
+    });
+
+    it('the narrator adds no line for a stage that ended during its call', async () => {
+        await injectNode('i-late');
+        await lineOf('late stage', 'Done. 1 turns, 1.1k tokens.', 'watch4');
+        // The run and the narrator call each cost 0.01: the call has returned when the total is 0.02
+        await waitFor(async () => Math.abs((await popup('watch4')).total - 0.02) < 1e-9, 10000, 'the narrator call');
+        assert.ok(narratorCalls().includes('Stage 1: late stage'));
+        assert.deepEqual((await popup('watch4')).lines.map((l) => l.text), ['Started.', 'Done. 1 turns, 1.1k tokens.']);
+    });
+
+    it('failed narrator calls give one warning and no error to a Catch node', async () => {
+        const warnings = () => (log.match(/The narrator failed/g) || []).length;
+        await injectNode('i-broken1');
+        await waitFor(async () => warnings() === 1, 10000, 'the warning');
+        await injectNode('i-broken2');
+        await waitFor(async () => narratorCalls().includes('Stage 1: broken2 stage'), 10000, 'the second narrator call');
+        await sleep(1000);
+        assert.equal(warnings(), 1);
+        const state = await popup('watch5');
+        assert.deepEqual(state.lines.map((l) => `${l.stage}: ${l.text}`), ['broken1 stage: Started.', 'broken2 stage: Started.']);
+        assert.equal(state.total, 0);
     });
 });
