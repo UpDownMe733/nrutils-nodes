@@ -7,6 +7,9 @@ Node-RED nodes built on [@nrutils/node-red-utils](https://www.npmjs.com/package/
 | Node | Package | What it does |
 | --- | --- | --- |
 | [worker function](packages/worker-function) | [`@nrutils/node-red-worker-function`](https://www.npmjs.com/package/@nrutils/node-red-worker-function) | A Function node that runs its code in a worker thread |
+| [claude agent](packages/claude-agent) | [`@nrutils/node-red-claude-agent`](https://www.npmjs.com/package/@nrutils/node-red-claude-agent) | Runs one Claude Code agent for each message, with a chat popup |
+| [agent watch](packages/agent-watch) | [`@nrutils/node-red-agent-watch`](https://www.npmjs.com/package/@nrutils/node-red-agent-watch) | A short running commentary of the claude-agent nodes on a tab |
+| [text inject](packages/text-inject) | [`@nrutils/node-red-text-inject`](https://www.npmjs.com/package/@nrutils/node-red-text-inject) | Sends the text that you type in its popup, the same as an inject node |
 
 ## Install
 

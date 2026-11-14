@@ -2,6 +2,9 @@
 	"name": "nrutils-nodes-demo",
 	"private": true,
 	"dependencies": {
-		"@nrutils/node-red-worker-function": "file:../packages/worker-function"
+		"@nrutils/node-red-worker-function": "file:../packages/worker-function",
+		"@nrutils/node-red-claude-agent": "file:../packages/claude-agent",
+		"@nrutils/node-red-agent-watch": "file:../packages/agent-watch",
+		"@nrutils/node-red-text-inject": "file:../packages/text-inject"
 	}
 }
