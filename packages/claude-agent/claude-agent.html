@@ -209,10 +209,10 @@
             select.id = 'claude-agent-run-' + node.id;
             select.style.display = 'none';
             select.addEventListener('change', () => showRun(node));
-            const text = make('input');
+            const text = make('textarea');
             text.id = 'claude-agent-text-' + node.id;
-            text.type = 'text';
-            text.style.flex = '1';
+            text.rows = 2;
+            text.style.cssText = 'flex:1;resize:vertical;box-sizing:border-box;font:inherit;min-height:2.4em';
             text.placeholder = 'Message to the agent';
             const send = make('button', 'Send');
             send.id = 'claude-agent-send-' + node.id;
@@ -227,11 +227,17 @@
                 sendControl(node, run && run.state === 'waiting' ? 'answer' : 'message', text.value);
                 text.value = '';
             });
-            text.addEventListener('keydown', (e) => { if (e.key === 'Enter') send.click(); });
+            // Enter sends. Shift+Enter starts a new line. Enter that ends an IME composition does not send.
+            text.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+                    e.preventDefault();
+                    send.click();
+                }
+            });
             interrupt.addEventListener('click', () => sendControl(node, 'interrupt'));
             stop.addEventListener('click', () => sendControl(node, 'stop'));
             const row = make('div');
-            row.style.cssText = 'display:flex;gap:4px;margin-top:4px';
+            row.style.cssText = 'display:flex;gap:4px;margin-top:4px;align-items:flex-end';
             for (const e of [select, text, send, interrupt, stop]) row.appendChild(e);
             div.appendChild(tabs);
             div.appendChild(log);
@@ -387,6 +393,6 @@
     <h3>Details</h3>
     <p>Each run has the tool <code>ask_operator(question, options)</code>. The run waits for an answer from output 2, from a control message, or from the popup.</p>
     <p>A failed run goes to a <code>catch</code> node. <code>msg.agent.reason</code> is one of <code>max_turns</code>, <code>max_cost</code>, <code>timeout</code>, <code>schema</code>, <code>sdk_error</code> or <code>node_closed</code>.</p>
-    <p>Click the node to open the popup. It has two tabs: Chat shows the text of the operator and of the agent; Timeline shows all events. The status line shows the state, the turns and the tokens used. The popup has Send, Interrupt and Stop. The Enter key also sends. When no run is active, Send starts a run with your text as the task; the run continues the last session of the node. When the agent asks a question, the popup shows it with one button for each option.</p>
+    <p>Click the node to open the popup. It has two tabs: Chat shows the text of the operator and of the agent; Timeline shows all events. The status line shows the state, the turns and the tokens used. The popup has Send, Interrupt and Stop. The message box has more than one line. Enter sends; Shift+Enter starts a new line. When no run is active, Send starts a run with your text as the task; the run continues the last session of the node. When the agent asks a question, the popup shows it with one button for each option.</p>
     <p>A deploy of the node ends its live runs and clears the popup log.</p>
 </script>
