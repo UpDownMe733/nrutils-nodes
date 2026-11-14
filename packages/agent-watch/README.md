@@ -95,6 +95,15 @@ but with no tools.
 If a narrator call fails, the node writes one warning to the Node-RED log and continues with the
 free lines.
 
+The time between two calls is 30 seconds. The `agentWatch` block of the Node-RED `settings.js` can
+change it (restart Node-RED after a change):
+
+```js
+agentWatch: {
+    narratorSeconds: 60    // the time between two narrator calls, in seconds
+},
+```
+
 ## Popup and status
 
 Click the node to open the popup. It lists the lines, the newest at the bottom. The list scrolls

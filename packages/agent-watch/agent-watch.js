@@ -13,7 +13,7 @@ const { NodeRedNodeBase, nodeRedPopup, nodeRedEditorComms } = require('@nrutils/
 const { events, agentSettings, loadSdk, weightedCount } = require('@nrutils/node-red-claude-agent/shared');
 
 const MAX_LINES = 300;
-const NARRATOR_MS = 30000;
+const NARRATOR_SECONDS = 30;   // the default time between two narrator calls
 const MAX_NEW_EVENTS = 12;      // for each stage in one narrator call; the newest stay
 const EVENT_TEXT = 200;
 const STATUS_TEXT = 60;
@@ -33,6 +33,8 @@ function cut(text, size) {
 module.exports = NodeRedNodeBase.createNode('agent-watch', [nodeRedPopup, nodeRedEditorComms], (RED, node, config) => {
     const comms = node.nodeRedEditorComms;
     const settings = agentSettings(RED);
+    const own = RED.settings.agentWatch || {};
+    const narratorMs = (Number(own.narratorSeconds) > 0 ? Number(own.narratorSeconds) : NARRATOR_SECONDS) * 1000;
     const lines = [];               // the last MAX_LINES lines: { time, stage, text, level }
     const active = new Map();       // runId to { stage, waiting }
     const pending = new Map();      // stage to the new events that the narrator has not seen
@@ -173,7 +175,7 @@ module.exports = NodeRedNodeBase.createNode('agent-watch', [nodeRedPopup, nodeRe
         addLine(msg.topic ? String(msg.topic) : 'Result', typeof p === 'string' ? p : JSON.stringify(p, null, 2), 'result');
         done();
     });
-    if (config.narrator !== false) timer = setInterval(narrate, NARRATOR_MS);
+    if (config.narrator !== false) timer = setInterval(narrate, narratorMs);
     showStatus();
 
     node.on('close', () => {
