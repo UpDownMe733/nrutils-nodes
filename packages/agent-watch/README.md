@@ -109,6 +109,9 @@ agentWatch: {
 Click the node to open the popup. It lists the lines, the newest at the bottom. The list scrolls
 down by itself, unless you scroll up.
 
+You can select the text of the lines and copy it with Ctrl+C or with the right-click menu. While the
+popup has the focus, the keys of the editor do not act on the flow.
+
 The status bar of the popup shows the total cost in dollars since the deploy, as the API reports it:
 the ended runs (also the failed and stopped ones) and the narrator calls. After the cost it shows
 the weighted tokens of the same runs and calls, for example `Total cost: $0.42, 118.2k weighted`.
