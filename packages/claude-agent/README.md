@@ -143,7 +143,7 @@ and no outside MCP servers. That keeps the first request of a run small. Auto me
 The node also turns off the Claude attribution lines in commit messages and pull requests.
 
 The node gives Cache time to the CLI as the settings `promptCacheTtl` and `subagentPromptCacheTtl`.
-It removes `FORCE_PROMPT_CACHING_5M` and `CLAUDE_CODE_PROMPT_CACHE_TTL` from the environment of the run,
+It removes `FORCE_PROMPT_CACHING_5M`, `CLAUDE_CODE_PROMPT_CACHE_TTL` and `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL` from the environment of the run,
 so the node property decides. A 60-minute cache write costs 2× input, against 1.25× for 5 minutes.
 A node from an older version gets 60 minutes. Before, the CLI chose: 1 hour on a subscription, 5 minutes with an API key.
 
