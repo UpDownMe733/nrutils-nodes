@@ -10,17 +10,77 @@
     const OPERATOR_KINDS = ['prompt', 'message', 'answer'];
     const AGENT_KINDS = ['text', 'question'];
     const END_KINDS = ['result', 'error'];
+    const MAX_ENTRIES = 200;
 
-    function make(tag, text) {
+    // The look of the popup. It uses the theme variables of Node-RED, so it follows the light and the dark theme.
+    // The operator bubble has the node colour with dark text: that has contrast in both themes.
+    const STYLE = `
+.ca-popup{display:flex;flex-direction:column;gap:6px;height:100%;min-height:0;min-width:0;font-size:12px;color:var(--red-ui-primary-text-color)}
+.ca-header{flex:none;display:flex;align-items:center;gap:6px;min-width:0;border-bottom:1px solid var(--red-ui-secondary-border-color)}
+.ca-tab{flex:none;background:none;border:none;border-bottom:2px solid transparent;margin:0 0 -1px;padding:3px 4px;font:inherit;cursor:pointer;color:var(--red-ui-secondary-text-color)}
+.ca-tab:hover{color:var(--red-ui-primary-text-color)}
+.ca-tab.selected{color:var(--red-ui-primary-text-color);border-bottom-color:var(--red-ui-text-color-link);font-weight:600}
+.ca-spacer{flex:1;min-width:0}
+.ca-header select{flex:none;width:auto;max-width:90px;height:22px;margin:0;padding:0 2px;font-size:11px}
+.ca-chip{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-variant-numeric:tabular-nums;padding:1px 7px;border-radius:10px;border:1px solid var(--red-ui-secondary-border-color);background:var(--red-ui-tertiary-background);color:var(--red-ui-secondary-text-color)}
+.ca-chip.ca-warn{color:var(--red-ui-text-color-warning);border-color:var(--red-ui-border-color-warning)}
+.ca-header .red-ui-button{flex:none;margin:0 0 2px}
+.ca-log{flex:1;min-height:0;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+.ca-chat{flex:1;min-height:0;overflow:auto;flex-direction:column;gap:6px;padding:2px}
+.ca-list{display:flex;flex-direction:column;gap:6px}
+.ca-msg{display:flex;flex-direction:column;max-width:85%}
+.ca-op{align-self:flex-end;align-items:flex-end}
+.ca-agent{align-self:flex-start;align-items:flex-start}
+.ca-meta{margin:0 4px 2px;font-size:10px;color:var(--red-ui-tertiary-text-color)}
+.ca-bubble{font-size:13px;line-height:1.4;padding:6px 10px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+.ca-op .ca-bubble{background:${NODE_COLOR};color:#000;border-bottom-right-radius:4px}
+.ca-agent .ca-bubble{background:var(--red-ui-tertiary-background);color:var(--red-ui-primary-text-color);border:1px solid var(--red-ui-secondary-border-color);border-bottom-left-radius:4px}
+.ca-question .ca-bubble{border-left:3px solid var(--red-ui-border-color-warning);border-radius:6px}
+.ca-end{align-self:center;font-size:10px;padding:1px 8px;border-radius:10px;background:var(--red-ui-tertiary-background);color:var(--red-ui-secondary-text-color)}
+.ca-end.ca-error{color:var(--red-ui-text-color-error);border:1px solid var(--red-ui-border-color-error)}
+.ca-empty{margin:auto;padding:12px;text-align:center;font-style:italic;color:var(--red-ui-tertiary-text-color)}
+.ca-working{align-self:flex-start;font-size:11px;font-style:italic;color:var(--red-ui-secondary-text-color)}
+.ca-ask{flex:none;padding:6px 8px;border-radius:6px;border:1px solid var(--red-ui-border-color-warning);background:var(--red-ui-form-tips-background);color:var(--red-ui-primary-text-color)}
+.ca-ask .red-ui-button{margin:4px 4px 0 0}
+.ca-composer{flex:none;display:flex;flex-direction:column;border:1px solid var(--red-ui-form-input-border-color);border-radius:8px;background:var(--red-ui-form-input-background)}
+.ca-composer:focus-within{border-color:var(--red-ui-form-input-focus-color);box-shadow:0 0 0 1px var(--red-ui-form-input-focus-color)}
+.ca-composer textarea{display:block;width:100%;height:auto;min-height:0;max-height:calc(6 * 1.4em + 8px);box-sizing:border-box;margin:0;padding:6px 8px 2px;resize:none;overflow-y:auto;font:inherit;font-size:13px;line-height:1.4;border:none !important;outline:none;box-shadow:none !important;background:transparent;color:var(--red-ui-form-text-color)}
+.ca-footer{display:flex;align-items:center;gap:4px;min-width:0;padding:2px 4px 4px 8px}
+.ca-hint{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--red-ui-tertiary-text-color)}
+.ca-footer .red-ui-button{flex:none}
+`;
+
+    function addStyle() {
+        if (document.getElementById('claude-agent-style')) return;
+        const style = make('style', STYLE);
+        style.id = 'claude-agent-style';
+        document.head.appendChild(style);
+    }
+
+    function make(tag, text, className) {
         const e = document.createElement(tag);
         if (text) e.textContent = text;
+        if (className) e.className = className;
         return e;
     }
 
-    // A popup element of the node: log, ask, run, text or send
+    // A small button of Node-RED with an icon, a label and a title
+    function button(icon, label, title) {
+        const b = make('button', '', 'red-ui-button red-ui-button-small');
+        b.type = 'button';
+        if (icon) b.appendChild(make('i', '', 'fa ' + icon));
+        if (label) b.appendChild(make('span', (icon ? ' ' : '') + label));
+        if (title) b.title = title;
+        return b;
+    }
+
+    // A popup element of the node: log, chat, list, empty, working, ask, run, chip, new, text, send, interrupt or stop
     function part(node, name) {
         return document.getElementById('claude-agent-' + name + '-' + node.id);
     }
+
+    const pad = (n) => String(n).padStart(2, '0');
+    const clock = (time) => { const d = new Date(time); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
 
     function selectedRun(node) {
         const runs = activeRuns[node.id] || [];
@@ -28,7 +88,7 @@
         return runs.find((r) => select && r.runId === select.value) || runs[0];
     }
 
-    // Show the selected run in the status line, the question block and the Send button.
+    // Show the selected run in the status line, the question block, the working line and the buttons.
     function showRun(node) {
         const run = selectedRun(node);
         const status = document.getElementById('nru_popup.' + node.id + '.statusText');
@@ -38,20 +98,20 @@
         }
         const ask = part(node, 'ask');
         if (!ask) return;
+        const working = !!(run && (run.state === 'starting' || run.state === 'running'));
+        part(node, 'working').style.display = working ? '' : 'none';
+        for (const name of ['interrupt', 'stop']) part(node, name).style.display = run ? '' : 'none';
         const waiting = !!(run && run.state === 'waiting' && run.question);
         ask.textContent = '';
         ask.style.display = waiting ? '' : 'none';
-        part(node, 'send').textContent = waiting ? 'Answer' : 'Send';
+        part(node, 'send-label').textContent = ' ' + (waiting ? 'Answer' : 'Send');
         part(node, 'text').placeholder = waiting ? 'Your answer' : 'Message to the agent';
         if (!waiting) return;
         ask.appendChild(make('div', 'Agent asks: ' + run.question.question));
         for (const option of run.question.options) {
-            const button = make('button', option);
-            button.type = 'button';
-            button.className = 'red-ui-button red-ui-button-small';
-            button.style.margin = '2px';
-            button.addEventListener('click', () => sendControl(node, 'answer', option));
-            ask.appendChild(button);
+            const b = button('', option);
+            b.addEventListener('click', () => sendControl(node, 'answer', option));
+            ask.appendChild(b);
         }
     }
 
@@ -79,27 +139,29 @@
         if (!log) return;
         const runId = (activeRuns[node.id] || []).length > 1 ? e.runId + ' ' : '';
         log.appendChild(make('div', new Date(e.time).toLocaleTimeString() + ' ' + runId + e.kind + ': ' + e.text));
-        while (log.childNodes.length > 200) log.removeChild(log.firstChild);
+        while (log.childNodes.length > MAX_ENTRIES) log.removeChild(log.firstChild);
         log.scrollTop = log.scrollHeight;
         addChat(node, e);
     }
 
-    // The chat tab: operator text on the right, agent text on the left, the end of a run as a grey line
+    // The chat tab: operator bubbles on the right, agent bubbles on the left, the end of a run as a pill
     function addChat(node, e) {
-        const chat = part(node, 'chat');
-        if (!chat) return;
+        const list = part(node, 'list');
+        if (!list) return;
         let entry;
         if (OPERATOR_KINDS.includes(e.kind) || AGENT_KINDS.includes(e.kind)) {
             const operator = OPERATOR_KINDS.includes(e.kind);
-            entry = make('div', e.kind === 'question' ? 'Question: ' + e.text : e.text);
-            entry.style.cssText = 'max-width:85%;margin:3px 0;padding:4px 8px;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;' +
-                (operator ? 'align-self:flex-end;background:' + NODE_COLOR + ';color:#000' : 'align-self:flex-start;border:1px solid rgba(128,128,128,0.5)');
+            const runId = (activeRuns[node.id] || []).length > 1 && !operator ? ' ' + e.runId : '';
+            entry = make('div', '', 'ca-msg ' + (operator ? 'ca-op' : 'ca-agent') + (e.kind === 'question' ? ' ca-question' : ''));
+            entry.appendChild(make('div', (operator ? 'You' : 'Agent' + runId) + ' · ' + clock(e.time), 'ca-meta'));
+            entry.appendChild(make('div', e.kind === 'question' ? 'Question: ' + e.text : e.text, 'ca-bubble'));
         } else if (END_KINDS.includes(e.kind) || (e.kind === 'state' && e.text === 'stopped')) {
-            entry = make('div', e.kind === 'error' ? 'error: ' + e.text : e.text);
-            entry.style.cssText = 'align-self:center;margin:3px 0;font-size:10px;opacity:0.6';
+            entry = make('div', e.kind === 'error' ? 'error: ' + e.text : e.text, 'ca-end' + (e.kind === 'error' ? ' ca-error' : ''));
         } else return;
-        chat.appendChild(entry);
-        while (chat.childNodes.length > 200) chat.removeChild(chat.firstChild);
+        list.appendChild(entry);
+        while (list.childNodes.length > MAX_ENTRIES) list.removeChild(list.firstChild);
+        part(node, 'empty').style.display = 'none';
+        const chat = part(node, 'chat');
         chat.scrollTop = chat.scrollHeight;
     }
 
@@ -122,6 +184,19 @@
         request
             .then((res) => { if (res && res.error) RED.notify(res.error, 'warning'); })
             .catch((err) => RED.notify(err.status === 404 ? 'Deploy the node first' : err.message, 'warning'));
+    }
+
+    // The message box grows with its text, up to about 6 lines. Then it scrolls.
+    function grow(text) {
+        text.style.height = 'auto';
+        if (text.scrollHeight) text.style.height = text.scrollHeight + 'px';
+    }
+
+    // Build one popup element with the id claude-agent-<name>-<nodeId>
+    function element(node, tag, name, className, text) {
+        const e = make(tag, text, className);
+        e.id = 'claude-agent-' + name + '-' + node.id;
+        return e;
     }
 
     RED.nodes.registerType('claude-agent', {
@@ -161,7 +236,7 @@
                     try { return !v || (JSON.parse(v), true); } catch (e) { return false; }
                 }
             },
-            nru_popupConfig: { value: { width: 460, height: 300, autoCloseTime: 0 } }
+            nru_popupConfig: { value: { width: 480, height: 420, autoCloseTime: 0 } }
         },
         inputs: 1,
         outputs: 3,
@@ -189,49 +264,57 @@
                     div.addEventListener(type, (e) => e.stopPropagation());
                 }
             }
-            div.style.display = 'flex';
-            div.style.flexDirection = 'column';
+            addStyle();
+            const root = make('div', '', 'ca-popup');
 
-            const tabs = make('div');
-            tabs.style.cssText = 'display:flex;gap:4px;margin-bottom:4px';
+            const header = make('div', '', 'ca-header');
             for (const [view, label] of [['chat', 'Chat'], ['timeline', 'Timeline']]) {
-                const tab = make('button', label);
-                tab.id = 'claude-agent-tab-' + view + '-' + node.id;
+                const tab = element(node, 'button', 'tab-' + view, 'ca-tab', label);
                 tab.type = 'button';
-                tab.className = 'red-ui-button red-ui-button-small';
                 tab.addEventListener('click', () => showView(node, view));
-                tabs.appendChild(tab);
+                header.appendChild(tab);
             }
-            const log = make('div');
-            log.id = 'claude-agent-log-' + node.id;
-            log.style.cssText = 'flex:1;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap';
-            const chat = make('div');
-            chat.id = 'claude-agent-chat-' + node.id;
-            chat.style.cssText = 'flex:1;overflow:auto;flex-direction:column;font-size:12px';
-            const ask = make('div');
-            ask.id = 'claude-agent-ask-' + node.id;
-            ask.style.cssText = 'display:none;margin-top:4px;padding:4px;background:#fff3cd;color:#000;border-left:3px solid #e0a800';
-            const select = make('select');
-            select.id = 'claude-agent-run-' + node.id;
+            header.appendChild(make('div', '', 'ca-spacer'));
+            const select = element(node, 'select', 'run');
+            select.title = 'The active run that the popup shows';
             select.style.display = 'none';
             select.addEventListener('change', () => showRun(node));
-            const text = make('textarea');
-            text.id = 'claude-agent-text-' + node.id;
-            text.rows = 2;
-            text.style.cssText = 'flex:1;resize:vertical;box-sizing:border-box;font:inherit;min-height:2.4em';
+            const chip = element(node, 'span', 'chip', 'ca-chip');
+            const newChat = button('fa-plus', '', 'New chat: the next message starts a new session');
+            newChat.id = 'claude-agent-new-' + node.id;
+            for (const e of [select, chip, newChat]) header.appendChild(e);
+
+            const log = element(node, 'div', 'log', 'ca-log');
+            const chat = element(node, 'div', 'chat', 'ca-chat');
+            chat.appendChild(element(node, 'div', 'empty', 'ca-empty', 'Ask the agent a question below.'));
+            chat.appendChild(element(node, 'div', 'list', 'ca-list'));
+            const working = element(node, 'div', 'working', 'ca-working');
+            working.appendChild(make('i', '', 'fa fa-circle-o-notch fa-spin'));
+            working.appendChild(make('span', ' Agent is working…'));
+            working.style.display = 'none';
+            chat.appendChild(working);
+            const ask = element(node, 'div', 'ask', 'ca-ask');
+            ask.style.display = 'none';
+
+            const composer = make('div', '', 'ca-composer');
+            const text = element(node, 'textarea', 'text');
+            text.rows = 1;
             text.placeholder = 'Message to the agent';
-            const send = make('button', 'Send');
+            text.addEventListener('input', () => grow(text));
+            const footer = make('div', '', 'ca-footer');
+            const interrupt = button('fa-pause', 'Interrupt', 'Stop the current turn. The run stays open for a new message.');
+            interrupt.id = 'claude-agent-interrupt-' + node.id;
+            const stop = button('fa-stop', 'Stop', 'End the run');
+            stop.id = 'claude-agent-stop-' + node.id;
+            const send = button('fa-paper-plane', '', 'Send the message');
             send.id = 'claude-agent-send-' + node.id;
-            const interrupt = make('button', 'Interrupt');
-            const stop = make('button', 'Stop');
-            for (const b of [send, interrupt, stop]) {
-                b.type = 'button';
-                b.className = 'red-ui-button red-ui-button-small';
-            }
+            send.className += ' primary';
+            send.appendChild(element(node, 'span', 'send-label', '', ' Send'));
             send.addEventListener('click', () => {
                 const run = selectedRun(node);
                 sendControl(node, run && run.state === 'waiting' ? 'answer' : 'message', text.value);
                 text.value = '';
+                grow(text);
             });
             // Enter sends. Shift+Enter starts a new line. Enter that ends an IME composition does not send.
             text.addEventListener('keydown', (e) => {
@@ -242,15 +325,15 @@
             });
             interrupt.addEventListener('click', () => sendControl(node, 'interrupt'));
             stop.addEventListener('click', () => sendControl(node, 'stop'));
-            const row = make('div');
-            row.style.cssText = 'display:flex;gap:4px;margin-top:4px;align-items:flex-end';
-            for (const e of [select, text, send, interrupt, stop]) row.appendChild(e);
-            div.appendChild(tabs);
-            div.appendChild(log);
-            div.appendChild(chat);
+            footer.appendChild(make('span', 'Enter sends · Shift+Enter new line', 'ca-hint'));
+            for (const e of [interrupt, stop, send]) footer.appendChild(e);
+            composer.appendChild(text);
+            composer.appendChild(footer);
+
+            for (const e of [header, log, chat, ask, composer]) root.appendChild(e);
+            div.appendChild(root);
             showView(node, views[node.id] || 'chat');
-            div.appendChild(ask);
-            div.appendChild(row);
+            showRun(node);
 
             node.nodeRedEditorComms.publish('get-log').then((state) => {
                 for (const e of state.events) addEvent(node, e);
