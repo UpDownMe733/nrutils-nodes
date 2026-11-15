@@ -334,6 +334,20 @@ describe('claude-agent popup chat', () => {
         assert.equal(part('empty').style.display, '');
     });
 
+    it('after a cleared message the status line says no active run, not the end of the earlier run', async () => {
+        const p = setup({}, { events: [], runs: [], session: { cacheTtl: '1h', lastActivity: null } });
+        // The status line of the popup frame, as nru_popup makes it
+        const status = fakeElement('div');
+        status.id = 'nru_popup.n1.statusText';
+        status.setStatusText = (v) => { status.textContent = v; };
+        p.div.appendChild(status);
+        p.receive('event', event('result', 'all done'));
+        p.receive('runs', []);
+        assert.equal(status.textContent, 'all done');
+        p.receive('cleared', {});
+        assert.equal(status.textContent, 'no active run');
+    });
+
     it('adds the style element once, with theme variables and no fixed colour but the node colour', async () => {
         const { head, rebuild } = await popup({});
         rebuild();
