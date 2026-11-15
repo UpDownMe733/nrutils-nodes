@@ -33,7 +33,7 @@ user that runs the CLI, or set `ANTHROPIC_API_KEY` for Node-RED. The node
 
 Each agent runs with `bypassPermissions`. It never asks. It uses each tool that it has, with the
 rights of the OS user that runs the CLI. It can change files and run commands, also outside its
-work folder.
+folder.
 
 Before real work:
 
