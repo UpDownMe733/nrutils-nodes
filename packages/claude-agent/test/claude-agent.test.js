@@ -209,10 +209,12 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
     it('New chat clears the popup log and the session, and the next popup run starts a new session', async () => {
         const from = published.length;
         assert.deepEqual(await editor('run', 'new-chat'), {});
-        // The open popups clear their views and show the empty session
+        // The open popups clear their views and show the empty session.
+        // A 'session' of the earlier run can arrive late: check the order from 'cleared' on.
         const both = async () => {
             const list = published.slice(from).filter((m) => m.nodeId === 'run' && ['cleared', 'session'].includes(m.messageType));
-            return list.length >= 2 && list;
+            const i = list.findIndex((m) => m.messageType === 'cleared');
+            return i >= 0 && list.length >= i + 2 && list.slice(i, i + 2);
         };
         assert.deepEqual((await waitFor(both, 5000, 'cleared and session publish')).map((m) => [m.messageType, m.payload]),
             [['cleared', {}], ['session', { cacheTtl: '1h', lastActivity: null }]]);
