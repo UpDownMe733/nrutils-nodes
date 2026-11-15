@@ -201,7 +201,7 @@
         let cache = 'Cache --';
         let title = info;
         let warn = false;
-        if (since) {
+        if (typeof since === 'number') {
             const left = since + ttlMin * 60000 - now;
             warn = left <= 5 * 60000;
             if (left > 0) {
