@@ -3,6 +3,7 @@
 // A small stand-in for the Claude Code CLI. The tests set it as claudeAgent.launcher in settings.js.
 // It reads and writes the stream-json protocol of the CLI on stdin and stdout. It calls no service.
 // The first word of the prompt selects what it does:
+//   silent          starts the session other-session and gives no model response and no result
 //   nologin         acts as the CLI without a login: a <synthetic> message, then an error result
 //   ask <question>  asks the operator through the ask_operator tool, then gives the answer as the result
 //   maxturns        ends with the error result error_max_turns
@@ -80,6 +81,7 @@ function noLogin() {
 async function answer(prompt) {
     if (/^Stage \d+: /.test(prompt)) return narrate(prompt);
     if (prompt.split(' ')[0] === 'nologin') return noLogin();
+    if (prompt.split(' ')[0] === 'silent') return write({ type: 'system', subtype: 'init', session_id: 'other-session', model });
     write({ type: 'system', subtype: 'init', session_id: sessionId, model });
     write({ type: 'assistant', session_id: sessionId, parent_tool_use_id: null,
         message: { id: 'message-' + ++count, role: 'assistant', content: [{ type: 'text', text: 'I work on: ' + prompt }] } });

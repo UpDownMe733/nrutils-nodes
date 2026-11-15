@@ -73,6 +73,10 @@ function makeFlow(workRoot) {
         // maxParallel 1: a second start message waits in the queue
         inject('i-queue', 'wait', ['queue']), inject('i-queuestop', '', ['queue'], { agent: ['{"cmd":"stop"}', 'json'] }),
         agent('queue', [[], [], ['collect-queueevents']]), collect('queueevents'),
+        // A run in the session fake-session, then a run in other-session with no model response
+        inject('i-switch', 'hello', ['switch']), inject('i-silent', 'silent', ['switch']),
+        inject('i-switchstop', '', ['switch'], { agent: ['{"cmd":"stop"}', 'json'] }),
+        agent('switch', [['collect-switch'], [], ['collect-switchevents']]), collect('switch'), collect('switchevents'),
         { id: 'catch-all', type: 'catch', z: 'tab', scope: null, uncaught: false, wires: [['collect-catch']] }, collect('catch'),
         // GET /results/<key> answers with the messages that collect(key) stored
         { id: 'http-results', type: 'http in', z: 'tab', url: '/results/:key', method: 'get', wires: [['results']] },
@@ -331,6 +335,24 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         await waitFor(async () => (await count('running')) >= 2, 10000, 'queued run');
         await injectNode('i-queuestop');
         await waitFor(async () => (await count('stopped')) >= 2, 10000, 'stopped');
+    });
+
+    it('a run in another session takes over the cache countdown of the popup', async () => {
+        await injectNode('i-switch');
+        await results('switch');
+        const before = await editor('switch', 'get-log');
+        assert.equal(typeof before.session.lastActivity, 'number', 'fake-session has a model response');
+        const from = published.length;
+        await injectNode('i-silent');
+        // other-session has no model response yet: the popup shows no cache
+        const state = await waitFor(async () => {
+            const s = await editor('switch', 'get-log');
+            return s.runs.length === 1 && s.session.lastActivity === null && s;
+        }, 10000, 'the session of the new run');
+        assert.equal(state.runs[0].lastActivity, null);
+        await waitFor(async () => publishedFrom('switch', 'session', from).some((m) => m.payload.lastActivity === null), 5000, 'session publish');
+        await injectNode('i-switchstop');
+        await waitFor(async () => (await results('switchevents')).some((m) => m.payload.text === 'stopped'), 10000, 'stopped');
     });
 
     it('the editor gets the claudeAgent settings for the Sandbox rule', async () => {
