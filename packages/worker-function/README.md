@@ -39,8 +39,6 @@ Node.js 18 or later. `node.linkcall()` needs Node-RED 5.
 | Show a load meter on the node | Draws a load bar and a badge for the calls in progress. Off by default. |
 | Modules | Modules to load into the code, as in the Function node. |
 
-The editor sidebar has the full help.
-
 ## Code
 
 The worker is a separate thread. It cannot see the flow, the other nodes or the wires. It talks
@@ -75,8 +73,6 @@ worker.parentPorts.subscribe('input', async (msg) => {
 | `node.linkcall(target, msg, { timeout })` | `await node.linkcall(target, msg, { timeout })`. Node-RED 5. Default timeout 5000 ms. |
 | `flow.get('x')` | `await flow.get('x')` (all context calls return a Promise) |
 
-A variable outside the handlers keeps its value until the node restarts.
-
 ## Ports and wires
 
 Send through Node-RED, as `node.send()` does. Outputs count from 0:
@@ -106,7 +102,7 @@ worker.inputPorts.subscribe('input', (msg, senderTrace) => {
 });
 ```
 
-The type is any name that sender and receiver share. A handler for `default` gets every type.
+The type is any name that sender and receiver share. A handler for `default` gets all types.
 
 ## Big buffers
 
@@ -126,8 +122,7 @@ cannot use the buffer.
 - A `return` in a handler sends nothing. Use `publish('send', msg)`.
 - `msg.req` and `msg.res` of an HTTP In node cannot go to a thread.
 - A function in a message cannot be copied. A class instance arrives as a plain object.
-- Each node has one thread. To use more cores, spread the messages over several nodes.
-- For short code, the core Function node is faster.
+- Each node has one thread. To use more cores, use several nodes.
 
 ## Example
 
