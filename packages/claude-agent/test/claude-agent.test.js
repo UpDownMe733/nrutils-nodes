@@ -83,8 +83,11 @@ function makeFlow(workRoot) {
 }
 
 describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
-    let child, base, userDir, workRoot;
+    let child, base, userDir, workRoot, socket;
     let log = '';
+    // The messages that the nodes publish to the popup: { messageType, nodeId, payload }
+    const published = [];
+    const publishedFrom = (nodeId, messageType, from = 0) => published.slice(from).filter((m) => m.nodeId === nodeId && m.messageType === messageType);
 
     const results = (key, count = 1) => waitFor(async () => {
         const list = await (await fetch(`${base}/results/${key}`)).json();
@@ -123,9 +126,19 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal(res.status, 204, await res.text());
         // Node-RED answers the deploy before the flow runs: wait for the results route
         await waitFor(async () => (await fetch(`${base}/results/none`)).ok, 5000, 'flow start');
+        // The editor gets the publishes of the nodes on this WebSocket
+        socket = new WebSocket(base.replace('http', 'ws') + '/comms');
+        socket.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            for (const m of Array.isArray(data) ? data : [data]) {
+                if (m.topic === 'notification/node_red_editorcomms') published.push(m.data);
+            }
+        };
+        await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
     });
 
     after(async () => {
+        if (socket) socket.close();
         if (child && child.exitCode === null) {
             const exited = new Promise(r => child.once('exit', r));
             child.kill('SIGTERM');
@@ -171,6 +184,7 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
     });
 
     it('the popup log has the events, and Send in the popup starts a run in the last session', async () => {
+        const from = published.length;
         const state = await editor('run', 'get-log');
         assert.ok(state.events.some((e) => e.kind === 'result'));
         assert.deepEqual(state.runs, []);
@@ -182,10 +196,22 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         const after = await editor('run', 'get-log');
         assert.equal(after.session.cacheTtl, '1h');
         assert.equal(typeof after.session.lastActivity, 'number');
+        // The popup gets the new session state after a model response
+        const sessions = await waitFor(async () => publishedFrom('run', 'session', from).length && publishedFrom('run', 'session', from),
+            5000, 'session publish');
+        assert.ok(sessions.every((m) => m.payload.cacheTtl === '1h' && typeof m.payload.lastActivity === 'number'));
     });
 
     it('New chat clears the popup log and the session, and the next popup run starts a new session', async () => {
+        const from = published.length;
         assert.deepEqual(await editor('run', 'new-chat'), {});
+        // The open popups clear their views and show the empty session
+        const both = async () => {
+            const list = published.slice(from).filter((m) => m.nodeId === 'run' && ['cleared', 'session'].includes(m.messageType));
+            return list.length >= 2 && list;
+        };
+        assert.deepEqual((await waitFor(both, 5000, 'cleared and session publish')).map((m) => [m.messageType, m.payload]),
+            [['cleared', {}], ['session', { cacheTtl: '1h', lastActivity: null }]]);
         const state = await editor('run', 'get-log');
         assert.deepEqual(state.events, []);
         assert.deepEqual(state.session, { cacheTtl: '1h', lastActivity: null });
