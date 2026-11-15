@@ -229,6 +229,16 @@
         "wires": []
     },
     {
+        "id": "cademo.c4",
+        "type": "comment",
+        "z": "cademo.tab",
+        "name": "4. Timer and New chat",
+        "info": "Open the popup of a node. The header shows the active time and the cache countdown. New chat starts a fresh session.\nThe colour node uses a 5-minute cache, so its countdown moves fast.",
+        "x": 180,
+        "y": 440,
+        "wires": []
+    },
+    {
         "id": "cademo.catch",
         "type": "catch",
         "z": "cademo.tab",
