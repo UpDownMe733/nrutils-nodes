@@ -201,15 +201,35 @@ A control message has `msg.agent = { cmd, runId }` and a text in `msg.payload`. 
 
 ## Popup
 
-Click the node to open the popup. It has two tabs:
+Click the node to open the popup. The header has two tabs on the left:
 
-- **Chat**: your text and the text of the agent, in full.
+- **Chat**: your text and the text of the agent, in full. Your messages are on the right. The
+  messages of the agent are on the left. Each message shows the sender and the time.
 - **Timeline**: all events of the runs.
 
-The status line shows the state, the turns and the tokens. When the agent asks a question, the
-popup shows it with one button for each option. The message box has more than one line. Enter sends; Shift+Enter starts a new line. **Send** sends a message to the run, or the answer.
-When no run is active, Send starts a run that continues the last session of the node.
-**Interrupt** and **Stop** act on the selected run.
+On the right of the header are the run list, the timer chip and **New chat** (the + button). The
+run list shows only when the node has more than one active run.
+
+The timer chip shows two times:
+
+- **Active**: the time since the selected run started, for example `Active 12m` or `Active 1h 05m`.
+- **Cache**: the minutes until the prompt cache expires, for example `Cache 52m`. The countdown
+  starts again at each model response. It uses the Cache time of the node (5 or 60 minutes). It is
+  an estimate from the time of the last model response. `Cache --` means that the run has no
+  response yet.
+
+With no active run, the chip shows the cache of the last session. It shows `New chat` when the node
+has no last session. At 0 it shows `Cache cold`: the next message reads the full context again at
+the full price. The chip turns amber at 5 minutes or less.
+
+**New chat** makes the node forget its last session and clears the popup log. The next message
+from the popup then starts a new session. New chat is not possible while a run is active.
+
+The message box is at the bottom. It grows with its text. Enter sends; Shift+Enter starts a new
+line. **Send** sends a message to the run. When the agent asks a question, the popup shows it with
+one button for each option, and Send becomes **Answer**. When no run is active, Send starts a run
+that continues the last session of the node. **Interrupt** and **Stop** show only while a run is
+active. They act on the selected run. The status line shows the state, the turns and the tokens.
 
 ## Messages
 
@@ -247,6 +267,7 @@ A failed run goes to a Catch node. `msg.agent.reason` tells why:
 ## Limits
 
 - A deploy of the node ends its runs and clears the popup log.
+- New chat also clears the popup log.
 - The popup keeps the last 200 events.
 - A Sandbox name does nothing without a launcher that reads it.
 - The work root limits only the start folder. The agent can reach all files that its OS user can
