@@ -77,6 +77,8 @@ function makeFlow(workRoot) {
         inject('i-switch', 'hello', ['switch']), inject('i-silent', 'silent', ['switch']),
         inject('i-switchstop', '', ['switch'], { agent: ['{"cmd":"stop"}', 'json'] }),
         agent('switch', [['collect-switch'], [], ['collect-switchevents']]), collect('switch'), collect('switchevents'),
+        // Two model responses, then the result
+        inject('i-turns', 'twoturns', ['turns']), agent('turns', [['collect-turns'], [], []]), collect('turns'),
         { id: 'catch-all', type: 'catch', z: 'tab', scope: null, uncaught: false, wires: [['collect-catch']] }, collect('catch'),
         // GET /results/<key> answers with the messages that collect(key) stored
         { id: 'http-results', type: 'http in', z: 'tab', url: '/results/:key', method: 'get', wires: [['results']] },
@@ -355,6 +357,31 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         await waitFor(async () => publishedFrom('switch', 'session', from).some((m) => m.payload.lastActivity === null), 5000, 'session publish');
         await injectNode('i-switchstop');
         await waitFor(async () => (await results('switchevents')).some((m) => m.payload.text === 'stopped'), 10000, 'stopped');
+    });
+
+    it('each model response and the result restart the cache countdown of the run and the session', async () => {
+        const from = published.length;
+        await injectNode('i-turns');
+        const first = await waitFor(async () => {
+            const s = await editor('turns', 'get-log');
+            return s.runs.length === 1 && s.runs[0].lastActivity && s;
+        }, 10000, 'the first response');
+        assert.equal(first.session.lastActivity, first.runs[0].lastActivity);
+        const second = await waitFor(async () => {
+            const s = await editor('turns', 'get-log');
+            return s.runs.length === 1 && s.runs[0].lastActivity > first.runs[0].lastActivity && s;
+        }, 10000, 'the second response');
+        assert.equal(second.session.lastActivity, second.runs[0].lastActivity);
+        await results('turns');
+        const done = await editor('turns', 'get-log');
+        assert.deepEqual(done.runs, []);
+        assert.ok(done.session.lastActivity > second.session.lastActivity, 'the result moves the session activity');
+        // The popup gets one 'session' for each response and one for the result, each later than the one before
+        const times = await waitFor(async () => {
+            const list = publishedFrom('turns', 'session', from).map((m) => m.payload.lastActivity);
+            return list.length >= 3 && list;
+        }, 5000, 'three session publishes');
+        assert.deepEqual(times, [first.session.lastActivity, second.session.lastActivity, done.session.lastActivity]);
     });
 
     it('the editor gets the claudeAgent settings for the Sandbox rule', async () => {
