@@ -84,14 +84,30 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     const queue = [];           // start messages that wait for a free slot: { msg, send, done, text }
     let lastSessionId;          // session of the newest run; the popup continues it
     let lastSessionCwd;         // folder of that session; the popup run uses it again
+    let sessionActivity = null; // time of the last model response in that session; the popup counts down the cache from it
     const log = [];             // the last LOG_SIZE events of all runs, for a new popup
     let lastStatus = {};
     let closing = false;
 
     function runList() {
         return [...runs.values()].map((r) => ({
-            runId: r.id, state: r.state, turns: r.turns, tokens: tokenText(r.tokens), question: r.question
+            runId: r.id, state: r.state, turns: r.turns, tokens: tokenText(r.tokens), question: r.question,
+            startTime: r.startTime, lastActivity: r.lastActivity
         }));
+    }
+
+    // The session state of the popup: the cache time and the time of the last model response
+    function session() {
+        return { cacheTtl, lastActivity: sessionActivity };
+    }
+
+    // A model response of the run. The prompt cache lives for the cache time after it.
+    function touch(run) {
+        run.lastActivity = Date.now();
+        if (run.sessionId && run.sessionId === lastSessionId) {
+            sessionActivity = run.lastActivity;
+            comms.publish('session', session());
+        }
     }
 
     function showStatus() {
@@ -215,6 +231,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     }
 
     function onResult(run, m) {
+        touch(run);
         run.tokens = tokenCount(m.modelUsage);
         run.weighted = weightedCount(m.modelUsage);
         run.cost = m.total_cost_usd || 0;
@@ -239,7 +256,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     async function start({ msg, send, done, text }) {
         const run = {
             id: crypto.randomUUID().slice(0, 8), msg, send, done, seq: 0, state: 'starting', startTime: Date.now(),
-            sessionId: undefined, model: undefined, turns: 0, messageId: null, tokens: undefined, usage: undefined,
+            sessionId: undefined, model: undefined, turns: 0, messageId: null, lastActivity: null, tokens: undefined, usage: undefined,
             schema: null, pending: new Set(), inbox: [], wake: null, answer: null, question: null, query: null,
             timer: null, ended: false
         };
@@ -291,6 +308,11 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             setState(run, 'running');
             for await (const m of run.query) {
                 if (m.session_id) {
+                    // Another session becomes the last session: its cache state replaces the old one.
+                    if (m.session_id !== lastSessionId && sessionActivity !== run.lastActivity) {
+                        sessionActivity = run.lastActivity;
+                        comms.publish('session', session());
+                    }
                     run.sessionId = lastSessionId = m.session_id;
                     lastSessionCwd = cwd;
                 }
@@ -301,6 +323,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
                     if (m.type === 'assistant' && !m.parent_tool_use_id && m.message.id !== run.messageId) {
                         run.messageId = m.message.id;
                         run.turns++;
+                        touch(run);
                         comms.publish('runs', runList());
                     }
                     for (const b of Array.isArray(m.message.content) ? m.message.content : []) {
@@ -368,8 +391,20 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         }
     });
 
-    // The popup asks for the log when it opens, and sends the Send, Answer, option, Interrupt and Stop buttons.
-    comms.subscribe('get-log', () => ({ events: log, runs: runList() }));
+    // The popup asks for the log when it opens, and sends the Send, Answer, option, Interrupt, Stop and New chat buttons.
+    // The node publishes 'event', 'runs', 'session' and 'cleared' to the popup.
+    comms.subscribe('get-log', () => ({ events: log, runs: runList(), session: session() }));
+    // New chat: the next popup run starts a new session. The popup log is cleared.
+    comms.subscribe('new-chat', () => {
+        if (runs.size || queue.length) return { error: 'stop the active run first' };
+        lastSessionId = undefined;
+        lastSessionCwd = undefined;
+        sessionActivity = null;
+        log.length = 0;
+        comms.publish('cleared', {});
+        comms.publish('session', session());
+        return {};
+    });
     // The popup starts a run when the node has no active run. The run continues the last session of the node.
     comms.subscribe('start', (p) => {
         if (!p || typeof p.text !== 'string' || !p.text.trim()) return { error: 'type a message first' };
