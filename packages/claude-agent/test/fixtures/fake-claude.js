@@ -9,6 +9,7 @@
 //   maxturns        ends with the error result error_max_turns
 //   wait            gives no result: the run waits until somebody stops it
 //   slowdone        gives the result after one second
+//   twoturns        gives a second model response after half a second, and the result half a second later
 //   Stage           a call of the agent-watch narrator: one line for each stage of the prompt.
 //                   It appends one line to narrator-calls.log in its folder. If the prompt has the
 //                   word narratorfail, the call fails. If it has the word slowdone, it answers after two seconds.
@@ -88,6 +89,13 @@ async function answer(prompt) {
     const word = prompt.split(' ')[0];
     if (word === 'wait') return;
     if (word === 'slowdone') return sleep(1000).then(() => result('done'));
+    if (word === 'twoturns') {
+        await sleep(500);
+        write({ type: 'assistant', session_id: sessionId, parent_tool_use_id: null,
+            message: { id: 'message-' + ++count, role: 'assistant', content: [{ type: 'text', text: 'The second turn.' }] } });
+        await sleep(500);
+        return result('done');
+    }
     if (word === 'maxturns') return result('', 'error_max_turns');
     if (word === 'ask') {
         const reply = await request({ subtype: 'mcp_message', server_name: 'operator', message: {
