@@ -113,6 +113,11 @@ describe('claude-agent popup message box', () => {
         assert.equal(setup().text.tagName, 'TEXTAREA');
     });
 
+    it('a new node gets the popup size 480x420', () => {
+        const value = setup().getDef().defaults.nru_popupConfig.value;
+        assert.deepEqual(JSON.parse(JSON.stringify(value)), { width: 480, height: 420, autoCloseTime: 0 });
+    });
+
     it('Enter sends the text, prevents the new line and clears the box', () => {
         const { text, calls } = setup();
         text.value = 'hello';
