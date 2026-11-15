@@ -70,6 +70,9 @@ function makeFlow(workRoot) {
             func: 'return { payload: "yes", agent: { cmd: "answer", runId: msg.agent.runId } };' }, collect('question'),
         inject('i-wait', 'wait', ['wait']), inject('i-stop', '', ['wait'], { agent: ['{"cmd":"stop"}', 'json'] }),
         agent('wait', [['collect-waitresult'], [], ['collect-waitevents']]), collect('waitresult'), collect('waitevents'),
+        // maxParallel 1: a second start message waits in the queue
+        inject('i-queue', 'wait', ['queue']), inject('i-queuestop', '', ['queue'], { agent: ['{"cmd":"stop"}', 'json'] }),
+        agent('queue', [[], [], ['collect-queueevents']]), collect('queueevents'),
         { id: 'catch-all', type: 'catch', z: 'tab', scope: null, uncaught: false, wires: [['collect-catch']] }, collect('catch'),
         // GET /results/<key> answers with the messages that collect(key) stored
         { id: 'http-results', type: 'http in', z: 'tab', url: '/results/:key', method: 'get', wires: [['results']] },
@@ -281,6 +284,26 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal(again.events.length, state.events.length);
         assert.deepEqual(again.session, state.session);
         await injectNode('i-stop');
+        await waitFor(async () => (await count('stopped')) >= 2, 10000, 'stopped');
+    });
+
+    it('New chat waits while a start message is in the queue', async () => {
+        const count = (text) => results('queueevents').then((list) => list.filter((m) => m.payload.text === text).length);
+        await injectNode('i-queue');
+        await waitFor(async () => (await count('running')) >= 1, 10000, 'running');
+        await injectNode('i-queue');
+        const state = await waitFor(async () => {
+            const s = await editor('queue', 'get-log');
+            return s.runs.length === 1 && typeof s.session.lastActivity === 'number' && s;
+        }, 10000, 'one run and one queued job');
+        assert.deepEqual(await editor('queue', 'new-chat'), { error: 'stop the active run first' });
+        const again = await editor('queue', 'get-log');
+        assert.equal(again.events.length, state.events.length);
+        assert.deepEqual(again.session, state.session);
+        // The stop ends the first run. The queued job starts, and the second stop ends it.
+        await injectNode('i-queuestop');
+        await waitFor(async () => (await count('running')) >= 2, 10000, 'queued run');
+        await injectNode('i-queuestop');
         await waitFor(async () => (await count('stopped')) >= 2, 10000, 'stopped');
     });
 
