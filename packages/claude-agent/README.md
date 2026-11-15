@@ -7,8 +7,7 @@
 A [Node-RED](https://nodered.org) node that runs one **Claude Code agent** for each message.
 
 Each message starts one agent run with the
-[Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk). The node is one
-stage of a workflow. The agent can ask you a question.
+[Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk). The agent can ask you a question.
 
 - The prompt is a mustache template over the message.
 - A popup shows each run as a chat and a timeline.
@@ -17,8 +16,7 @@ stage of a workflow. The agent can ask you a question.
 
 ## Install
 
-In the editor: **Menu → Manage palette → Install**, search `@nrutils/node-red-claude-agent`. Or in
-your Node-RED user directory:
+In the editor: **Menu → Manage palette → Install**. Or in your Node-RED user directory:
 
 ```sh
 npm install @nrutils/node-red-claude-agent
@@ -26,8 +24,7 @@ npm install @nrutils/node-red-claude-agent
 
 Restart Node-RED. The node is in the **agents** category. It needs Node-RED 4.0 or later and
 Node.js 18 or later. npm installs the SDK and its CLI. To log in, run `claude` one time as the OS
-user that runs the CLI, or set `ANTHROPIC_API_KEY` for Node-RED. The node
-[agent-watch](https://www.npmjs.com/package/@nrutils/node-red-agent-watch) comments on all agents.
+user that runs the CLI, or set `ANTHROPIC_API_KEY` for Node-RED.
 
 ## Safety
 
@@ -85,7 +82,7 @@ The sudo rule needs the tag `SETENV`, so that the CLI gets the environment.
 | System prompt | Text added to the Claude Code system prompt. |
 | Model | Empty (the SDK default), `haiku`, `sonnet` or `opus`. `msg.model` replaces it. |
 | Cache time | `5 minutes` or `60 minutes`. Default 60 minutes. |
-| Prompt | A mustache template over the message. Default `{{payload}}`. |
+| Prompt | A mustache template over the message. An object becomes JSON. Default `{{payload}}`. |
 | Tools | A comma list. Default `Read, Grep, Glob`. Empty: all tools. |
 | Project settings | Load `CLAUDE.md` and `.claude/settings.json` of the folder. Off by default. |
 | Full environment | Also load user settings, skills and MCP servers. Off by default. |
@@ -101,14 +98,14 @@ Cache time overrides `FORCE_PROMPT_CACHING_5M`, `CLAUDE_CODE_PROMPT_CACHE_TTL` a
 
 ## Prompt and result
 
-An object value in the template becomes JSON, for example `{{stages.plan}}`. The result goes out on output 1, with the properties of the start message:
+The result goes out on output 1, with the properties of the start message:
 
 - `msg.payload`: the final text of the agent, or the schema object.
 - `msg.stages[<name>]`: the same value. The key is the node name, else the id. Earlier stages stay.
 - `msg.agent`: `{ runId, sessionId, model, turns, durationMs, tokens, weighted, usage }`.
 
-`weighted` is a price-weighted token count in sonnet input tokens. The status shows it, for example
-`done, $0.12, 44.5k weighted`.
+`weighted` counts tokens in sonnet input units. For each model it is
+(input + 2 × cache write + r × cache read + 5 × output) × weight. Opus has weight 2 and r 0.05, sonnet 1 and 0.05, haiku 0.05 and 0.1.
 
 To continue a session later, put its `sessionId` into `msg.agent.resume`.
 
