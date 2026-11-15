@@ -62,6 +62,7 @@ function makeFlow(workRoot) {
         inject('i-badname', 'hello', ['badname']), agent('badname', [[], [], []], { sandbox: 'bad name' }),
         inject('i-outside', 'hello', ['outside'], { cwd: ['/', 'str'] }), agent('outside', [[], [], []]),
         inject('i-maxturns', 'maxturns', ['maxturns']), agent('maxturns', [[], [], []]),
+        inject('i-nologin', 'nologin', ['nologin']), agent('nologin', [[], [], []]),
         // The question goes out on output 2, a function answers yes, the answer goes back in
         inject('i-ask', 'ask Deploy now?', ['ask']),
         agent('ask', [['collect-ask'], ['answer'], []]), collect('ask'),
@@ -239,6 +240,12 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         await injectNode('i-maxturns');
         const caught = await caughtFrom('maxturns');
         assert.equal(caught.agent.reason, 'max_turns');
+    });
+
+    it('a run that fails before a model response does not start the cache countdown', async () => {
+        await injectNode('i-nologin');
+        assert.match((await caughtFrom('nologin')).error.message, /Not logged in/);
+        assert.deepEqual((await editor('nologin', 'get-log')).session, { cacheTtl: '1h', lastActivity: null });
     });
 
     it('a question goes out on output 2 and an answer message continues the run', async () => {
