@@ -172,7 +172,23 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         assert.deepEqual(state.runs, []);
         assert.deepEqual(await editor('run', 'start', { text: 'from the popup' }), {});
         const list = await results('result', 2);
+        assert.equal(JSON.parse(list[0].payload).resume, null);
         assert.equal(JSON.parse(list[1].payload).prompt, 'from the popup');
+        assert.equal(JSON.parse(list[1].payload).resume, 'fake-session');
+        const after = await editor('run', 'get-log');
+        assert.equal(after.session.cacheTtl, '1h');
+        assert.equal(typeof after.session.lastActivity, 'number');
+    });
+
+    it('New chat clears the popup log and the session, and the next popup run starts a new session', async () => {
+        assert.deepEqual(await editor('run', 'new-chat'), {});
+        const state = await editor('run', 'get-log');
+        assert.deepEqual(state.events, []);
+        assert.deepEqual(state.session, { cacheTtl: '1h', lastActivity: null });
+        assert.deepEqual(await editor('run', 'start', { text: 'fresh chat' }), {});
+        const list = await results('result', 3);
+        assert.equal(JSON.parse(list[2].payload).prompt, 'fresh chat');
+        assert.equal(JSON.parse(list[2].payload).resume, null);
     });
 
     it('a sandbox run gives the sandbox name and the folder to the launcher in the environment', async () => {
@@ -190,6 +206,7 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal(got.settings.promptCacheTtl, '5m');
         assert.equal(got.settings.subagentPromptCacheTtl, '5m');
         assert.equal(got.settings.autoMemoryEnabled, false);
+        assert.equal((await editor('cache5m', 'get-log')).session.cacheTtl, '5m');
     });
 
     it('an unknown cache time gives 1h', async () => {
@@ -239,6 +256,25 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         await waitFor(async () => (await results('waitevents')).some((m) => m.payload.text === 'stopped'), 10000, 'stopped');
         await sleep(300);
         assert.deepEqual(await (await fetch(`${base}/results/waitresult`)).json(), []);
+    });
+
+    it('the popup gets the start time and the last response of an active run, and New chat waits until the run ends', async () => {
+        const count = (text) => results('waitevents').then((list) => list.filter((m) => m.payload.text === text).length);
+        await injectNode('i-wait');
+        await waitFor(async () => (await count('running')) >= 2, 10000, 'running');
+        const state = await waitFor(async () => {
+            const s = await editor('wait', 'get-log');
+            return s.runs.length === 1 && s.runs[0].lastActivity && s;
+        }, 10000, 'last activity');
+        assert.equal(typeof state.runs[0].startTime, 'number');
+        assert.ok(state.runs[0].lastActivity >= state.runs[0].startTime);
+        assert.equal(state.session.lastActivity, state.runs[0].lastActivity);
+        assert.deepEqual(await editor('wait', 'new-chat'), { error: 'stop the active run first' });
+        const again = await editor('wait', 'get-log');
+        assert.equal(again.events.length, state.events.length);
+        assert.deepEqual(again.session, state.session);
+        await injectNode('i-stop');
+        await waitFor(async () => (await count('stopped')) >= 2, 10000, 'stopped');
     });
 
     it('the editor gets the claudeAgent settings for the Sandbox rule', async () => {

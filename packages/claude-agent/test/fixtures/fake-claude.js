@@ -12,7 +12,7 @@
 //                   word narratorfail, the call fails. If it has the word slowdone, it answers after two seconds.
 //   any other text  gives a JSON result: the prompt, the folder, the sandbox variables, the settings
 //                   of --settings, FORCE_PROMPT_CACHING_5M, CLAUDE_CODE_PROMPT_CACHE_TTL,
-//                   CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL and some arguments
+//                   CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL and some arguments (also --resume)
 
 const fs = require('fs');
 const readline = require('readline');
@@ -80,7 +80,7 @@ async function answer(prompt) {
         return result('The operator said: ' + reply.mcp_response.result.content[0].text);
     }
     result(JSON.stringify({
-        prompt, cwd: process.cwd(), model: arg('--model'), permissionMode: arg('--permission-mode'),
+        prompt, cwd: process.cwd(), model: arg('--model'), permissionMode: arg('--permission-mode'), resume: arg('--resume'),
         settings: readSettings(), forceCache5m: process.env.FORCE_PROMPT_CACHING_5M || null,
         cacheTtlEnv: process.env.CLAUDE_CODE_PROMPT_CACHE_TTL || null,
         subagentCacheTtlEnv: process.env.CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL || null,
