@@ -231,7 +231,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     }
 
     function onResult(run, m) {
-        touch(run);
+        // An error result, for example "Not logged in", has no model response.
+        if (!m.is_error) touch(run);
         run.tokens = tokenCount(m.modelUsage);
         run.weighted = weightedCount(m.modelUsage);
         run.cost = m.total_cost_usd || 0;
@@ -323,7 +324,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
                     if (m.type === 'assistant' && !m.parent_tool_use_id && m.message.id !== run.messageId) {
                         run.messageId = m.message.id;
                         run.turns++;
-                        touch(run);
+                        // The CLI writes a <synthetic> message for an error without a model call.
+                        if (m.message.model !== '<synthetic>') touch(run);
                         comms.publish('runs', runList());
                     }
                     for (const b of Array.isArray(m.message.content) ? m.message.content : []) {
