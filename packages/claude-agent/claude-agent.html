@@ -7,6 +7,9 @@
     const activeRuns = {};      // nodeId to the active runs of the runtime node
     const lastEnd = {};         // nodeId to the end of the last run: the result line, "stopped" or the error
     const views = {};           // nodeId to the popup tab: 'chat' (the default) or 'timeline'. Survives a popup rebuild.
+    const sessions = {};        // nodeId to the last session of the runtime node: { cacheTtl, lastActivity }
+    const popups = {};          // nodeId to the node of each popup that the editor has built
+    let chipTimer = null;       // one timer for the chips of all popups
     const OPERATOR_KINDS = ['prompt', 'message', 'answer'];
     const AGENT_KINDS = ['text', 'question'];
     const END_KINDS = ['result', 'error'];
@@ -98,6 +101,8 @@
         }
         const ask = part(node, 'ask');
         if (!ask) return;
+        showChip(node);
+        part(node, 'new').disabled = (activeRuns[node.id] || []).length > 0;
         const working = !!(run && (run.state === 'starting' || run.state === 'running'));
         part(node, 'working').style.display = working ? '' : 'none';
         for (const name of ['interrupt', 'stop']) part(node, name).style.display = run ? '' : 'none';
@@ -184,6 +189,77 @@
         request
             .then((res) => { if (res && res.error) RED.notify(res.error, 'warning'); })
             .catch((err) => RED.notify(err.status === 404 ? 'Deploy the node first' : err.message, 'warning'));
+    }
+
+    // The text of the timer chip. Active: the time since the start of the selected run.
+    // Cache: the minutes until the prompt cache expires. Each model response restarts the cache time.
+    function chipState(node, run, now) {
+        const session = sessions[node.id] || { cacheTtl: node.cacheTtl === '5m' ? '5m' : '1h', lastActivity: null };
+        const ttlMin = session.cacheTtl === '5m' ? 5 : 60;
+        const since = run ? run.lastActivity : session.lastActivity;
+        const info = 'Cache: the estimated time until the ' + ttlMin + '-minute prompt cache expires. Each model response starts it again.';
+        let cache = 'Cache --';
+        let title = info;
+        let warn = false;
+        if (since) {
+            const left = since + ttlMin * 60000 - now;
+            warn = left <= 5 * 60000;
+            if (left > 0) {
+                cache = 'Cache ' + pad(Math.ceil(left / 60000)) + 'm';
+            } else {
+                cache = 'Cache cold';
+                title = 'The prompt cache has expired. The next message reads the full context again at the full price.';
+            }
+        } else if (!run) {
+            return { text: 'New chat', title: 'The next message starts a new session.', warn: false };
+        }
+        if (!run) return { text: cache, title: title, warn: warn };
+        const min = Math.max(0, Math.floor((now - run.startTime) / 60000));
+        const active = min >= 60 ? Math.floor(min / 60) + 'h ' + pad(min % 60) + 'm' : min + 'm';
+        return { text: 'Active ' + active + ' · ' + cache, title: 'Active: the time since the run started.\n' + title, warn: warn };
+    }
+
+    function showChip(node) {
+        const chip = part(node, 'chip');
+        if (!chip) return false;
+        const state = chipState(node, selectedRun(node), Date.now());
+        chip.textContent = state.text;
+        chip.title = state.title;
+        chip.classList.toggle('ca-warn', state.warn);
+        return true;
+    }
+
+    // Update the chips of all popups every 10 s. A popup without a chip leaves the list. The timer stops when the list is empty.
+    function startChipTimer() {
+        if (chipTimer) return;
+        chipTimer = setInterval(() => {
+            for (const node of Object.values(popups)) if (!showChip(node)) delete popups[node.id];
+            if (!Object.keys(popups).length) {
+                clearInterval(chipTimer);
+                chipTimer = null;
+            }
+        }, 10000);
+    }
+
+    // New chat: the runtime forgets the last session and clears the popup log
+    function newChat(node) {
+        node.nodeRedEditorComms.publish('new-chat')
+            .then((res) => { if (res && res.error) RED.notify(res.error, 'warning'); })
+            .catch((err) => RED.notify(err.status === 404 ? 'Deploy the node first' : err.message, 'warning'));
+        const text = part(node, 'text');
+        if (text) text.focus();
+    }
+
+    // The runtime has cleared its log: empty the chat and the Timeline
+    function clear(node) {
+        delete lastEnd[node.id];
+        for (const name of ['list', 'log']) {
+            const e = part(node, name);
+            if (e) e.textContent = '';
+        }
+        const empty = part(node, 'empty');
+        if (empty) empty.style.display = '';
+        showRun(node);
     }
 
     // The message box grows with its text, up to about 6 lines. Then it scrolls.
@@ -280,9 +356,10 @@
             select.style.display = 'none';
             select.addEventListener('change', () => showRun(node));
             const chip = element(node, 'span', 'chip', 'ca-chip');
-            const newChat = button('fa-plus', '', 'New chat: the next message starts a new session');
-            newChat.id = 'claude-agent-new-' + node.id;
-            for (const e of [select, chip, newChat]) header.appendChild(e);
+            const fresh = button('fa-plus', '', 'New chat: the next message starts a new session. Stop the active run first.');
+            fresh.id = 'claude-agent-new-' + node.id;
+            fresh.addEventListener('click', () => newChat(node));
+            for (const e of [select, chip, fresh]) header.appendChild(e);
 
             const log = element(node, 'div', 'log', 'ca-log');
             const chat = element(node, 'div', 'chat', 'ca-chat');
@@ -334,15 +411,20 @@
             div.appendChild(root);
             showView(node, views[node.id] || 'chat');
             showRun(node);
+            popups[node.id] = node;
+            startChipTimer();
 
             node.nodeRedEditorComms.publish('get-log').then((state) => {
+                if (state.session) sessions[node.id] = state.session;
                 for (const e of state.events) addEvent(node, e);
                 showRuns(node, state.runs);
             }).catch(() => showRuns(node, []));
         },
         nodeRedEditorComms_subscriptions: {
             event: function (e) { addEvent(this, e); },
-            runs: function (runs) { showRuns(this, runs); }
+            runs: function (runs) { showRuns(this, runs); },
+            session: function (session) { sessions[this.id] = session; showChip(this); },
+            cleared: function () { clear(this); }
         }
     });
 })();
