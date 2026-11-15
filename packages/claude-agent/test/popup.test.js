@@ -1,6 +1,6 @@
 'use strict';
 
-// Runs the editor script of claude-agent.html in a small fake DOM and checks the popup message box.
+// Runs the editor script of claude-agent.html in a small fake DOM and checks the popup.
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -166,5 +166,176 @@ describe('claude-agent edit dialog', () => {
     it('leaves a stored Cache time alone', () => {
         assert.deepEqual(open('5m'), []);
         assert.deepEqual(open('1h'), []);
+    });
+});
+
+const MIN = 60000;
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+const run = (extra) => ({ runId: 'r1', state: 'running', turns: 1, tokens: '1.1k tokens', question: null, startTime: 0, lastActivity: null, ...extra });
+const event = (kind, text, extra) => ({ runId: 'r1', seq: 1, time: 0, kind, text, ...extra });
+// The popup after get-log, with the clock at now
+async function popup(state, now = 0) {
+    const p = setup({}, { events: [], runs: [], session: { cacheTtl: '1h', lastActivity: null }, ...state });
+    p.clock.now = now;
+    await settle();
+    return p;
+}
+
+describe('claude-agent popup timer chip', () => {
+    it('counts down the 60-minute cache of the last session with two digits', async () => {
+        const { part } = await popup({ session: { cacheTtl: '1h', lastActivity: 0 } }, 8 * MIN);
+        assert.equal(part('chip').textContent, 'Cache 52m');
+        assert.equal(part('chip').classList.contains('ca-warn'), false);
+    });
+
+    it('counts down the 5-minute cache, turns amber, and says cold at the end', async () => {
+        const { part, clock, receive } = await popup({ session: { cacheTtl: '5m', lastActivity: 0 } }, 30000);
+        assert.equal(part('chip').textContent, 'Cache 05m');
+        assert.equal(part('chip').classList.contains('ca-warn'), true);
+        clock.now = 5 * MIN;
+        receive('session', { cacheTtl: '5m', lastActivity: 0 });
+        assert.equal(part('chip').textContent, 'Cache cold');
+        assert.match(part('chip').title, /full context again at the full price/);
+    });
+
+    it('says New chat when the node has no session', async () => {
+        const { part } = await popup({});
+        assert.equal(part('chip').textContent, 'New chat');
+    });
+
+    it('shows the active time and Cache -- before the first response of a run', async () => {
+        const { part } = await popup({ runs: [run()] }, 2 * MIN);
+        assert.equal(part('chip').textContent, 'Active 2m · Cache --');
+    });
+
+    it('shows hours and minutes after 60 minutes, and the cache from the last response of the run', async () => {
+        const { part } = await popup({ runs: [run({ lastActivity: 60 * MIN })] }, 65 * MIN);
+        assert.equal(part('chip').textContent, 'Active 1h 05m · Cache 55m');
+    });
+
+    it('a timer updates the chip every 10 s and stops when the popup has gone', async () => {
+        const { part, clock, div } = await popup({ session: { cacheTtl: '1h', lastActivity: 0 } }, 0);
+        assert.equal(part('chip').textContent, 'Cache 60m');
+        const timers = clock.timers.filter((t) => t.on);
+        assert.equal(timers.length, 1);
+        assert.equal(timers[0].ms, 10000);
+        clock.tick(MIN + 10000);
+        assert.equal(part('chip').textContent, 'Cache 59m');
+        div.textContent = '';
+        clock.tick(10000);
+        assert.equal(clock.timers.filter((t) => t.on).length, 0);
+    });
+
+    it('a rebuild of the popup keeps one timer', async () => {
+        const { clock, rebuild } = await popup({});
+        rebuild();
+        rebuild();
+        assert.equal(clock.timers.filter((t) => t.on).length, 1);
+    });
+});
+
+describe('claude-agent popup buttons', () => {
+    it('Interrupt and Stop are hidden without a run and shown with a run', async () => {
+        const { part, receive } = await popup({});
+        assert.equal(part('interrupt').style.display, 'none');
+        assert.equal(part('stop').style.display, 'none');
+        receive('runs', [run()]);
+        assert.equal(part('interrupt').style.display, '');
+        assert.equal(part('stop').style.display, '');
+    });
+
+    it('New chat publishes new-chat and puts the focus in the message box', async () => {
+        const { part, calls, text } = await popup({});
+        assert.equal(part('new').disabled, false);
+        part('new').click();
+        assert.deepEqual(calls.filter((c) => c.type === 'new-chat').length, 1);
+        assert.equal(text.focused, 1);
+    });
+
+    it('New chat is disabled with an active run', async () => {
+        const { part, receive } = await popup({ runs: [run()] });
+        assert.equal(part('new').disabled, true);
+        receive('runs', []);
+        assert.equal(part('new').disabled, false);
+    });
+
+    it('New chat shows the error of the runtime', async () => {
+        const { part, answers, notes } = await popup({});
+        answers['new-chat'] = { error: 'stop the active run first' };
+        part('new').click();
+        await settle();
+        assert.deepEqual(notes, [{ text: 'stop the active run first', type: 'warning' }]);
+    });
+
+    it('Send says Answer when the run waits for an answer', async () => {
+        const { part } = await popup({ runs: [run({ state: 'waiting', question: { question: 'Go?', options: ['yes'] } })] });
+        assert.equal(part('send').textContent.trim(), 'Answer');
+        assert.equal(part('ask').style.display, '');
+    });
+});
+
+describe('claude-agent popup chat', () => {
+    it('shows the empty state before the first entry', async () => {
+        const { part, receive } = await popup({});
+        assert.equal(part('empty').style.display, undefined);
+        assert.equal(part('empty').textContent, 'Ask the agent a question below.');
+        receive('event', event('prompt', 'hello'));
+        assert.equal(part('empty').style.display, 'none');
+    });
+
+    it('shows the working line while the selected run is starting or running', async () => {
+        const { part, receive } = await popup({});
+        assert.equal(part('working').style.display, 'none');
+        receive('runs', [run({ state: 'starting' })]);
+        assert.equal(part('working').style.display, '');
+        receive('runs', [run({ state: 'waiting' })]);
+        assert.equal(part('working').style.display, 'none');
+        receive('runs', [run({ state: 'running' })]);
+        assert.equal(part('working').style.display, '');
+    });
+
+    it('operator and agent entries get their classes, a meta line and no inline colour', async () => {
+        const { part, receive } = await popup({});
+        receive('event', event('prompt', 'hello', { time: new Date(2026, 0, 1, 14, 2).getTime() }));
+        receive('event', event('text', 'hi there', { time: new Date(2026, 0, 1, 14, 3).getTime() }));
+        receive('event', event('question', 'Go?'));
+        receive('event', event('error', 'boom'));
+        const [you, agent, question, end] = part('list').childNodes;
+        assert.ok(you.classList.contains('ca-op'));
+        assert.equal(you.childNodes[0].textContent, 'You · 14:02');
+        assert.equal(you.childNodes[1].textContent, 'hello');
+        assert.ok(agent.classList.contains('ca-agent'));
+        assert.equal(agent.childNodes[0].textContent, 'Agent · 14:03');
+        assert.ok(question.classList.contains('ca-question'));
+        assert.ok(end.classList.contains('ca-end') && end.classList.contains('ca-error'));
+        for (const e of [you, agent, question, end, ...you.childNodes, ...agent.childNodes]) {
+            assert.deepEqual(e.style, {}, 'no inline style');
+        }
+    });
+
+    it('keeps 200 entries', async () => {
+        const { part, receive } = await popup({});
+        for (let i = 0; i < 205; i++) receive('event', event('text', 'line ' + i));
+        assert.equal(part('list').childNodes.length, 200);
+        assert.equal(part('log').childNodes.length, 200);
+    });
+
+    it('a cleared message empties the chat and the Timeline', async () => {
+        const { part, receive } = await popup({ events: [event('prompt', 'hello'), event('result', 'done')] });
+        assert.equal(part('list').childNodes.length, 2);
+        receive('cleared', {});
+        assert.equal(part('list').childNodes.length, 0);
+        assert.equal(part('log').childNodes.length, 0);
+        assert.equal(part('empty').style.display, '');
+    });
+
+    it('adds the style element once, with theme variables and no fixed colour but the node colour', async () => {
+        const { head, rebuild } = await popup({});
+        rebuild();
+        const styles = head.childNodes.filter((e) => e.id === 'claude-agent-style');
+        assert.equal(styles.length, 1);
+        const colours = styles[0].textContent.match(/#[0-9a-f]{3,6}\b/gi);
+        assert.deepEqual([...new Set(colours)].sort(), ['#000', '#9fd8d0']);
+        assert.doesNotMatch(html, /#fff3cd/);
     });
 });
