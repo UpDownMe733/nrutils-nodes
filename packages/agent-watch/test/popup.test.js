@@ -274,6 +274,40 @@ describe('agent-watch popup', () => {
             assert.equal(width(h.popupDiv), '13ch');
         });
 
+        it('gives each row a Time cell of 5ch and a Stage cell that uses the variable', () => {
+            const h = load();
+            h.def.nru_popupInit.call(h.node);
+            add(h, h.node, 'draft');
+            const row = findById(h.popupDiv, 'agent-watch-list-n1').childNodes[0];
+            assert.match(row.childNodes[0].style.cssText, /(^|;)width:5ch(;|$)/);
+            assert.match(row.childNodes[1].style.cssText, /(^|;)width:var\(--aw-stage-w\)(;|$)/);
+        });
+
+        it('computes the auto width again from the lines of get-log on a rebuild', async () => {
+            const h = load();
+            h.def.nru_popupInit.call(h.node);
+            add(h, h.node, 'kitchen-lights-plan-reviewer');
+            assert.equal(width(h.popupDiv), '29ch');
+            // The real textContent = '' empties the div. The fake does not.
+            h.popupDiv.childNodes = [];
+            const lines = [line('abcdefgh'), line('abc')];
+            h.node.nodeRedEditorComms.publish = () => Promise.resolve({ lines, total: 0, weighted: 0 });
+            h.def.nru_popupInit.call(h.node);
+            assert.equal(width(h.popupDiv), '6ch');
+            await new Promise(resolve => setImmediate(resolve));
+            assert.equal(width(h.popupDiv), '9ch');
+            assert.equal(findById(h.popupDiv, 'agent-watch-list-n1').childNodes.length, 2);
+        });
+
+        it('limits the width to 60% of the wrapper', () => {
+            const h = load();
+            h.def.nru_popupInit.call(h.node);
+            wrapperOf(h.popupDiv).rect = { left: 0, width: 1000 };
+            handleOf(h.popupDiv).fire('mousedown', fakeEvent({}));
+            doc(h, 'mousemove')[0].fn({ clientX: 900 });
+            assert.equal(width(h.popupDiv), '600px');
+        });
+
         it('keeps the widths of two nodes apart', () => {
             const h = load();
             const other = { ...h.node, id: 'n2' };
