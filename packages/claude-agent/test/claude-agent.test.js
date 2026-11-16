@@ -55,6 +55,10 @@ function makeFlow(workRoot) {
         inject('i-run', 'hello', ['run'], { topic: ['greet', 'str'] }),
         agent('run', [['collect-result'], [], ['collect-events']], { prompt: 'Task: {{payload}} {{topic}}', model: 'haiku', cwd: path.join(workRoot, 'project') }),
         collect('result'), collect('events'),
+        inject('i-fable', 'hello', ['fable'], { model: ['fable', 'str'] }),
+        agent('fable', [['collect-fable'], [], []], { model: 'haiku' }), collect('fable'),
+        inject('i-fullid', 'hello', ['fullid'], { model: ['claude-fable-5-2', 'str'] }),
+        agent('fullid', [['collect-fullid'], [], []], { model: 'haiku' }), collect('fullid'),
         inject('i-sandbox', 'hello', ['sandbox']),
         inject('i-cache5m', 'hello', ['cache5m']), agent('cache5m', [['collect-cache5m'], [], []], { cacheTtl: '5m' }), collect('cache5m'),
         inject('i-cachebogus', 'hello', ['cachebogus']), agent('cachebogus', [['collect-cachebogus'], [], []], { cacheTtl: 'bogus' }), collect('cachebogus'),
@@ -157,6 +161,19 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
     it('Node-RED loads the node with no error', () => {
         assert.match(log, /Added node types|Starting flows/);
         assert.doesNotMatch(log, /\[error\]/);
+    });
+
+    it('msg.model fable replaces the model of the node', async () => {
+        await injectNode('i-fable');
+        const [msg] = await results('fable');
+        assert.equal(JSON.parse(msg.payload).model, 'fable');
+        assert.equal(msg.agent.weighted, 1500, '(1000 + 100 * 5) * 1, fable has the default weight');
+    });
+
+    it('msg.model with a full model ID is ignored', async () => {
+        await injectNode('i-fullid');
+        const [msg] = await results('fullid');
+        assert.equal(JSON.parse(msg.payload).model, 'haiku');
     });
 
     it('a start message runs the launcher in the folder with the prompt, model and permission mode', async () => {
