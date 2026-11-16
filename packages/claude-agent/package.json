@@ -43,7 +43,7 @@
 		"zod": "^4.0.0"
 	},
 	"peerDependencies": {
-		"@nrutils/node-red-utils": "^0.3.0"
+		"@nrutils/node-red-utils": "^0.4.0"
 	},
 	"devDependencies": {
 		"node-red": "^5.0.9"
