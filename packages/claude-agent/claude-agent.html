@@ -301,10 +301,13 @@
     // It has at most 120 characters. The editor button uses it. The popup never reads the system prompt.
     const SUMMARY_MAX = 120;
     function summaryFromPrompt(text) {
-        const first = String(text || '').split(/\r?\n/).find((l) => l.trim() !== '');
-        if (!first) return '';
-        let line = first.trim().replace(/^(?:[#>\-*+]+|\d+\.)\s+/, '');
-        line = line.replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim();
+        let line = '';
+        for (const l of String(text || '').split(/\r?\n/)) {
+            const t = l.trim().replace(/^(?:[#>\-*+]+|\d+\.)(?:\s+|$)/, '').replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim();
+            // A line of only marks, like --- or ###, has no text: skip it
+            if (/[\p{L}\p{N}]/u.test(t)) { line = t; break; }
+        }
+        if (!line) return '';
         const end = line.search(/[.!?](?:\s|$)/);
         if (end >= 0) line = line.slice(0, end + 1);
         if (line.length <= SUMMARY_MAX) return line;

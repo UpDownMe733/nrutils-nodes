@@ -543,6 +543,12 @@ describe('claude-agent summaryFromPrompt', () => {
         assert.equal(f('\n\n  First line\nSecond line'), 'First line');
     });
 
+    it('skips lines that have only marks', () => {
+        assert.equal(f('---\nText.'), 'Text.');
+        assert.equal(f('###'), '');
+        assert.equal(f('# \n\n## Real title'), 'Real title');
+    });
+
     it('stops at the first sentence', () => {
         assert.equal(f('You pick colours. Ask first.'), 'You pick colours.');
         assert.equal(f('Ready! Go.'), 'Ready!');
