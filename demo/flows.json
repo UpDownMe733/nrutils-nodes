@@ -874,10 +874,10 @@
         "id": "cademo.c6",
         "type": "comment",
         "z": "cademo.tab",
-        "name": "6. Choose the model for one message",
+        "name": "4. Choose the model for one message",
         "info": "Click the inject node. The message sets msg.model to fable. The node look runs this message with fable in place of haiku. The node accepts haiku, sonnet, opus and fable. Fable costs more than haiku.",
         "x": 190,
-        "y": 540,
+        "y": 440,
         "wires": []
     },
     {
@@ -903,7 +903,7 @@
         "payload": "List the files in the work folder. Then say in one sentence what the folder is for.",
         "payloadType": "str",
         "x": 150,
-        "y": 600,
+        "y": 500,
         "wires": [
             [
                 "cademo.a1"
