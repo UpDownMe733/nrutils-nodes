@@ -68,7 +68,9 @@ agentWatch: {
 
 ## Popup
 
-The popup lists the lines, newest at the bottom. You can copy the text. Its status bar shows the total cost and the weighted tokens since the deploy, for example
+The popup lists the lines, newest at the bottom. You can copy the text. A header row names the columns: Time, Stage and Line.
+The Stage column fits the longest name, up to 30 characters. Drag the edge of the Stage header to change the width. The browser keeps the width for all agent-watch popups. Double-click the edge to fit again. Hover over a cut name to see all of it.
+A new request adds its lines at the end. The popup does not clear itself. Only a deploy clears the lines. Its status bar shows the total cost and the weighted tokens since the deploy, for example
 `Total cost: $0.42, 118.2k weighted`. `weighted` is a price-weighted count in sonnet input tokens.
 
 ## Status
@@ -97,7 +99,7 @@ The node sends no error to a Catch node.
 
 ## Limits
 
-- The node keeps the last 300 lines. A deploy clears them and the totals.
+- The node keeps the last 300 lines. A deploy clears them and the totals. A new request only adds lines at the end.
 - A narrator line comes at most once for each interval (default 30 s, set by
   `agentWatch.narratorSeconds`).
 
