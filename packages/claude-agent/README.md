@@ -126,7 +126,9 @@ with one active run.
 
 ## Popup
 
-Click the node to open the popup. The tabs are **Chat** and **Timeline**. On the right are the run
+Click the node to open the popup. The top shows the name of the node (or `claude-agent`) and a line
+with its model, folder and sandbox. The line shows the settings of the node, not the `msg.model` or
+`msg.cwd` of a run. The tabs are below it: **Chat** and **Timeline**. On the right are the run
 list (with more than one run), the timer chip and **New chat**.
 
 The timer chip shows:
