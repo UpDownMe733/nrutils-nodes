@@ -244,6 +244,70 @@ describe('agent-watch popup', () => {
             assert.equal(doc(h, 'mousemove').length, 0);
         });
 
+        it('gives the header the surface of the status bar and muted labels with no bold', () => {
+            const h = load();
+            h.def.nru_popupInit.call(h.node);
+            const header = wrapperOf(h.popupDiv).childNodes[0];
+            assert.match(header.style.cssText, /background:var\(--red-ui-secondary-background-hover,#e8e8e8\)/);
+            assert.match(header.style.cssText, /color:var\(--red-ui-secondary-text-color,#555\)/);
+            assert.match(header.style.cssText, /font:10px Arial,Helvetica,sans-serif/);
+            assert.match(header.style.cssText, /padding:3px 2px/);
+            assert.doesNotMatch(header.style.cssText, /bold/);
+            for (const c of header.childNodes) assert.doesNotMatch(c.style.cssText, /bold/);
+            // A colour outside var( ) would ignore the theme.
+            assert.doesNotMatch(header.style.cssText.replace(/var\([^)]*\)/g, ''), /#[0-9a-f]{3,6}/i);
+        });
+
+        it('keeps the stage cell of a row bold', () => {
+            const h = load();
+            h.def.nru_popupInit.call(h.node);
+            add(h, h.node, 'draft');
+            const list = wrapperOf(h.popupDiv).childNodes[1];
+            assert.match(list.childNodes[0].childNodes[1].style.cssText, /font-weight:bold/);
+        });
+
+        it('gives the handle a thin divider with a theme variable', () => {
+            const h = load();
+            h.def.nru_popupInit.call(h.node);
+            const hd = handleOf(h.popupDiv);
+            assert.match(hd.style.cssText, /position:absolute/);
+            assert.match(hd.style.cssText, /width:6px/);
+            assert.match(hd.style.cssText, /border-right:1px solid var\(--red-ui-secondary-border-color,#ccc\)/);
+        });
+
+        it('darkens the divider on mouseenter and resets it on mouseleave', () => {
+            const h = load();
+            h.def.nru_popupInit.call(h.node);
+            const hd = handleOf(h.popupDiv);
+            hd.fire('mouseenter', {});
+            assert.equal(hd.style.borderRightColor, 'var(--red-ui-secondary-text-color,#555)');
+            hd.fire('mouseleave', {});
+            assert.equal(hd.style.borderRightColor, 'var(--red-ui-secondary-border-color,#ccc)');
+        });
+
+        it('keeps the divider dark during a drag and resets it on mouseup', () => {
+            const h = load();
+            h.def.nru_popupInit.call(h.node);
+            const hd = handleOf(h.popupDiv);
+            hd.fire('mousedown', fakeEvent({}));
+            assert.equal(hd.style.borderRightColor, 'var(--red-ui-secondary-text-color,#555)');
+            hd.fire('mouseleave', {});
+            assert.equal(hd.style.borderRightColor, 'var(--red-ui-secondary-text-color,#555)');
+            doc(h, 'mouseup')[0].fn({});
+            assert.equal(hd.style.borderRightColor, 'var(--red-ui-secondary-border-color,#ccc)');
+        });
+
+        it('does not start a popup move from a mousedown on the handle', () => {
+            const h = load();
+            h.def.nru_popupInit.call(h.node);
+            const e = fakeEvent({});
+            handleOf(h.popupDiv).fire('mousedown', e);
+            // The stopped event never reaches the listeners of the popup div, which the title bar move uses.
+            assert.equal(e.stopped, 1);
+            assert.notEqual(handleOf(h.popupDiv), h.popupDiv);
+            assert.equal(handleOf(h.popupDiv).parentNode.parentNode.parentNode.parentNode, h.popupDiv);
+        });
+
         it('uses a saved width on the next popup and stops the auto fit', () => {
             const h = load();
             h.store['agent-watch.stageWidth'] = '90';
