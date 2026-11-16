@@ -587,7 +587,7 @@
         <dt>Folder</dt><dd>The work folder of the agent. It must be the work root (<code>claudeAgent.workRoot</code> in <code>settings.js</code>, default the home folder of Node-RED) or a folder below it. Empty: the work root. <code>msg.cwd</code> replaces it.</dd>
         <dt>Sandbox</dt><dd>A name that the node gives to the launcher program (<code>claudeAgent.launcher</code>) in the environment variable <code>NODE_RED_CLAUDE_SANDBOX</code>, with the folder in <code>NODE_RED_CLAUDE_CWD</code>. The launcher can then start the CLI in that container or machine. Empty: no sandbox.</dd>
         <dt>System prompt</dt><dd>It is added to the Claude Code system prompt. Empty: no extra instructions.</dd>
-        <dt>Model</dt><dd>Empty: the default model.</dd>
+        <dt>Model</dt><dd>Empty: the default model. Else haiku, sonnet, opus or fable. <code>msg.model</code> replaces it.</dd>
         <dt>Cache time</dt><dd>How long the prompt cache of the run lives between two requests: 5 or 60 minutes. Default 60. A 60-minute cache write costs more (2&times; input, against 1.25&times;), but a run that waits for the operator longer than 5 minutes reads the cache again.</dd>
         <dt>Prompt</dt><dd>A mustache template over the message, for example <code>{{payload}}</code> or <code>{{stages.triage.problem}}</code>. An object value becomes JSON.</dd>
         <dt>Tools</dt><dd>A comma list of the tools of the agent. Empty: all tools. The agent gets no permission prompt.</dd>
@@ -605,7 +605,7 @@
     <p>A start message has no <code>msg.agent.cmd</code>. The rendered prompt is the task.</p>
     <dl class="message-properties">
         <dt class="optional">cwd <span class="property-type">string</span></dt><dd>The work folder for this run.</dd>
-        <dt class="optional">model <span class="property-type">string</span></dt><dd><code>haiku</code>, <code>sonnet</code> or <code>opus</code>. This run uses that model in place of the model of the node. The node ignores a different value.</dd>
+        <dt class="optional">model <span class="property-type">string</span></dt><dd><code>haiku</code>, <code>sonnet</code>, <code>opus</code> or <code>fable</code>. This run uses that model in place of the model of the node. The node ignores a different value, also a full model ID.</dd>
         <dt class="optional">agent.resume <span class="property-type">string</span></dt><dd>A session id. The run continues that session. The node ignores <code>msg.agent.sessionId</code> on a start message.</dd>
     </dl>
     <p>A control message has <code>msg.agent = { cmd, runId }</code> and a text <code>msg.payload</code>. You can omit <code>runId</code> when the node has one active run.</p>

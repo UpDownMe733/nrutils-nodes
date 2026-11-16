@@ -81,7 +81,7 @@ The sudo rule needs the tag `SETENV`, so that the CLI gets the environment.
 | Folder | The work folder. Empty: the work root. `msg.cwd` replaces it. |
 | Sandbox | A name for the launcher. Empty: none. |
 | System prompt | Text added to the Claude Code system prompt. |
-| Model | Empty (the SDK default), `haiku`, `sonnet` or `opus`. `msg.model` replaces it. |
+| Model | Empty (the SDK default), `haiku`, `sonnet`, `opus` or `fable`. `msg.model` replaces it. |
 | Cache time | `5 minutes` or `60 minutes`. Default 60 minutes. |
 | Prompt | A mustache template over the message. An object becomes JSON. Default `{{payload}}`. |
 | Tools | A comma list. Default `Read, Grep, Glob`. Empty: all tools. |
@@ -106,7 +106,7 @@ The result goes out on output 1, with the properties of the start message:
 - `msg.agent`: `{ runId, sessionId, model, turns, durationMs, tokens, weighted, usage }`.
 
 `weighted` counts tokens in sonnet input units. For each model it is
-(input + 2 × cache write + r × cache read + 5 × output) × weight. Opus has weight 2 and r 0.05, sonnet 1 and 0.05, haiku 0.05 and 0.1.
+(input + 2 × cache write + r × cache read + 5 × output) × weight. Opus has weight 2 and r 0.05, sonnet 1 and 0.05, haiku 0.05 and 0.1. Any other model, fable included, has weight 1 and r 0.05.
 
 To continue a session later, put its `sessionId` into `msg.agent.resume`.
 
@@ -153,7 +153,7 @@ and Send becomes **Answer**. **Interrupt** and **Stop** show during a run.
 |---|---|
 | `payload` | The default prompt is `{{payload}}`. |
 | `cwd` | Optional. The work folder of this run. |
-| `model` | Optional. `haiku`, `sonnet` or `opus`. |
+| `model` | Optional. `haiku`, `sonnet`, `opus` or `fable`. |
 | `agent.resume` | Optional. A session id to continue. |
 | `agent.cmd` | Makes the message a control message. |
 
