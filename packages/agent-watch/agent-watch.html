@@ -46,14 +46,23 @@
         setStageWidth(wrapper, Math.min(MAX_CH, Math.max(MIN_CH, st.longest + 1)) + 'ch');
     }
 
+    const DIVIDER_COLOR = 'var(--red-ui-secondary-border-color,#ccc)';
+    const DIVIDER_ACTIVE = 'var(--red-ui-secondary-text-color,#555)';
+
     // Build the Stage cell of the header. Its right edge is the handle to drag.
     function makeStageHeader(wrapper) {
-        const cell = make('span', 'Stage', 'flex:none;position:relative;width:var(--aw-stage-w);font-weight:bold');
-        const handle = make('span', '', 'position:absolute;top:0;right:0;bottom:0;width:6px;cursor:col-resize');
+        const cell = make('span', 'Stage', 'flex:none;position:relative;width:var(--aw-stage-w)');
+        const handle = make('span', '', 'position:absolute;top:0;right:0;bottom:0;width:6px;cursor:col-resize;border-right:1px solid ' + DIVIDER_COLOR);
+        let dragging = false;
+        const paint = (on) => { handle.style.borderRightColor = on ? DIVIDER_ACTIVE : DIVIDER_COLOR; };
+        handle.addEventListener('mouseenter', () => paint(true));
+        handle.addEventListener('mouseleave', () => { if (!dragging) paint(false); });
         handle.title = 'Drag to change the width. Double-click to fit.';
         handle.addEventListener('mousedown', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            dragging = true;
+            paint(true);
             const move = (ev) => {
                 const max = Math.max(MIN_PX, wrapper.getBoundingClientRect().width * 0.6);
                 const px = Math.min(max, Math.max(MIN_PX, ev.clientX - cell.getBoundingClientRect().left));
@@ -61,6 +70,8 @@
                 setStageWidth(wrapper, px + 'px');
             };
             const up = () => {
+                dragging = false;
+                paint(false);
                 document.removeEventListener('mousemove', move);
                 document.removeEventListener('mouseup', up);
                 if (wrapper.agentWatch.manual !== null) saveWidth(wrapper.agentWatch.manual);
@@ -151,11 +162,12 @@
             wrapper.agentWatch = { longest: 0, manual: loadWidth() };
             setStageWidth(wrapper, wrapper.agentWatch.manual !== null ? wrapper.agentWatch.manual + 'px' : MIN_CH + 'ch');
             // The header stays in place. Only the list scrolls.
-            const header = make('div', '', 'flex:none;display:flex;gap:8px;padding:1px 2px;font-family:monospace;font-size:11px'
+            const header = make('div', '', 'flex:none;display:flex;gap:8px;padding:3px 2px;font:10px Arial,Helvetica,sans-serif'
+                + ';background:var(--red-ui-secondary-background-hover,#e8e8e8);color:var(--red-ui-secondary-text-color,#555)'
                 + ';user-select:none;-webkit-user-select:none;border-bottom:1px solid var(--red-ui-secondary-border-color,#ccc)');
-            header.appendChild(make('span', 'Time', 'flex:none;width:5ch;font-weight:bold'));
+            header.appendChild(make('span', 'Time', 'flex:none;width:5ch'));
             header.appendChild(makeStageHeader(wrapper));
-            header.appendChild(make('span', 'Line', 'flex:1;font-weight:bold'));
+            header.appendChild(make('span', 'Line', 'flex:1'));
             wrapper.appendChild(header);
             const list = make('div', '', 'flex:1;min-height:0;overflow:auto;font-family:monospace;font-size:11px'
                 // The status-label class of Node-RED sets user-select:none, and the popup inherits it.
@@ -211,8 +223,8 @@
     <p>The status shows the stage and the newest line. Blue: a stage runs. Yellow: a stage waits for an answer of the operator. Red: the newest line is an error. Grey: no stage runs.</p>
 
     <h3>Popup</h3>
-    <p>Click the node to open the popup. It lists the lines, the newest at the bottom. Lines of a question and lines of an error have a colour. The list scrolls down by itself, unless you scroll up.</p>
-    <p>A header row names the columns: Time, Stage and Line. The Stage column fits the longest name, up to 30 characters. Drag the edge of the Stage header to change the width. The browser keeps the width for all agent-watch popups. Double-click the edge to fit again. Hover over a cut name to see all of it.</p>
+    <p>Click the node to open the popup. The title bar shows the name of the node. Drag the title bar or the status bar to move the popup. Drag the corner to resize it. Click <code>×</code> or click the node again to close it. The popup lists the lines, the newest at the bottom. Lines of a question and lines of an error have a colour. The list scrolls down by itself, unless you scroll up.</p>
+    <p>A header row names the columns: Time, Stage and Line. The Stage column fits the longest name, up to 30 characters. The Stage edge shows a thin divider. Drag the divider to change the width. The browser keeps the width for all agent-watch popups. Double-click the edge to fit again. Hover over a cut name to see all of it.</p>
     <p>A new request adds its lines at the end. The popup does not clear itself. Only a deploy clears the lines.</p>
     <p>You can select the text of the lines and copy it with Ctrl+C or with the right-click menu. While the popup has the focus, the keys of the editor do not act on the flow.</p>
     <p>If the narrator fails, the node writes one warning to the Node-RED log and continues with the free lines. The node never sends an error to a <code>catch</code> node.</p>
