@@ -19,6 +19,9 @@
     // The operator bubble has the node colour with dark text: that has contrast in both themes.
     const STYLE = `
 .ca-popup{display:flex;flex-direction:column;gap:6px;height:100%;min-height:0;min-width:0;font-size:12px;color:var(--red-ui-primary-text-color)}
+.ca-identity{flex:none;display:flex;flex-direction:column;min-width:0;padding:0 2px 2px}
+.ca-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600;color:var(--red-ui-primary-text-color)}
+.ca-about{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--red-ui-secondary-text-color)}
 .ca-header{flex:none;display:flex;align-items:center;gap:6px;min-width:0;border-bottom:1px solid var(--red-ui-secondary-border-color)}
 .ca-tab{flex:none;background:none;border:none;border-bottom:2px solid transparent;margin:0 0 -1px;padding:3px 4px;font:inherit;cursor:pointer;color:var(--red-ui-secondary-text-color)}
 .ca-tab:hover{color:var(--red-ui-primary-text-color)}
@@ -77,9 +80,22 @@
         return b;
     }
 
-    // A popup element of the node: log, chat, list, empty, working, ask, run, chip, new, text, send, interrupt or stop
+    // A popup element of the node: identity, name, about, log, chat, list, empty, working, ask, run, chip, new, text, send, interrupt or stop
     function part(node, name) {
         return document.getElementById('claude-agent-' + name + '-' + node.id);
+    }
+
+    // Show the name of the node and its settings at the top of the popup. The text is set with textContent only.
+    function showIdentity(node) {
+        const identity = part(node, 'identity');
+        if (!identity) return;
+        const about = [node.model || 'default model', node.cwd || 'work root'];
+        if (node.sandbox) about.push('sandbox ' + node.sandbox);
+        for (const [name, text] of [['name', node.name || 'claude-agent'], ['about', about.join(' · ')]]) {
+            const line = part(node, name);
+            line.textContent = text;
+            line.title = text;
+        }
     }
 
     const pad = (n) => String(n).padStart(2, '0');
@@ -275,6 +291,9 @@
         return e;
     }
 
+    // An open popup shows the new name and settings when the edit dialog closes
+    if (RED.events) RED.events.on('nodes:change', (n) => { if (n && popups[n.id]) showIdentity(n); });
+
     RED.nodes.registerType('claude-agent', {
         category: 'agents',
         color: NODE_COLOR,
@@ -343,6 +362,10 @@
             addStyle();
             const root = make('div', '', 'ca-popup');
 
+            const identity = element(node, 'div', 'identity', 'ca-identity');
+            identity.appendChild(element(node, 'div', 'name', 'ca-name'));
+            identity.appendChild(element(node, 'div', 'about', 'ca-about'));
+
             const header = make('div', '', 'ca-header');
             for (const [view, label] of [['chat', 'Chat'], ['timeline', 'Timeline']]) {
                 const tab = element(node, 'button', 'tab-' + view, 'ca-tab', label);
@@ -407,8 +430,9 @@
             composer.appendChild(text);
             composer.appendChild(footer);
 
-            for (const e of [header, log, chat, ask, composer]) root.appendChild(e);
+            for (const e of [identity, header, log, chat, ask, composer]) root.appendChild(e);
             div.appendChild(root);
+            showIdentity(node);
             showView(node, views[node.id] || 'chat');
             showRun(node);
             popups[node.id] = node;
