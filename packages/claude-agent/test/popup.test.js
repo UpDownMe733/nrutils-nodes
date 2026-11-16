@@ -418,9 +418,56 @@ describe('claude-agent popup identity block', () => {
         assert.equal(t.part('name').innerHTML, undefined);
     });
 
+    it('shows a summary as the second line, with the same title', () => {
+        const t = setup({}, undefined, { ...full, summary: 'Tells you what is in its work folder' });
+        const identity = walk(t.div).find((e) => e.className === 'ca-identity');
+        assert.equal(identity.childNodes[1].className, 'ca-summary');
+        assert.equal(t.part('summary'), identity.childNodes[1]);
+        assert.equal(t.part('summary').textContent, 'Tells you what is in its work folder');
+        assert.equal(t.part('summary').title, 'Tells you what is in its work folder');
+        assert.notEqual(t.part('summary').style.display, 'none');
+    });
+
+    it('hides the summary line for an old flow and for a summary of spaces', () => {
+        for (const summary of [undefined, '   ']) {
+            const t = setup({}, undefined, { ...full, summary });
+            assert.equal(t.part('summary').style.display, 'none');
+            assert.equal(t.part('name').textContent, 'triage');
+            assert.equal(t.part('about').textContent, 'sonnet · /work/garden · sandbox pi-box');
+        }
+    });
+
+    it('never shows the system prompt', () => {
+        const t = setup({}, undefined, { ...full, systemPrompt: 'SECRET-TOKEN-123 You pick colours.' });
+        assert.equal(t.part('summary').style.display, 'none');
+        const all = walk(t.div).map((e) => (e.textContent || '') + (e.title || '')).join('|');
+        assert.ok(!all.includes('SECRET-TOKEN-123'));
+    });
+
+    it('shows a summary with markup as text', () => {
+        const summary = '<b>x</b>&amp;';
+        const t = setup({}, undefined, { summary });
+        assert.equal(t.part('summary').textContent, summary);
+        assert.equal(t.part('summary').title, summary);
+        assert.equal(t.part('summary').innerHTML, undefined);
+    });
+
+    it('nodes:change shows, changes and hides the summary', () => {
+        const t = setup({}, undefined, full);
+        assert.equal(t.part('summary').style.display, 'none');
+        t.emit('nodes:change', { id: 'n1', name: 'triage', summary: 'One' });
+        assert.equal(t.part('summary').textContent, 'One');
+        assert.notEqual(t.part('summary').style.display, 'none');
+        t.emit('nodes:change', { id: 'n1', name: 'triage', summary: 'Two' });
+        assert.equal(t.part('summary').textContent, 'Two');
+        t.emit('nodes:change', { id: 'n1', name: 'triage', summary: '' });
+        assert.equal(t.part('summary').textContent, '');
+        assert.equal(t.part('summary').style.display, 'none');
+    });
+
     it('keeps each line on one row with an ellipsis', () => {
         const css = walk(setup().head).map((e) => e.textContent).join('');
-        for (const rule of ['.ca-name', '.ca-about']) {
+        for (const rule of ['.ca-name', '.ca-summary', '.ca-about']) {
             const m = new RegExp(rule.replace('.', '\\.') + '\\{([^}]*)\\}').exec(css);
             assert.match(m[1], /white-space:\s*nowrap/);
             assert.match(m[1], /text-overflow:\s*ellipsis/);
@@ -430,7 +477,7 @@ describe('claude-agent popup identity block', () => {
     it('has style rules with no fixed colour', () => {
         const t = setup();
         const css = walk(t.head).map((e) => e.textContent).join('');
-        for (const rule of ['.ca-identity', '.ca-name', '.ca-about']) {
+        for (const rule of ['.ca-identity', '.ca-name', '.ca-summary', '.ca-about']) {
             const m = new RegExp(rule.replace('.', '\\.') + '\\{([^}]*)\\}').exec(css);
             assert.ok(m, rule);
             assert.ok(!/#[0-9a-f]{3,6}|rgb/i.test(m[1]), rule);
@@ -445,5 +492,74 @@ describe('claude-agent edit dialog', () => {
         assert.ok(head >= 0 && head < template.indexOf('node-input-name'));
         assert.ok(template.includes('>Claude agent</div>'));
         assert.ok(template.includes('A claude-agent node that runs one Claude Code agent for each start message.'));
+    });
+
+    it('has a Summary input after Name, with a limit, and the button', () => {
+        const template = /data-template-name="claude-agent">([\s\S]*?)<\/script>/.exec(html)[1];
+        const summary = template.indexOf('id="node-input-summary"');
+        assert.ok(summary > template.indexOf('node-input-name'));
+        assert.match(template.slice(summary, template.indexOf('>', summary)), /maxlength="120"/);
+        assert.ok(template.includes('id="claude-agent-summary-from-prompt"'));
+        assert.equal(setup().getDef().defaults.summary.value, '');
+    });
+
+    const click = (prompt) => {
+        const set = [];
+        let handler;
+        const $ = (sel) => ({
+            val: (v) => (v === undefined ? prompt : set.push([sel, v])),
+            on: (ev, fn) => { if (sel === '#claude-agent-summary-from-prompt' && ev === 'click') handler = fn; }
+        });
+        const t = setup({ $ });
+        t.getDef().oneditprepare.call({ cacheTtl: '1h' });
+        set.length = 0;
+        handler();
+        return { set, notes: t.notes };
+    };
+
+    it('the button copies the start of the unsaved system prompt', () => {
+        const { set, notes } = click('# You pick colours. Ask first.\nMore.');
+        assert.deepEqual(set, [['#node-input-summary', 'You pick colours.']]);
+        assert.deepEqual(notes, []);
+    });
+
+    it('the button warns and leaves the field when the prompt is empty', () => {
+        const { set, notes } = click('  ');
+        assert.deepEqual(set, []);
+        assert.deepEqual(notes, [{ text: 'The system prompt is empty.', type: 'warning' }]);
+    });
+});
+
+describe('claude-agent summaryFromPrompt', () => {
+    const f = (t) => setup().getDef().summaryFromPrompt(t);
+
+    it('gives an empty text for empty and blank input', () => {
+        assert.equal(f(''), '');
+        assert.equal(f(undefined), '');
+        assert.equal(f(' \n  \n'), '');
+    });
+
+    it('takes the first non-empty line', () => {
+        assert.equal(f('\n\n  First line\nSecond line'), 'First line');
+    });
+
+    it('stops at the first sentence', () => {
+        assert.equal(f('You pick colours. Ask first.'), 'You pick colours.');
+        assert.equal(f('Ready! Go.'), 'Ready!');
+        assert.equal(f('Version 1.2 is used'), 'Version 1.2 is used');
+    });
+
+    it('removes markdown marks', () => {
+        assert.equal(f('# Title'), 'Title');
+        assert.equal(f('- an item'), 'an item');
+        assert.equal(f('1. one'), 'one');
+        assert.equal(f('You are **bold** and `code`'), 'You are bold and code');
+    });
+
+    it('cuts a long sentence at a word and adds an ellipsis', () => {
+        const out = f('alpha '.repeat(60).trim());
+        assert.ok(out.length <= 120);
+        assert.ok(out.endsWith('\u2026'));
+        assert.match(out.slice(0, -1), /^(alpha )*alpha$/);
     });
 });
