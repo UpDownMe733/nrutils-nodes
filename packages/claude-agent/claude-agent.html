@@ -21,6 +21,7 @@
 .ca-popup{display:flex;flex-direction:column;gap:6px;height:100%;min-height:0;min-width:0;font-size:12px;color:var(--red-ui-primary-text-color)}
 .ca-identity{flex:none;display:flex;flex-direction:column;min-width:0;padding:0 2px 2px}
 .ca-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600;color:var(--red-ui-primary-text-color)}
+.ca-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--red-ui-secondary-text-color)}
 .ca-about{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--red-ui-secondary-text-color)}
 .ca-header{flex:none;display:flex;align-items:center;gap:6px;min-width:0;border-bottom:1px solid var(--red-ui-secondary-border-color)}
 .ca-tab{flex:none;background:none;border:none;border-bottom:2px solid transparent;margin:0 0 -1px;padding:3px 4px;font:inherit;cursor:pointer;color:var(--red-ui-secondary-text-color)}
@@ -80,7 +81,7 @@
         return b;
     }
 
-    // A popup element of the node: identity, name, about, log, chat, list, empty, working, ask, run, chip, new, text, send, interrupt or stop
+    // A popup element of the node: identity, name, summary, about, log, chat, list, empty, working, ask, run, chip, new, text, send, interrupt or stop
     function part(node, name) {
         return document.getElementById('claude-agent-' + name + '-' + node.id);
     }
@@ -91,11 +92,13 @@
         if (!identity) return;
         const about = [node.model || 'default model', node.cwd || 'work root'];
         if (node.sandbox) about.push('sandbox ' + node.sandbox);
-        for (const [name, text] of [['name', node.name || 'claude-agent'], ['about', about.join(' · ')]]) {
+        const summary = String(node.summary || '').trim();
+        for (const [name, text] of [['name', node.name || 'claude-agent'], ['summary', summary], ['about', about.join(' · ')]]) {
             const line = part(node, name);
             line.textContent = text;
             line.title = text;
         }
+        part(node, 'summary').style.display = summary ? '' : 'none';
     }
 
     const pad = (n) => String(n).padStart(2, '0');
@@ -389,6 +392,7 @@
 
             const identity = element(node, 'div', 'identity', 'ca-identity');
             identity.appendChild(element(node, 'div', 'name', 'ca-name'));
+            identity.appendChild(element(node, 'div', 'summary', 'ca-summary'));
             identity.appendChild(element(node, 'div', 'about', 'ca-about'));
 
             const header = make('div', '', 'ca-header');
