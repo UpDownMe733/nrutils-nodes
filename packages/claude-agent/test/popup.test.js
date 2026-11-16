@@ -51,7 +51,7 @@ function walk(root) {
 }
 
 // Runs the editor script. state is the answer of get-log. clock.now is the time of Date.now().
-function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: '1h', lastActivity: null } }) {
+function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: '1h', lastActivity: null } }, fields = {}) {
     const div = fakeElement('div');
     div.id = 'nru_popup.n1.div';
     const head = fakeElement('head');
@@ -73,7 +73,9 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     let def;
     const calls = [];
     const notes = [];
+    const handlers = {};
     const RED = {
+        events: { on: (type, fn) => (handlers[type] = handlers[type] || []).push(fn) },
         nodes: { registerType: (name, d) => { def = d; } },
         notify: (text, type) => notes.push({ text, type }),
         validators: { number: () => () => true },
@@ -84,6 +86,7 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const answers = { 'get-log': state, 'new-chat': {} };
     const node = {
         id: 'n1',
+        ...fields,
         nodeRedEditorComms: {
             publish: (type, payload) => {
                 calls.push({ type, payload });
@@ -97,7 +100,8 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const receive = (type, payload) => def.nodeRedEditorComms_subscriptions[type].call(node, payload);
     const part = (name) => document.getElementById('claude-agent-' + name + '-n1');
     const rebuild = () => def.nru_popupInit.call(node);
-    return { text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
+    const emit = (type, ...args) => (handlers[type] || []).forEach((fn) => fn(...args));
+    return { emit, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
 }
 
 const key = (text, init) => {
@@ -356,5 +360,90 @@ describe('claude-agent popup chat', () => {
         const colours = styles[0].textContent.match(/#[0-9a-f]{3,6}\b/gi);
         assert.deepEqual([...new Set(colours)].sort(), ['#000', '#9fd8d0']);
         assert.doesNotMatch(html, /#fff3cd/);
+    });
+});
+
+describe('claude-agent popup identity block', () => {
+    const full = { name: 'triage', model: 'sonnet', cwd: '/work/garden', sandbox: 'pi-box' };
+    const lines = (t) => [t.part('name'), t.part('about')];
+
+    it('shows the name, model, folder and sandbox of the node', () => {
+        const [name, about] = lines(setup({}, undefined, full));
+        assert.equal(name.textContent, 'triage');
+        assert.equal(about.textContent, 'sonnet · /work/garden · sandbox pi-box');
+        assert.equal(name.title, name.textContent);
+        assert.equal(about.title, about.textContent);
+    });
+
+    it('shows the defaults for a node with nothing set', () => {
+        const [name, about] = lines(setup());
+        assert.equal(name.textContent, 'claude-agent');
+        assert.equal(about.textContent, 'default model · work root');
+    });
+
+    it('is the first child of the popup, above the tab row', () => {
+        const root = walk(setup().div).find((e) => e.className === 'ca-popup');
+        assert.equal(root.childNodes[0].className, 'ca-identity');
+        assert.equal(root.childNodes[1].className, 'ca-header');
+    });
+
+    it('a rebuild gives exactly one identity block', () => {
+        const t = setup({}, undefined, full);
+        t.rebuild();
+        t.rebuild();
+        assert.equal(walk(t.div).filter((e) => e.className === 'ca-identity').length, 1);
+    });
+
+    it('nodes:change updates the open popup and ignores another node', () => {
+        const t = setup({}, undefined, full);
+        t.emit('nodes:change', { id: 'other', name: 'x', model: 'y' });
+        assert.equal(t.part('name').textContent, 'triage');
+        t.emit('nodes:change', { id: 'n1', name: 'audit', model: 'opus' });
+        assert.equal(t.part('name').textContent, 'audit');
+        assert.equal(t.part('about').textContent, 'opus · work root');
+    });
+
+    it('does not throw when the popup has gone', () => {
+        const t = setup({}, undefined, full);
+        t.div.childNodes = [];
+        assert.equal(t.part('identity'), null);
+        assert.doesNotThrow(() => t.emit('nodes:change', { id: 'n1', name: 'audit' }));
+    });
+
+    it('shows a name with markup as text', () => {
+        const name = '<b>x</b>&amp;';
+        const t = setup({}, undefined, { name });
+        assert.equal(t.part('name').textContent, name);
+        assert.equal(t.part('name').title, name);
+        assert.equal(t.part('name').innerHTML, undefined);
+    });
+
+    it('keeps each line on one row with an ellipsis', () => {
+        const css = walk(setup().head).map((e) => e.textContent).join('');
+        for (const rule of ['.ca-name', '.ca-about']) {
+            const m = new RegExp(rule.replace('.', '\\.') + '\\{([^}]*)\\}').exec(css);
+            assert.match(m[1], /white-space:\s*nowrap/);
+            assert.match(m[1], /text-overflow:\s*ellipsis/);
+        }
+    });
+
+    it('has style rules with no fixed colour', () => {
+        const t = setup();
+        const css = walk(t.head).map((e) => e.textContent).join('');
+        for (const rule of ['.ca-identity', '.ca-name', '.ca-about']) {
+            const m = new RegExp(rule.replace('.', '\\.') + '\\{([^}]*)\\}').exec(css);
+            assert.ok(m, rule);
+            assert.ok(!/#[0-9a-f]{3,6}|rgb/i.test(m[1]), rule);
+        }
+    });
+});
+
+describe('claude-agent edit dialog', () => {
+    it('has a title and a description before the Name row', () => {
+        const template = /data-template-name="claude-agent">([\s\S]*?)<\/script>/.exec(html)[1];
+        const head = template.indexOf('id="claude-agent-header"');
+        assert.ok(head >= 0 && head < template.indexOf('node-input-name'));
+        assert.ok(template.includes('>Claude agent</div>'));
+        assert.ok(template.includes('A claude-agent node that runs one Claude Code agent for each start message.'));
     });
 });
