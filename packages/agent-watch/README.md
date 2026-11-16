@@ -68,8 +68,9 @@ agentWatch: {
 
 ## Popup
 
+The title bar of the popup shows the name of the node. Drag the title bar or the status bar to move the popup. Drag the corner to resize it. Click `×` or click the node again to close it.
 The popup lists the lines, newest at the bottom. You can copy the text. A header row names the columns: Time, Stage and Line.
-The Stage column fits the longest name, up to 30 characters. Drag the edge of the Stage header to change the width. The browser keeps the width for all agent-watch popups. Double-click the edge to fit again. Hover over a cut name to see all of it.
+The Stage column fits the longest name, up to 30 characters. The Stage edge shows a thin divider. Drag the divider to change the width. The browser keeps the width for all agent-watch popups. Double-click the edge to fit again. Hover over a cut name to see all of it.
 The status bar of the popup shows the total cost and the weighted tokens since the deploy, for example
 `Total cost: $0.42, 118.2k weighted`. `weighted` is a price-weighted count in sonnet input tokens.
 
