@@ -17,7 +17,7 @@ const { NodeRedNodeBase, nodeRedPopup, nodeRedEditorComms } = require('@nrutils/
 const { events, agentSettings, loadSdk, weightedCount, weightedText } = require('./shared');
 
 // The models that msg.model can choose. A different value uses the model of the node.
-const MSG_MODELS = new Set(['haiku', 'sonnet', 'opus']);
+const MSG_MODELS = new Set(['haiku', 'sonnet', 'opus', 'fable']);
 const LOG_SIZE = 200;
 const TEXT_SIZE = 300;
 const INTERRUPTED = ['aborted_streaming', 'aborted_tools'];

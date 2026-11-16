@@ -43,7 +43,7 @@ const loadSdk = () => (sdk ??= import('@anthropic-ai/claude-agent-sdk'));
 // The weighted tokens of a run, in "sonnet input tokens", for all models of the SDK modelUsage.
 // Per model: (input*1 + cacheCreation*2 + cacheRead*r + output*5) * weight.
 // The model is found by the word opus (weight 2, r 0.05), sonnet (1, 0.05) or haiku (0.05, 0.1) in its name.
-// Any other model: weight 1, r 0.05.
+// Any other model, fable included, gets weight 1 and r 0.05.
 function weightedCount(modelUsage) {
     let n = 0;
     for (const [name, u] of Object.entries(modelUsage || {})) {
