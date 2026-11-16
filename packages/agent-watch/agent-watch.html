@@ -4,6 +4,10 @@
 <script type="text/javascript">
 (function () {
     const MAX_LINES = 300;
+    const STORE_KEY = 'agent-watch.stageWidth';
+    const MIN_CH = 6;
+    const MAX_CH = 30;
+    const MIN_PX = 40;
     const LEVEL_STYLE = {
         wait: 'color:#b36b00;background:rgba(224,168,0,0.18)',
         error: 'color:#d0342c;background:rgba(208,52,44,0.12)',
@@ -17,19 +21,80 @@
         return e;
     }
 
+    // The browser keeps a width that the user dragged. All agent-watch popups share it.
+    function loadWidth() {
+        try {
+            const w = parseFloat(localStorage.getItem(STORE_KEY));
+            return w > 0 ? w : null;
+        } catch (e) { return null; }
+    }
+    function saveWidth(px) {
+        try {
+            if (px === null) localStorage.removeItem(STORE_KEY);
+            else localStorage.setItem(STORE_KEY, String(px));
+        } catch (e) { /* the browser may block the storage */ }
+    }
+
+    // One variable on the wrapper sets the width of the Stage cell in the header and in all rows.
+    function setStageWidth(wrapper, css) {
+        wrapper.style.setProperty('--aw-stage-w', css);
+    }
+    // Fit the column to the longest stage name, from 6 to 30 characters. A dragged width stops this.
+    function autoFit(wrapper) {
+        const st = wrapper.agentWatch;
+        if (st.manual !== null) return;
+        setStageWidth(wrapper, Math.min(MAX_CH, Math.max(MIN_CH, st.longest + 1)) + 'ch');
+    }
+
+    // Build the Stage cell of the header. Its right edge is the handle to drag.
+    function makeStageHeader(wrapper) {
+        const cell = make('span', 'Stage', 'flex:none;position:relative;width:var(--aw-stage-w);font-weight:bold');
+        const handle = make('span', '', 'position:absolute;top:0;right:0;bottom:0;width:6px;cursor:col-resize');
+        handle.title = 'Drag to change the width. Double-click to fit.';
+        handle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const move = (ev) => {
+                const max = Math.max(MIN_PX, wrapper.getBoundingClientRect().width * 0.6);
+                const px = Math.min(max, Math.max(MIN_PX, ev.clientX - cell.getBoundingClientRect().left));
+                wrapper.agentWatch.manual = px;
+                setStageWidth(wrapper, px + 'px');
+            };
+            const up = () => {
+                document.removeEventListener('mousemove', move);
+                document.removeEventListener('mouseup', up);
+                if (wrapper.agentWatch.manual !== null) saveWidth(wrapper.agentWatch.manual);
+            };
+            document.addEventListener('mousemove', move);
+            document.addEventListener('mouseup', up);
+        });
+        handle.addEventListener('dblclick', () => {
+            wrapper.agentWatch.manual = null;
+            saveWidth(null);
+            autoFit(wrapper);
+        });
+        cell.appendChild(handle);
+        return cell;
+    }
+
     // Add one line to the list. Scroll down only when the user is at the bottom.
     function addLine(node, line) {
         const list = document.getElementById('agent-watch-list-' + node.id);
         if (!list) return;
+        const wrapper = list.parentNode;
         const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 8;
         const row = make('div', '', 'display:flex;gap:8px;padding:1px 2px;' + (LEVEL_STYLE[line.level] || ''));
         const d = new Date(line.time);
-        row.appendChild(make('span', String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'), 'flex:none'));
-        const stage = make('span', line.stage, 'flex:none;width:12ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:bold');
+        row.appendChild(make('span', String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'), 'flex:none;width:5ch'));
+        const stage = make('span', line.stage, 'flex:none;width:var(--aw-stage-w);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:bold');
         stage.title = line.stage;
         row.appendChild(stage);
         row.appendChild(make('span', line.text, 'flex:1;white-space:pre-wrap;overflow-wrap:anywhere'));
         list.appendChild(row);
+        if (wrapper && wrapper.agentWatch) {
+            wrapper.agentWatch.longest = Math.max(wrapper.agentWatch.longest, String(line.stage).length);
+            autoFit(wrapper);
+        }
         while (list.childNodes.length > MAX_LINES) list.removeChild(list.firstChild);
         if (atBottom) list.scrollTop = list.scrollHeight;
     }
@@ -82,12 +147,23 @@
                     document.dispatchEvent(new MouseEvent('mouseup', { clientX: e.clientX, clientY: e.clientY, button: e.button }));
                 });
             }
-            const list = make('div', '', 'height:100%;overflow:auto;font-family:monospace;font-size:11px'
+            const wrapper = make('div', '', 'display:flex;flex-direction:column;height:100%');
+            wrapper.agentWatch = { longest: 0, manual: loadWidth() };
+            setStageWidth(wrapper, wrapper.agentWatch.manual !== null ? wrapper.agentWatch.manual + 'px' : MIN_CH + 'ch');
+            // The header stays in place. Only the list scrolls.
+            const header = make('div', '', 'flex:none;display:flex;gap:8px;padding:1px 2px;font-family:monospace;font-size:11px'
+                + ';user-select:none;-webkit-user-select:none;border-bottom:1px solid var(--red-ui-secondary-border-color,#ccc)');
+            header.appendChild(make('span', 'Time', 'flex:none;width:5ch;font-weight:bold'));
+            header.appendChild(makeStageHeader(wrapper));
+            header.appendChild(make('span', 'Line', 'flex:1;font-weight:bold'));
+            wrapper.appendChild(header);
+            const list = make('div', '', 'flex:1;min-height:0;overflow:auto;font-family:monospace;font-size:11px'
                 // The status-label class of Node-RED sets user-select:none, and the popup inherits it.
                 + ';user-select:text;-webkit-user-select:text;cursor:text;outline:none');
             list.tabIndex = -1;
             list.id = 'agent-watch-list-' + node.id;
-            div.appendChild(list);
+            wrapper.appendChild(list);
+            div.appendChild(wrapper);
             showTotal(node, 0, 0);
             node.nodeRedEditorComms.publish('get-log').then((state) => {
                 showTotal(node, state.total, state.weighted);
