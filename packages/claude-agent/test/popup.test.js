@@ -158,7 +158,7 @@ describe('claude-agent popup message box', () => {
 describe('claude-agent edit dialog', () => {
     const open = (cacheTtl) => {
         const set = [];
-        const $ = (sel) => ({ val: (v) => set.push([sel, v]) });
+        const $ = (sel) => ({ val: (v) => set.push([sel, v]), on: () => {} });
         const { getDef } = setup({ $ });
         getDef().oneditprepare.call({ cacheTtl });
         return set;
