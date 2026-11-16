@@ -284,5 +284,45 @@
         "x": 350,
         "y": 380,
         "wires": []
+    },
+    {
+        "id": "cademo.c6",
+        "type": "comment",
+        "z": "cademo.tab",
+        "name": "6. Choose the model for one message",
+        "info": "Click the inject node. The message sets msg.model to fable. The node look runs this message with fable in place of haiku. The node accepts haiku, sonnet, opus and fable. Fable costs more than haiku.",
+        "x": 190,
+        "y": 540,
+        "wires": []
+    },
+    {
+        "id": "cademo.i6",
+        "type": "inject",
+        "z": "cademo.tab",
+        "name": "ask fable",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "model",
+                "v": "fable",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "List the files in the work folder. Then say in one sentence what the folder is for.",
+        "payloadType": "str",
+        "x": 150,
+        "y": 600,
+        "wires": [
+            [
+                "cademo.a1"
+            ]
+        ]
     }
 ]
