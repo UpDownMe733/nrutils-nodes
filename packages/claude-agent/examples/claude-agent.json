@@ -239,6 +239,16 @@
         "wires": []
     },
     {
+        "id": "cademo.c5",
+        "type": "comment",
+        "z": "cademo.tab",
+        "name": "5. Who you talk to",
+        "info": "Open the popup of a node. The top line shows the name of the node. The line below shows its model, folder and sandbox. Change the name or the model in the edit dialog: the open popup shows the new values.",
+        "x": 160,
+        "y": 480,
+        "wires": []
+    },
+    {
         "id": "cademo.catch",
         "type": "catch",
         "z": "cademo.tab",
