@@ -294,11 +294,29 @@
     // An open popup shows the new name and settings when the edit dialog closes
     if (RED.events) RED.events.on('nodes:change', (n) => { if (n && popups[n.id]) showIdentity(n); });
 
+    // The start of a system prompt as one short line: the first sentence of the first line, without markdown marks.
+    // It has at most 120 characters. The editor button uses it. The popup never reads the system prompt.
+    const SUMMARY_MAX = 120;
+    function summaryFromPrompt(text) {
+        const first = String(text || '').split(/\r?\n/).find((l) => l.trim() !== '');
+        if (!first) return '';
+        let line = first.trim().replace(/^(?:[#>\-*+]+|\d+\.)\s+/, '');
+        line = line.replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim();
+        const end = line.search(/[.!?](?:\s|$)/);
+        if (end >= 0) line = line.slice(0, end + 1);
+        if (line.length <= SUMMARY_MAX) return line;
+        const limit = SUMMARY_MAX - 3;
+        let cut = line.slice(0, limit);
+        if (line[limit] !== ' ' && cut.includes(' ')) cut = cut.slice(0, cut.lastIndexOf(' '));
+        return cut.trimEnd() + '\u2026';
+    }
+
     RED.nodes.registerType('claude-agent', {
         category: 'agents',
         color: NODE_COLOR,
         defaults: {
             name: { value: '' },
+            summary: { value: '' },
             systemPrompt: { value: '' },
             model: { value: '' },
             cacheTtl: { value: '1h' },
@@ -339,10 +357,17 @@
         icon: 'claude-agent.svg',
         label: function () { return this.name || 'claude-agent'; },
         paletteLabel: 'claude-agent',
+        summaryFromPrompt: summaryFromPrompt,
 
         // A node from before the Cache time property has no value. The dialog shows 60 minutes, as the runtime uses.
         oneditprepare: function () {
             if (this.cacheTtl !== '5m' && this.cacheTtl !== '1h') $('#node-input-cacheTtl').val('1h');
+            // The button copies the start of the current, unsaved system prompt. Done saves it.
+            $('#claude-agent-summary-from-prompt').on('click', function () {
+                const prompt = $('#node-input-systemPrompt').val();
+                if (!String(prompt || '').trim()) { RED.notify('The system prompt is empty.', 'warning'); return; }
+                $('#node-input-summary').val(summaryFromPrompt(prompt));
+            });
         },
 
         // Runs each time the editor builds the popup
@@ -463,6 +488,12 @@
         <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="Name">
     </div>
+    <div class="form-row">
+        <label for="node-input-summary">Summary</label>
+        <input type="text" id="node-input-summary" maxlength="120" placeholder="Empty: no summary line in the popup" style="width:50%">
+        <button type="button" id="claude-agent-summary-from-prompt" class="red-ui-button red-ui-button-small"><i class="fa fa-magic"></i> From system prompt</button>
+    </div>
+    <div class="form-tips">Shown at the top of the popup. It is not sent to Claude. The button copies the start of the system prompt: remove any secret from it.</div>
     <div class="form-row">
         <label for="node-input-cwd">Folder</label>
         <input type="text" id="node-input-cwd" placeholder="Empty: the work root">
