@@ -113,6 +113,8 @@ The result goes out on output 1, with the properties of the start message:
 `weighted` counts tokens in sonnet input units. For each model it is
 (input + 2 × cache write + r × cache read + 5 × output) × weight. Opus has weight 2 and r 0.05, sonnet 1 and 0.05, haiku 0.05 and 0.1. Any other model, fable included, has weight 1 and r 0.05.
 
+A run waits for its background subagents. It ends with the first result that comes when no subagent works.
+
 To continue a session later, put its `sessionId` into `msg.agent.resume`.
 
 ## Session mode agent

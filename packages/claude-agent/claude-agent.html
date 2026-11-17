@@ -724,6 +724,7 @@
 
     <h3>Details</h3>
     <p>Each run has the tool <code>ask_operator(question, options)</code>. The run waits for an answer from output 2, from a control message, or from the popup.</p>
+    <p>A run waits for its background subagents. It ends with the first result that comes when no subagent works.</p>
     <p>A failed run goes to a <code>catch</code> node. <code>msg.agent.reason</code> is one of <code>max_turns</code>, <code>max_cost</code>, <code>timeout</code>, <code>schema</code>, <code>sdk_error</code> or <code>node_closed</code>.</p>
     <p>Click the node to open the popup. The top of the popup shows the name of the node (or claude-agent), its summary (when set) and a line with its model, folder and sandbox. The last line shows the settings of the node, not the msg.model or msg.cwd of a run. The two tabs are below it. Chat shows the text of the operator on the right and the text of the agent on the left. Timeline shows all events. The status line shows the state, the turns, the tokens used and the context size of the last model response.</p>
     <p>The timer chip in the header shows <b>Active</b>, the time since the selected run started, and <b>Cache</b>, the minutes until the prompt cache expires, for example <code>Cache 52m</code>. The cache countdown starts again at each model response. It is an estimate. <code>Cache cold</code> means that the next message reads the full context again at the full price. The chip turns amber at 5 minutes or less.</p>
