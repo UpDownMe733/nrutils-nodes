@@ -683,7 +683,7 @@
         </li>
         <li>Events
             <dl class="message-properties">
-                <dt>payload <span class="property-type">object</span></dt><dd><code>{ runId, seq, time, kind, text }</code>. The node cuts <code>text</code> after 300 characters. A <code>prompt</code> event from the inbox has <code>source: 'agent'</code> and <code>from</code>. One from a keep-alive or close turn has <code>source: 'life'</code>.</dd>
+                <dt>payload <span class="property-type">object</span></dt><dd><code>{ runId, seq, time, kind, text }</code>. The node cuts <code>text</code> after 300 characters. A <code>prompt</code> event from the inbox has the message text only (no label line), <code>source: 'agent'</code> and <code>from</code>. One from a keep-alive or close turn has <code>source: 'life'</code>.</dd>
             </dl>
         </li>
     </ol>

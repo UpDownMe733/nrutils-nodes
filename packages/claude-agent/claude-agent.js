@@ -480,7 +480,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             // One prompt event for each part, so the popup shows each part with its own sender.
             // A turn that the node writes (keep-alive, close, handoff) is a life cycle prompt, not operator text.
             if (life || text !== undefined) event(run, 'prompt', prompt, { source: 'life' });
-            else for (const job of jobs) event(run, 'prompt', render(job), job.from ? { source: 'agent', from: job.from } : undefined);
+            else for (const job of jobs) event(run, 'prompt', job.shown ?? render(job), job.from ? { source: 'agent', from: job.from } : undefined);
             push(run, prompt);
             run.query = sdk.query({ prompt: input(run), options });
             setState(run, 'running');
@@ -540,8 +540,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     }
 
     // A start message with no input msg: from the popup or from the inbox. Its result goes out as a new msg.
-    function enqueue(msg, text, from) {
-        queue.push({ msg, send: (m) => node.send(m), done: (err) => { if (err) node.error(err, msg); }, text, from });
+    function enqueue(msg, text, from, shown) {
+        queue.push({ msg, send: (m) => node.send(m), done: (err) => { if (err) node.error(err, msg); }, text, from, shown });
         startNext();
         showStatus();
     }
@@ -557,7 +557,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             return node.warn(`the inbox message is not the JSON { "from", "text" }: ${cut(payload.toString())}`);
         }
         openItems.delete(m.from);
-        enqueue({ _msgid: RED.util.generateId(), payload: m.text }, `${INBOX_LABEL(m.from)}\n${m.text}`, m.from || 'unknown');
+        enqueue({ _msgid: RED.util.generateId(), payload: m.text }, `${INBOX_LABEL(m.from)}\n${m.text}`, m.from || 'unknown', m.text);
     }
 
     if (broker) {
