@@ -344,13 +344,11 @@ describe('claude-agent popup chat', () => {
     it('agent text renders as markdown, sanitized, and other bubbles stay plain text', async () => {
         const { part, receive } = await popup({});
         receive('event', event('prompt', '**you**'));
-        receive('event', event('prompt', '**from**', { source: 'agent', from: 'a/b' }));
         receive('event', event('question', '**ask**'));
         receive('event', event('text', '**bold**<script>x</script>'));
-        const [you, from, question, agent] = part('list').childNodes.map((m) => m.childNodes[1]);
-        for (const b of [you, from, question]) assert.equal(b.innerHTML, undefined);
+        const [you, question, agent] = part('list').childNodes.map((m) => m.childNodes[1]);
+        for (const b of [you, question]) assert.equal(b.innerHTML, undefined);
         assert.equal(you.textContent, '**you**');
-        assert.equal(from.textContent, '**from**');
         assert.equal(question.textContent, 'Question: **ask**');
         assert.ok(agent.classList.contains('ca-md'));
         assert.equal(agent.innerHTML, '<md>**bold**</md>');
@@ -672,21 +670,17 @@ describe('claude-agent popup chat sender', () => {
         event('prompt', '.', { seq: 3, source: 'life' })
     ];
 
-    it('the history marks an inbox message as agent, typed text as operator, and hides a keep-alive prompt', async () => {
+    it('the history shows typed text as operator and hides an inbox message and a keep-alive prompt', async () => {
         const list = entries(await popup({ events }));
-        assert.equal(list.length, 2);
-        assert.equal(list[0].classList.contains('ca-from'), false);
+        assert.equal(list.length, 1);
         assert.match(list[0].childNodes[0].textContent, /^You/);
-        assert.equal(list[1].classList.contains('ca-from'), true);
-        assert.match(list[1].childNodes[0].textContent, /^From Team-B\/peer/);
     });
 
-    it('the live view marks the same way', async () => {
+    it('the live view hides the same messages', async () => {
         const p = await popup({});
         for (const e of events) p.receive('event', e);
         const list = entries(p);
-        assert.equal(list.length, 2);
-        assert.equal(list[0].classList.contains('ca-from'), false);
-        assert.equal(list[1].classList.contains('ca-from'), true);
+        assert.equal(list.length, 1);
+        assert.match(list[0].childNodes[0].textContent, /^You/);
     });
 });

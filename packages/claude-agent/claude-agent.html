@@ -42,8 +42,6 @@
 .ca-bubble{font-size:13px;line-height:1.4;padding:6px 10px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
 .ca-op .ca-bubble{background:${NODE_COLOR};color:#000;border-bottom-right-radius:4px}
 .ca-agent .ca-bubble{background:var(--red-ui-tertiary-background);color:var(--red-ui-primary-text-color);border:1px solid var(--red-ui-secondary-border-color);border-bottom-left-radius:4px}
-.ca-from .ca-bubble{background:var(--red-ui-secondary-background);color:var(--red-ui-primary-text-color);border:1px dashed var(--red-ui-primary-text-color);border-bottom-right-radius:4px;font-style:italic}
-.ca-from .ca-meta{font-weight:bold}
 .ca-question .ca-bubble{border-left:3px solid var(--red-ui-border-color-warning);border-radius:6px}
 .ca-bubble.ca-md{white-space:normal}
 .ca-md>:first-child{margin-top:0}
@@ -210,15 +208,16 @@
         const list = part(node, 'list');
         if (!list) return;
         let entry;
-        // A keep-alive or close prompt is not text of the operator: the life cycle pill shows it
-        if (e.kind === 'prompt' && e.source === 'life') return;
+        // A keep-alive or close prompt is not text of the operator: the life cycle pill shows it.
+        // An inbox message from another agent is not shown here: the Timeline tab has it.
+        if (e.kind === 'prompt' && (e.source === 'life' || e.source === 'agent')) return;
         if (OPERATOR_KINDS.includes(e.kind) || AGENT_KINDS.includes(e.kind)) {
             const operator = OPERATOR_KINDS.includes(e.kind);
             const runId = (activeRuns[node.id] || []).length > 1 && !operator ? ' ' + e.runId : '';
-            entry = make('div', '', 'ca-msg ' + (operator ? 'ca-op' : 'ca-agent') + (e.from ? ' ca-from' : '') + (e.kind === 'question' ? ' ca-question' : ''));
-            entry.appendChild(make('div', (e.from ? 'From ' + e.from : operator ? 'You' : 'Agent' + runId) + ' · ' + clock(e.time), 'ca-meta'));
-            const bubble = make('div', e.kind === 'question' ? 'Question: ' + e.text : operator || e.from ? e.text : '', 'ca-bubble');
-            if (e.kind === 'text' && !e.from) renderMarkdown(bubble, e.text);
+            entry = make('div', '', 'ca-msg ' + (operator ? 'ca-op' : 'ca-agent') + (e.kind === 'question' ? ' ca-question' : ''));
+            entry.appendChild(make('div', (operator ? 'You' : 'Agent' + runId) + ' · ' + clock(e.time), 'ca-meta'));
+            const bubble = make('div', e.kind === 'question' ? 'Question: ' + e.text : operator ? e.text : '', 'ca-bubble');
+            if (e.kind === 'text') renderMarkdown(bubble, e.text);
             entry.appendChild(bubble);
         } else if (e.kind === 'life') {
             // A keep-alive, a close, a note or a handoff of the session mode agent
@@ -741,7 +740,7 @@
     <p>Keep-alive and close turns send nothing on the outputs. The popup shows them as <i>life cycle</i> lines.</p>
 
     <h3>MQTT inbox</h3>
-    <p>The popup shows the text of the agent as markdown: headings, lists, tables, code, links and emphasis. A link opens in a new tab. An image or other remote file does not show. The text of the operator, of an inbox message and of a question stays plain text. The popup shows an inbox message as a dashed italic bubble with the label <code>From &lt;from&gt;</code>. A keep-alive turn has no bubble: the life cycle line shows it.</p>
+    <p>The popup shows the text of the agent as markdown: headings, lists, tables, code, links and emphasis. A link opens in a new tab. An image or other remote file does not show. The text of the operator, of an inbox message and of a question stays plain text. The Chat tab does not show an inbox message. The Timeline tab shows it. A keep-alive turn has no bubble: the life cycle line shows it.</p>
     <p>The address of the agent is <code>&lt;team&gt;/&lt;name&gt;</code>: the tab label and the node name. <code>/ + #</code> and white space become <code>-</code>. A node with no name gets no inbox.</p>
     <p>The inbox topic is <code>agents/&lt;team&gt;/agent/&lt;name&gt;/inbox</code> (QoS 1). The payload is JSON <code>{ "from": "&lt;team&gt;/&lt;name&gt;", "text": "..." }</code>. Other payloads give a warning. An inbox message starts a turn in both session modes. Its result goes out on output 1 as a new msg.</p>
     <p>The agent gets the tool <code>send(to, text)</code>. <code>to</code> is <code>name</code> (same team) or <code>team/name</code>. With no broker connection, the tool gives an error text. A send that has no answer yet keeps the session open with keep-alive turns.</p>
