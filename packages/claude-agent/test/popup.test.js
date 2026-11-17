@@ -156,25 +156,49 @@ describe('claude-agent popup message box', () => {
 });
 
 describe('claude-agent edit dialog', () => {
-    const open = (cacheTtl) => {
+    // Open the dialog for a node with these properties. Give the calls of val(v) and toggle(on) for the selector.
+    const open = (props, selector) => {
         const set = [];
-        const $ = (sel) => ({ val: (v) => set.push([sel, v]), on: () => {} });
+        const values = { '#node-input-session': props.session };
+        const handlers = {};
+        const $ = (sel) => {
+            const e = {
+                val: (v) => (v === undefined ? values[sel] : (values[sel] = v, set.push([sel, v]), e)),
+                on: (type, fn) => { handlers[sel + type] = fn; return e; },
+                trigger: (type) => { handlers[sel + type](); return e; },
+                toggle: (on) => { set.push([sel, on]); return e; }
+            };
+            return e;
+        };
         const { getDef } = setup({ $ });
-        getDef().oneditprepare.call({ cacheTtl });
-        return set;
+        getDef().oneditprepare.call(props);
+        return { get set() { return set.filter(([sel]) => sel === selector); }, change: (v) => { values['#node-input-session'] = v; handlers['#node-input-sessionchange'](); } };
     };
+    const cacheSet = (cacheTtl) => open({ cacheTtl }, '#node-input-cacheTtl').set;
 
     it('shows 60 minutes for a node without a Cache time', () => {
-        assert.deepEqual(open(undefined), [['#node-input-cacheTtl', '1h']]);
+        assert.deepEqual(cacheSet(undefined), [['#node-input-cacheTtl', '1h']]);
     });
 
     it('shows 60 minutes for an unknown Cache time', () => {
-        assert.deepEqual(open(''), [['#node-input-cacheTtl', '1h']]);
+        assert.deepEqual(cacheSet(''), [['#node-input-cacheTtl', '1h']]);
     });
 
     it('leaves a stored Cache time alone', () => {
-        assert.deepEqual(open('5m'), []);
-        assert.deepEqual(open('1h'), []);
+        assert.deepEqual(cacheSet('5m'), []);
+        assert.deepEqual(cacheSet('1h'), []);
+    });
+
+    it('shows the message mode for a node without a Session, and hides the agent settings', () => {
+        assert.deepEqual(open({}, '#node-input-session').set, [['#node-input-session', 'message']]);
+        assert.deepEqual(open({}, '.claude-agent-agent-row').set, [['.claude-agent-agent-row', false]]);
+    });
+
+    it('shows the agent settings only in the agent mode', () => {
+        const dialog = open({ session: 'agent' }, '.claude-agent-agent-row');
+        assert.deepEqual(dialog.set, [['.claude-agent-agent-row', true]]);
+        dialog.change('message');
+        assert.deepEqual(dialog.set, [['.claude-agent-agent-row', true], ['.claude-agent-agent-row', false]]);
     });
 });
 
@@ -320,6 +344,14 @@ describe('claude-agent popup chat', () => {
         for (const e of [you, agent, question, end, ...you.childNodes, ...agent.childNodes]) {
             assert.deepEqual(e.style, {}, 'no inline style');
         }
+    });
+
+    it('a life cycle line of the agent shows as a marked line in the chat', async () => {
+        const { part, receive } = await popup({});
+        receive('event', event('life', 'keep-alive 1 of 3'));
+        const [line] = part('list').childNodes;
+        assert.ok(line.classList.contains('ca-end') && line.classList.contains('ca-life'));
+        assert.equal(line.textContent, 'life cycle: keep-alive 1 of 3');
     });
 
     it('keeps 200 entries', async () => {
@@ -506,10 +538,15 @@ describe('claude-agent edit dialog', () => {
     const click = (prompt) => {
         const set = [];
         let handler;
-        const $ = (sel) => ({
-            val: (v) => (v === undefined ? prompt : set.push([sel, v])),
-            on: (ev, fn) => { if (sel === '#claude-agent-summary-from-prompt' && ev === 'click') handler = fn; }
-        });
+        const $ = (sel) => {
+            const e = {
+                val: (v) => (v === undefined ? prompt : (set.push([sel, v]), e)),
+                on: (ev, fn) => { if (sel === '#claude-agent-summary-from-prompt' && ev === 'click') handler = fn; return e; },
+                trigger: () => e,
+                toggle: () => e
+            };
+            return e;
+        };
         const t = setup({ $ });
         t.getDef().oneditprepare.call({ cacheTtl: '1h' });
         set.length = 0;
