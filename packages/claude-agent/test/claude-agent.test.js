@@ -83,8 +83,9 @@ function makeFlow(workRoot) {
         agent('switch', [['collect-switch'], [], ['collect-switchevents']]), collect('switch'), collect('switchevents'),
         // Two model responses, then the result
         inject('i-turns', 'twoturns', ['turns']), agent('turns', [['collect-turns'], [], []]), collect('turns'),
-        // A result while a background subagent works
+        // A result while a background subagent or a background shell job works
         inject('i-subagent', 'subagent', ['subagent']), agent('subagent', [['collect-subagent'], [], []]), collect('subagent'),
+        inject('i-shelljob', 'shelljob', ['shelljob']), agent('shelljob', [['collect-shelljob'], [], []]), collect('shelljob'),
         { id: 'catch-all', type: 'catch', z: 'tab', scope: null, uncaught: false, wires: [['collect-catch']] }, collect('catch'),
         // GET /results/<key> answers with the messages that collect(key) stored
         { id: 'http-results', type: 'http in', z: 'tab', url: '/results/:key', method: 'get', wires: [['results']] },
@@ -379,17 +380,17 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         await waitFor(async () => (await results('switchevents')).some((m) => m.payload.text === 'stopped'), 10000, 'stopped');
     });
 
-    it('a result while a background subagent works does not end the run: the run ends with the later result', async () => {
-        await injectNode('i-subagent');
+    for (const kind of ['subagent', 'shelljob']) it(`a result while a background ${kind} works does not end the run: the run ends with the later result`, async () => {
+        await injectNode('i-' + kind);
         const open = await waitFor(async () => {
-            const s = await editor('subagent', 'get-log');
-            return s.events.some((e) => e.kind === 'turn' && e.text === 'the subagent works') && s;
+            const s = await editor(kind, 'get-log');
+            return s.events.some((e) => e.kind === 'turn' && e.text === `the ${kind} works`) && s;
         }, 10000, 'the first result');
         assert.equal(open.runs.length, 1, 'the run is still open');
         assert.equal(open.events.some((e) => e.kind === 'result'), false);
-        const [out] = await results('subagent');
-        assert.equal(out.payload, 'subagent done');
-        assert.deepEqual((await editor('subagent', 'get-log')).runs, []);
+        const [out] = await results(kind);
+        assert.equal(out.payload, `${kind} done`);
+        assert.deepEqual((await editor(kind, 'get-log')).runs, []);
     });
 
     it('each model response and the result restart the cache countdown of the run and the session', async () => {

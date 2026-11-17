@@ -431,6 +431,18 @@ describe('claude-agent popup chat', () => {
         assert.equal(status.textContent, 'no active run');
     });
 
+    it('the status line of a run says 1 turn, and no tokens before the result', async () => {
+        const p = setup({}, { events: [], runs: [], session: { cacheTtl: '1h', lastActivity: null } });
+        const status = fakeElement('div');
+        status.id = 'nru_popup.n1.statusText';
+        status.setStatusText = (v) => { status.textContent = v; };
+        p.div.appendChild(status);
+        p.receive('runs', [run({ tokens: '', context: '10' })]);
+        assert.equal(status.textContent, 'running, 1 turn, context 10');
+        p.receive('runs', [run({ turns: 2 })]);
+        assert.equal(status.textContent, 'running, 2 turns, 1.1k tokens');
+    });
+
     it('adds the style element once, with theme variables and no fixed colour but the node colour', async () => {
         const { head, rebuild } = await popup({});
         rebuild();
