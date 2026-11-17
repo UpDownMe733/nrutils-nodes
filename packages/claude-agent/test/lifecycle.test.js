@@ -251,12 +251,12 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         await ended('empty', 2);
         await waitFor(async () => (await held()) === 0, 5000, 'cold');
         assert.equal(fs.existsSync(notePath('empty')), false);
-        assert.ok(lifeLines('empty').includes('no note'), lifeLines('empty').join('|'));
+        await waitFor(async () => lifeLines('empty').includes('no note'), 5000, 'no note');
         await injectNode('i-empty-1');
         const got = JSON.parse((await results('empty', 2))[1].payload);
         assert.equal(got.prompt, RECORD_PREFIX('fake-session') + 'next', 'no note and a session file');
         assert.equal(got.resume, null);
-        assert.ok(lifeLines('empty').includes('new session with the record of the last session'), lifeLines('empty').join('|'));
+        await waitFor(async () => lifeLines('empty').includes('new session with the record of the last session'), 5000, 'new session with the record');
         await idle('empty');
         await fire();
         await ended('empty', 4);
@@ -420,6 +420,7 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         assert.equal(prompted.at(-1).from, 'Team-B/peer');
         assert.ok(prompted.some((e) => e.source === 'life' && e.text === '.'), 'a keep-alive prompt has the source life');
         await idle('sender');
+        await waitFor(async () => prompts('sender').includes('.'), 5000, 'keep-alive prompt event');
         const count = prompts('sender').length;
         await fire();
         await waitFor(async () => prompts('sender').length === count + 1, 5000, 'close');
