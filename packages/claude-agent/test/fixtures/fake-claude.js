@@ -116,7 +116,7 @@ async function answer(prompt) {
     if (word === 'slowdone') return sleep(1000).then(() => result('done'));
     if (word === 'twoturns') {
         await sleep(500);
-        reply('The second turn.');
+        reply('The second turn.', 2500);
         await sleep(500);
         return result('done');
     }

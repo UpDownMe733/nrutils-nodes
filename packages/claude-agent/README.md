@@ -196,6 +196,7 @@ Click the node to open the popup. The top shows the name of the node (or `claude
 (when set) and a line with its model, folder and sandbox. The last line shows the settings of the node,
 not the `msg.model` or `msg.cwd` of a run. The tabs are below it: **Chat** and **Timeline**. On the right are the run
 list (with more than one run), the timer chip and **New chat**.
+The status line shows the state, the turns, the tokens used and the context size of the last model response.
 
 The timer chip shows:
 

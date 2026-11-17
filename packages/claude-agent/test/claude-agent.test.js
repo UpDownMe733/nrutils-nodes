@@ -390,9 +390,12 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
             return s.runs.length === 1 && s.runs[0].lastActivity > first.runs[0].lastActivity && s;
         }, 10000, 'the second response');
         assert.equal(second.session.lastActivity, second.runs[0].lastActivity);
+        assert.equal(first.runs[0].context, '10', 'the run list has the context of the first response');
+        assert.equal(second.runs[0].context, '2.5k', 'the run list has the context of the second response');
         await results('turns');
         const done = await editor('turns', 'get-log');
         assert.deepEqual(done.runs, []);
+        assert.match(done.events.filter((e) => e.kind === 'result').pop().text, /^done, 2 turns, .*, context 2\.5k$/);
         assert.ok(done.session.lastActivity > second.session.lastActivity, 'the result moves the session activity');
         // The popup gets one 'session' for each response and one for the result, each later than the one before
         const times = await waitFor(async () => {

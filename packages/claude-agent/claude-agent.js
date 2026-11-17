@@ -78,6 +78,7 @@ function tokenCount(modelUsage) {
     return n;
 }
 const costText = (usd) => `$${(Number.isFinite(usd) ? usd : 0).toFixed(2)}`;
+const sizeText = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n || 0));
 const tokenText = (n) => `${n >= 1000 ? (n / 1000).toFixed(1) + 'k' : n || 0} tokens`;
 
 module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeRedEditorComms], (RED, node, config) => {
@@ -117,7 +118,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
 
     function runList() {
         return [...runs.values()].map((r) => ({
-            runId: r.id, state: r.state, turns: r.turns, tokens: tokenText(r.tokens), question: r.question,
+            runId: r.id, state: r.state, turns: r.turns, tokens: tokenText(r.tokens), context: sizeText(r.context), question: r.question,
             startTime: r.startTime, lastActivity: r.lastActivity
         }));
     }
@@ -213,7 +214,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
 
     function handoff(run) {
         if (run.ended) return;
-        event(run, 'result', `handoff, ${run.turns} turns, ${tokenText(run.tokens)}`,
+        event(run, 'result', `handoff, ${run.turns} turns, ${tokenText(run.tokens)}, context ${sizeText(run.context)}`,
             { turns: run.turns, tokens: tokenText(run.tokens), tokenCount: run.tokens || 0, weightedCount: run.weighted || 0, costUsd: run.cost || 0 });
         end(run);
         dropSession();
@@ -339,7 +340,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         if (run.life === 'close') storeNote(run, payload);
         end(run);
         const tokens = tokenText(run.tokens);
-        event(run, 'result', `done, ${run.turns} turns, ${tokens}`, { turns: run.turns, tokens, tokenCount: run.tokens || 0, weightedCount: run.weighted || 0, costUsd: run.cost || 0 });
+        event(run, 'result', `done, ${run.turns} turns, ${tokens}, context ${sizeText(run.context)}`, { turns: run.turns, tokens, tokenCount: run.tokens || 0, weightedCount: run.weighted || 0, costUsd: run.cost || 0 });
         // Each input message of the run gets one output
         for (const { msg, send, done } of run.jobs) {
             msg.payload = payload;
@@ -498,13 +499,13 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
                 if (m.type === 'system' && m.subtype === 'init') run.model = m.model;
                 else if (m.type === 'result') onResult(run, m);
                 else if (m.type === 'assistant' || m.type === 'user') {
-                    // Each model response of the agent starts the timer again and gives the context size
-                    if (agentMode && m.type === 'assistant' && m.message.model !== '<synthetic>') {
-                        armTimer();
+                    // Each model response of the main agent gives the context size. In agent mode it also starts the timer again.
+                    if (m.type === 'assistant' && m.message.model !== '<synthetic>') {
+                        if (agentMode) armTimer();
                         const u = m.message.usage;
                         if (u && !m.parent_tool_use_id) {
-                            context = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
-                            if (context > contextLimit && !life && !run.hint) run.hint = 'due';
+                            context = run.context = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+                            if (agentMode && context > contextLimit && !life && !run.hint) run.hint = 'due';
                         }
                     }
                     // Each new model message of the main agent is one turn.
