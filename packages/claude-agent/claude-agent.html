@@ -18,7 +18,9 @@
     // The look of the popup. It uses the theme variables of Node-RED, so it follows the light and the dark theme.
     // The operator bubble has the node colour with dark text: that has contrast in both themes.
     const STYLE = `
-.ca-popup{display:flex;flex-direction:column;gap:6px;height:100%;min-height:0;min-width:0;font-size:12px;color:var(--red-ui-primary-text-color)}
+.ca-popup{display:flex;flex-direction:column;gap:6px;height:100%;min-height:0;min-width:0;font-size:12px;color:var(--red-ui-primary-text-color);cursor:default;user-select:text}
+.ca-popup button{user-select:none}
+.ca-bubble,.ca-inbox-text,.ca-log{cursor:text}
 .ca-identity{flex:none;display:flex;flex-direction:column;min-width:0;padding:0 2px 2px}
 .ca-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600;color:var(--red-ui-primary-text-color)}
 .ca-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--red-ui-secondary-text-color)}
@@ -32,14 +34,14 @@
 .ca-chip{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-variant-numeric:tabular-nums;padding:1px 7px;border-radius:10px;border:1px solid var(--red-ui-secondary-border-color);background:var(--red-ui-tertiary-background);color:var(--red-ui-secondary-text-color)}
 .ca-chip.ca-warn{color:var(--red-ui-text-color-warning);border-color:var(--red-ui-border-color-warning)}
 .ca-header .red-ui-button{flex:none;margin:0 0 2px}
-.ca-log{flex:1;min-height:0;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+.ca-log{flex:1;min-height:0;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}
 .ca-chat{flex:1;min-height:0;overflow:auto;flex-direction:column;gap:6px;padding:2px}
 .ca-list{display:flex;flex-direction:column;gap:6px}
 .ca-msg{display:flex;flex-direction:column;max-width:85%;min-width:0}
 .ca-op{align-self:flex-end;align-items:flex-end}
 .ca-agent{align-self:flex-start;align-items:flex-start}
 .ca-meta{margin:0 4px 2px;font-size:10px;color:var(--red-ui-tertiary-text-color)}
-.ca-bubble{font-size:13px;line-height:1.4;padding:6px 10px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+.ca-bubble{font-size:13px;line-height:1.4;padding:6px 10px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 .ca-op .ca-bubble{background:${NODE_COLOR};color:#000;border-bottom-right-radius:4px}
 .ca-agent .ca-bubble{background:var(--red-ui-tertiary-background);color:var(--red-ui-primary-text-color);border:1px solid var(--red-ui-secondary-border-color);border-bottom-left-radius:4px}
 .ca-question .ca-bubble{border-left:3px solid var(--red-ui-border-color-warning);border-radius:6px}
@@ -68,7 +70,7 @@
 .ca-inbox .ca-meta i{display:none;margin-left:auto;font-size:16px;line-height:1;color:var(--red-ui-primary-text-color);transition:transform .15s}
 .ca-inbox.ca-more .ca-meta i,.ca-inbox.ca-open .ca-meta i{display:inline}
 .ca-inbox.ca-open .ca-meta i{transform:rotate(180deg)}
-.ca-inbox-text{font-size:12px;line-height:1.4;max-height:calc(3 * 1.4em);overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;color:var(--red-ui-primary-text-color)}
+.ca-inbox-text{font-size:12px;line-height:1.4;max-height:calc(3 * 1.4em);overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--red-ui-primary-text-color)}
 .ca-inbox.ca-more:not(.ca-open) .ca-inbox-text{-webkit-mask-image:linear-gradient(#000 60%,transparent);mask-image:linear-gradient(#000 60%,transparent)}
 .ca-inbox.ca-open .ca-inbox-text{max-height:300px;overflow-y:auto}
 .ca-end{align-self:center;font-size:10px;padding:1px 8px;border-radius:10px;background:var(--red-ui-tertiary-background);color:var(--red-ui-secondary-text-color)}
@@ -493,7 +495,7 @@
             // and the text box gets no keys.
             if (!div.claudeAgentEventsKept) {
                 div.claudeAgentEventsKept = true;
-                for (const type of ['mousedown', 'mouseup', 'click', 'dblclick', 'touchstart', 'touchend', 'keydown', 'keyup', 'keypress', 'wheel']) {
+                for (const type of ['mousedown', 'mouseup', 'click', 'dblclick', 'touchstart', 'touchend', 'keydown', 'keyup', 'keypress', 'wheel', 'contextmenu']) {
                     div.addEventListener(type, (e) => e.stopPropagation());
                 }
             }

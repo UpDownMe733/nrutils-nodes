@@ -753,3 +753,20 @@ describe('claude-agent popup chat sender', () => {
         assert.ok(!card.classList.contains('ca-open'));
     });
 });
+
+describe('claude-agent popup text selection', () => {
+    it('the whole popup selects text, shows the normal cursor, and the buttons do not select', async () => {
+        const { head } = await popup({});
+        const css = head.childNodes.map((c) => c.textContent).join('');
+        assert.match(/\.ca-popup\{[^}]*\}/.exec(css)[0], /cursor:default;user-select:text/);
+        assert.match(css, /\.ca-popup button\{user-select:none\}/);
+        assert.match(css, /\.ca-bubble,\.ca-inbox-text,\.ca-log\{cursor:text\}/);
+        // No rule of the popup text turns the selection off
+        assert.doesNotMatch(css, /user-select:(none|auto)(?!\})/);
+    });
+
+    it('the right button menu stays in the popup, so the browser menu has Copy', async () => {
+        const { div } = await popup({});
+        assert.ok(div.listeners.contextmenu.length > 0);
+    });
+});
