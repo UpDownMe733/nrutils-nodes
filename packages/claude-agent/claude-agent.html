@@ -698,6 +698,7 @@
     <p>After a turn, a timer runs: the cache time minus 1 minute. Each model response starts it again. At the timer end, the node closes the session: it asks the agent for a note of 200 words maximum, stores the answer, and forgets the session. An empty answer gives no note. If a <code>send</code> has no answer yet, the node sends a keep-alive turn (prompt <code>.</code>) in place of the close, up to <b>Max keep-alive</b> times.</p>
     <p>A context above <b>Context limit</b> at a turn end also closes the session. In a long turn, the node tells the agent to call the tool <code>handoff(note)</code>. The node then stores the note and continues the task in a new session. The input message gets its output from the new session.</p>
     <p>A new session starts with the note and then deletes it. The note is the file <code>&lt;userDir&gt;/claude-agent/&lt;node id&gt;.note.md</code>. Stop keeps the session, and the timer runs.</p>
+    <p>The node keeps the id of the last session in the file <code>&lt;userDir&gt;/claude-agent/&lt;node id&gt;.session</code>. A deploy, a restart and a close do not delete it. New chat deletes it. A new session with no note, and with this file, starts with a text that tells the agent to read the record of its last session (<code>~/.claude/projects/*/&lt;id&gt;.jsonl</code>). The agent reads it, not the node.</p>
     <p>Keep-alive and close turns send nothing on the outputs. The popup shows them as <i>life cycle</i> lines.</p>
 
     <h3>MQTT inbox</h3>

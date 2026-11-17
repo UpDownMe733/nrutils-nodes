@@ -93,6 +93,8 @@ function makeFlow(workRoot, mqttPort, deadPort) {
         ...agentWithInjects('life', ['hello', 'again', 'next']),
         ...agentWithInjects('empty', ['hello', 'next'], { cwd: path.join(workRoot, 'empty') }),
         ...agentWithInjects('waits', ['slowdone', 'one', 'two']),
+        ...agentWithInjects('rec', ['one', 'two']),
+        ...agentWithInjects('chat', ['one']),
         ...agentWithInjects('big', ['big']),
         ...agentWithInjects('long', ['long']),
         agent('relong', [['collect-relong'], [], []]), collect('relong'),
@@ -150,6 +152,8 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
     const ended = (nodeId, count) => waitFor(async () => eventsOf(nodeId).filter((e) => e.kind === 'result').length >= count,
         10000, `${count} result events of ${nodeId}`);
     const notePath = (nodeId) => path.join(userDir, 'claude-agent', nodeId + '.note.md');
+    const sessionPath = (nodeId) => path.join(userDir, 'claude-agent', nodeId + '.session');
+    const RECORD_PREFIX = (id) => `You have no note of your earlier session. The record of that session is the file ~/.claude/projects/*/${id}.jsonl. Read it before you answer. It can be large: read only the text of the user and of the assistant.\n\n`;
     const inbox = (name) => `agents/Team-A/agent/${name}/inbox`;
     const publish = (topic, payload) => new Promise((resolve) => mqtt.publish({ cmd: 'publish', topic, payload: Buffer.from(payload), qos: 1, retain: false, dup: false }, resolve));
 
@@ -250,11 +254,45 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         assert.ok(lifeLines('empty').includes('no note'), lifeLines('empty').join('|'));
         await injectNode('i-empty-1');
         const got = JSON.parse((await results('empty', 2))[1].payload);
-        assert.equal(got.prompt, 'next');
+        assert.equal(got.prompt, RECORD_PREFIX('fake-session') + 'next', 'no note and a session file');
         assert.equal(got.resume, null);
+        assert.ok(lifeLines('empty').includes('new session with the record of the last session'), lifeLines('empty').join('|'));
         await idle('empty');
         await fire();
         await ended('empty', 4);
+    });
+
+    it('stage 1: a new node instance with a session file and no note gets the record text; a note wins over the file', async () => {
+        fs.mkdirSync(path.dirname(notePath('rec')), { recursive: true });
+        fs.writeFileSync(sessionPath('rec'), 'old-id');
+        await injectNode('i-rec-0');
+        const [first] = await results('rec', 1);
+        assert.equal(JSON.parse(first.payload).prompt, RECORD_PREFIX('old-id') + 'one');
+        assert.equal(JSON.parse(first.payload).resume, null);
+        assert.equal(fs.readFileSync(sessionPath('rec'), 'utf8'), 'fake-session', 'the file holds the new session');
+        await idle('rec');
+        await fire();
+        await ended('rec', 2);
+        await waitFor(async () => (await held()) === 0, 5000, 'cold');
+        assert.equal(fs.readFileSync(sessionPath('rec'), 'utf8'), 'fake-session', 'a close keeps the file');
+        fs.writeFileSync(notePath('rec'), 'my note');
+        fs.writeFileSync(sessionPath('rec'), 'older-id');
+        await injectNode('i-rec-1');
+        const second = JSON.parse((await results('rec', 2))[1].payload);
+        assert.equal(second.prompt, 'The note of your earlier session:\nmy note\n\ntwo');
+        await idle('rec');
+        await fire();
+        await ended('rec', 4);
+    });
+
+    it('New chat deletes the session file', async () => {
+        await injectNode('i-chat-0');
+        await results('chat', 1);
+        assert.equal(fs.existsSync(sessionPath('chat')), true);
+        await idle('chat');
+        assert.deepEqual(await editor('chat', 'new-chat'), {});
+        assert.equal(fs.existsSync(sessionPath('chat')), false);
+        await fire();
     });
 
     it('stage 3: the messages that arrive during a turn go in together as one prompt, and each gets one output', async () => {
@@ -358,6 +396,7 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         assert.equal(prompts('sender').at(-1), CLOSE_PROMPT);
         assert.equal((await list('sender')).length, 1, 'keep-alive and close turns send nothing on the output');
         fs.rmSync(notePath('sender'), { force: true });
+        fs.rmSync(sessionPath('sender'), { force: true });
     });
 
     it('an answer from the agent clears the open item, and an inbox message starts a turn with a new output msg', async () => {
@@ -380,6 +419,7 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         assert.equal(prompts('sender').at(-1), CLOSE_PROMPT, 'no open item: the timer end closes');
         await waitFor(async () => (await held()) === 0 && (await editor('sender', 'get-log')).runs.length === 0, 5000, 'cold');
         fs.rmSync(notePath('sender'), { force: true });
+        fs.rmSync(sessionPath('sender'), { force: true });
     });
 
     it('an inbox payload that is not the JSON contract gives a warning and no run', async () => {
