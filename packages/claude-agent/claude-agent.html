@@ -35,7 +35,7 @@
 .ca-log{flex:1;min-height:0;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
 .ca-chat{flex:1;min-height:0;overflow:auto;flex-direction:column;gap:6px;padding:2px}
 .ca-list{display:flex;flex-direction:column;gap:6px}
-.ca-msg{display:flex;flex-direction:column;max-width:85%}
+.ca-msg{display:flex;flex-direction:column;max-width:85%;min-width:0}
 .ca-op{align-self:flex-end;align-items:flex-end}
 .ca-agent{align-self:flex-start;align-items:flex-start}
 .ca-meta{margin:0 4px 2px;font-size:10px;color:var(--red-ui-tertiary-text-color)}
@@ -45,6 +45,24 @@
 .ca-from .ca-bubble{background:var(--red-ui-secondary-background);color:var(--red-ui-primary-text-color);border:1px dashed var(--red-ui-primary-text-color);border-bottom-right-radius:4px;font-style:italic}
 .ca-from .ca-meta{font-weight:bold}
 .ca-question .ca-bubble{border-left:3px solid var(--red-ui-border-color-warning);border-radius:6px}
+.ca-bubble.ca-md{white-space:normal}
+.ca-md>:first-child{margin-top:0}
+.ca-md>:last-child{margin-bottom:0}
+.ca-md p,.ca-md ul,.ca-md ol,.ca-md pre,.ca-md table,.ca-md blockquote{margin:0 0 6px}
+.ca-md ul,.ca-md ol{padding-left:18px}
+.ca-md li{margin:1px 0}
+.ca-md h1,.ca-md h2,.ca-md h3,.ca-md h4,.ca-md h5,.ca-md h6{margin:8px 0 4px;font-size:13px;line-height:1.3;font-weight:700;color:var(--red-ui-primary-text-color)}
+.ca-md h1{font-size:15px}
+.ca-md h2{font-size:14px}
+.ca-md a{color:var(--red-ui-text-color-link);text-decoration:underline}
+.ca-md code{font-family:monospace;font-size:12px;padding:0 3px;border-radius:3px;background:var(--red-ui-primary-background);color:var(--red-ui-text-color-code);border:1px solid var(--red-ui-tertiary-border-color)}
+.ca-md pre{padding:6px 8px;border-radius:4px;overflow-x:auto;white-space:pre;background:var(--red-ui-primary-background);border:1px solid var(--red-ui-secondary-border-color)}
+.ca-md pre code{padding:0;border:none;background:none;color:var(--red-ui-primary-text-color)}
+.ca-md table{border-collapse:collapse;display:block;max-width:100%;overflow-x:auto;font-size:12px}
+.ca-md th,.ca-md td{padding:2px 6px;border:1px solid var(--red-ui-secondary-border-color);text-align:left}
+.ca-md th{background:var(--red-ui-secondary-background);font-weight:600}
+.ca-md blockquote{padding-left:8px;border-left:3px solid var(--red-ui-secondary-border-color);color:var(--red-ui-secondary-text-color)}
+.ca-md hr{border:none;border-top:1px solid var(--red-ui-secondary-border-color);margin:6px 0}
 .ca-end{align-self:center;font-size:10px;padding:1px 8px;border-radius:10px;background:var(--red-ui-tertiary-background);color:var(--red-ui-secondary-text-color)}
 .ca-end.ca-error{color:var(--red-ui-text-color-error);border:1px solid var(--red-ui-border-color-error)}
 .ca-end.ca-life{font-style:italic;border:1px dashed var(--red-ui-secondary-border-color)}
@@ -171,6 +189,18 @@
         addChat(node, e);
     }
 
+    // Agent text is markdown. The HTML passes DOMPurify twice: renderMarkdown returns the raw text when marked fails.
+    // A link opens in a new tab. An image gets removed: a remote image would let the agent text call a server.
+    function renderMarkdown(bubble, text) {
+        bubble.className += ' ca-md';
+        bubble.innerHTML = DOMPurify.sanitize(RED.utils.renderMarkdown(text));
+        bubble.querySelectorAll('a').forEach((a) => {
+            a.setAttribute('target', '_blank');
+            a.setAttribute('rel', 'noopener noreferrer');
+        });
+        bubble.querySelectorAll('img').forEach((img) => img.remove());
+    }
+
     // The chat tab: operator bubbles on the right, agent bubbles on the left, the end of a run as a pill
     function addChat(node, e) {
         const list = part(node, 'list');
@@ -183,7 +213,9 @@
             const runId = (activeRuns[node.id] || []).length > 1 && !operator ? ' ' + e.runId : '';
             entry = make('div', '', 'ca-msg ' + (operator ? 'ca-op' : 'ca-agent') + (e.from ? ' ca-from' : '') + (e.kind === 'question' ? ' ca-question' : ''));
             entry.appendChild(make('div', (e.from ? 'From ' + e.from : operator ? 'You' : 'Agent' + runId) + ' · ' + clock(e.time), 'ca-meta'));
-            entry.appendChild(make('div', e.kind === 'question' ? 'Question: ' + e.text : e.text, 'ca-bubble'));
+            const bubble = make('div', e.kind === 'question' ? 'Question: ' + e.text : operator || e.from ? e.text : '', 'ca-bubble');
+            if (e.kind === 'text' && !e.from) renderMarkdown(bubble, e.text);
+            entry.appendChild(bubble);
         } else if (e.kind === 'life') {
             // A keep-alive, a close, a note or a handoff of the session mode agent
             entry = make('div', 'life cycle: ' + e.text, 'ca-end ca-life');
@@ -706,7 +738,7 @@
     <p>Keep-alive and close turns send nothing on the outputs. The popup shows them as <i>life cycle</i> lines.</p>
 
     <h3>MQTT inbox</h3>
-    <p>The popup shows an inbox message as a dashed italic bubble with the label <code>From &lt;from&gt;</code>. A keep-alive turn has no bubble: the life cycle line shows it.</p>
+    <p>The popup shows the text of the agent as markdown: headings, lists, tables, code, links and emphasis. A link opens in a new tab. An image does not show. The text of the operator, of an inbox message and of a question stays plain text. The popup shows an inbox message as a dashed italic bubble with the label <code>From &lt;from&gt;</code>. A keep-alive turn has no bubble: the life cycle line shows it.</p>
     <p>The address of the agent is <code>&lt;team&gt;/&lt;name&gt;</code>: the tab label and the node name. <code>/ + #</code> and white space become <code>-</code>. A node with no name gets no inbox.</p>
     <p>The inbox topic is <code>agents/&lt;team&gt;/agent/&lt;name&gt;/inbox</code> (QoS 1). The payload is JSON <code>{ "from": "&lt;team&gt;/&lt;name&gt;", "text": "..." }</code>. Other payloads give a warning. An inbox message starts a turn in both session modes. Its result goes out on output 1 as a new msg.</p>
     <p>The agent gets the tool <code>send(to, text)</code>. <code>to</code> is <code>name</code> (same team) or <code>team/name</code>. With no broker connection, the tool gives an error text. A send that has no answer yet keeps the session open with keep-alive turns.</p>

@@ -15,6 +15,7 @@ const script = /<script type="text\/javascript">([\s\S]*?)<\/script>/.exec(html)
 function fakeElement(tag) {
     const classes = new Set();
     let ownText = '';
+    let html;
     const listeners = {};
     const e = {
         tagName: tag.toUpperCase(), style: {}, childNodes: [], value: '', clicks: 0, focused: 0, disabled: false, title: '',
@@ -33,6 +34,15 @@ function fakeElement(tag) {
         },
         get textContent() { return ownText + e.childNodes.map((c) => c.textContent).join(''); },
         set textContent(v) { ownText = String(v); e.childNodes.length = 0; },
+        // A fake parser: each a and img tag of the HTML becomes an element that querySelectorAll finds
+        get innerHTML() { return html; },
+        set innerHTML(v) {
+            html = String(v);
+            for (const tagName of ['a', 'img']) e.found[tagName] = [...html.matchAll(new RegExp('<' + tagName + '[ >]', 'g'))].map(() => fakeElement(tagName));
+        },
+        found: {},
+        querySelectorAll: (sel) => e.found[sel] || [],
+        remove() { e.removed = true; },
         get firstChild() { return e.childNodes[0]; },
         setAttribute(name, value) { e.attributes[name] = String(value); },
         getAttribute: (name) => e.attributes[name],
@@ -80,9 +90,11 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
         notify: (text, type) => notes.push({ text, type }),
         // The rule of RED.validators.number: an empty or absent value is valid only with blankAllowed.
         validators: { number: (blankAllowed) => (v) => (v === '' || v === undefined ? !!blankAllowed : !isNaN(v)) },
-        settings: {}
+        settings: {},
+        utils: { renderMarkdown: (text) => '<md>' + text + '</md>' }
     };
-    vm.runInNewContext(script, { document, RED, window: {}, Date: FakeDate, setInterval, clearInterval, ...extra });
+    const DOMPurify = { sanitize: (html) => html.replace(/<script.*?<\/script>/g, '') };
+    vm.runInNewContext(script, { document, RED, DOMPurify, window: {}, Date: FakeDate, setInterval, clearInterval, ...extra });
     const getDef = () => def;
     const answers = { 'get-log': state, 'new-chat': {} };
     const node = {
@@ -326,6 +338,35 @@ describe('claude-agent popup chat', () => {
         assert.equal(part('working').style.display, 'none');
         receive('runs', [run({ state: 'running' })]);
         assert.equal(part('working').style.display, '');
+    });
+
+    it('agent text renders as markdown, sanitized, and other bubbles stay plain text', async () => {
+        const { part, receive } = await popup({});
+        receive('event', event('prompt', '**you**'));
+        receive('event', event('prompt', '**from**', { source: 'agent', from: 'a/b' }));
+        receive('event', event('question', '**ask**'));
+        receive('event', event('text', '**bold**<script>x</script>'));
+        const [you, from, question, agent] = part('list').childNodes.map((m) => m.childNodes[1]);
+        for (const b of [you, from, question]) assert.equal(b.innerHTML, undefined);
+        assert.equal(you.textContent, '**you**');
+        assert.equal(from.textContent, '**from**');
+        assert.equal(question.textContent, 'Question: **ask**');
+        assert.ok(agent.classList.contains('ca-md'));
+        assert.equal(agent.innerHTML, '<md>**bold**</md>');
+    });
+
+    it('a link of agent text opens in a new tab and an image gets removed, in live and loaded entries', async () => {
+        const markdown = '<a href="x">l</a><img src="y">';
+        const live = await popup({});
+        live.receive('event', event('text', markdown));
+        const loaded = await popup({ events: [event('text', markdown)] });
+        for (const { part } of [live, loaded]) {
+            const bubble = part('list').childNodes[0].childNodes[1];
+            const [a] = bubble.found.a;
+            assert.equal(a.attributes.target, '_blank');
+            assert.equal(a.attributes.rel, 'noopener noreferrer');
+            assert.equal(bubble.found.img[0].removed, true);
+        }
     });
 
     it('operator and agent entries get their classes, a meta line and no inline colour', async () => {
