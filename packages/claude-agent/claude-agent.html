@@ -45,6 +45,7 @@
 .ca-question .ca-bubble{border-left:3px solid var(--red-ui-border-color-warning);border-radius:6px}
 .ca-end{align-self:center;font-size:10px;padding:1px 8px;border-radius:10px;background:var(--red-ui-tertiary-background);color:var(--red-ui-secondary-text-color)}
 .ca-end.ca-error{color:var(--red-ui-text-color-error);border:1px solid var(--red-ui-border-color-error)}
+.ca-end.ca-life{font-style:italic;border:1px dashed var(--red-ui-secondary-border-color)}
 .ca-empty{margin:auto;padding:12px;text-align:center;font-style:italic;color:var(--red-ui-tertiary-text-color)}
 .ca-working{align-self:flex-start;font-size:11px;font-style:italic;color:var(--red-ui-secondary-text-color)}
 .ca-ask{flex:none;padding:6px 8px;border-radius:6px;border:1px solid var(--red-ui-border-color-warning);background:var(--red-ui-form-tips-background);color:var(--red-ui-primary-text-color)}
@@ -179,6 +180,9 @@
             entry = make('div', '', 'ca-msg ' + (operator ? 'ca-op' : 'ca-agent') + (e.kind === 'question' ? ' ca-question' : ''));
             entry.appendChild(make('div', (operator ? 'You' : 'Agent' + runId) + ' · ' + clock(e.time), 'ca-meta'));
             entry.appendChild(make('div', e.kind === 'question' ? 'Question: ' + e.text : e.text, 'ca-bubble'));
+        } else if (e.kind === 'life') {
+            // A keep-alive, a close, a note or a handoff of the session mode agent
+            entry = make('div', 'life cycle: ' + e.text, 'ca-end ca-life');
         } else if (END_KINDS.includes(e.kind) || (e.kind === 'state' && e.text === 'stopped')) {
             entry = make('div', e.kind === 'error' ? 'error: ' + e.text : e.text, 'ca-end' + (e.kind === 'error' ? ' ca-error' : ''));
         } else return;
@@ -326,6 +330,10 @@
             systemPrompt: { value: '' },
             model: { value: '' },
             cacheTtl: { value: '1h' },
+            session: { value: 'message' },
+            contextLimit: { value: 100000, validate: RED.validators.number() },
+            maxKeepAlive: { value: 3, validate: RED.validators.number() },
+            broker: { value: '', type: 'mqtt-broker', required: false },
             prompt: { value: '{{payload}}' },
             cwd: { value: '' },
             sandbox: {
@@ -368,6 +376,11 @@
         // A node from before the Cache time property has no value. The dialog shows 60 minutes, as the runtime uses.
         oneditprepare: function () {
             if (this.cacheTtl !== '5m' && this.cacheTtl !== '1h') $('#node-input-cacheTtl').val('1h');
+            // A node from before the Session property runs in the message mode. The agent settings show only in the agent mode.
+            if (this.session !== 'agent') $('#node-input-session').val('message');
+            const session = $('#node-input-session');
+            session.on('change', () => $('.claude-agent-agent-row').toggle(session.val() === 'agent'));
+            session.trigger('change');
             // The button copies the start of the current, unsaved system prompt. Done saves it.
             $('#claude-agent-summary-from-prompt').on('click', function () {
                 const prompt = $('#node-input-systemPrompt').val();
@@ -531,6 +544,26 @@
         </select>
     </div>
     <div class="form-row">
+        <label for="node-input-session">Session</label>
+        <select id="node-input-session">
+            <option value="message">a new session for each message</option>
+            <option value="agent">one agent with one session</option>
+        </select>
+    </div>
+    <div class="form-row claude-agent-agent-row">
+        <label for="node-input-contextLimit">Context limit</label>
+        <input type="text" id="node-input-contextLimit" style="width:100px"> tokens
+    </div>
+    <div class="form-row claude-agent-agent-row">
+        <label for="node-input-maxKeepAlive">Max keep-alive</label>
+        <input type="text" id="node-input-maxKeepAlive" style="width:100px">
+    </div>
+    <div class="form-row">
+        <label for="node-input-broker">MQTT broker</label>
+        <input type="text" id="node-input-broker">
+    </div>
+    <div class="form-tips">The broker gives the node an inbox and the <code>send</code> tool. The tab label is the team, the node name is the agent name.</div>
+    <div class="form-row">
         <label for="node-input-prompt">Prompt</label>
         <textarea id="node-input-prompt" rows="3" style="width:70%"></textarea>
     </div>
@@ -589,6 +622,10 @@
         <dt>System prompt</dt><dd>It is added to the Claude Code system prompt. Empty: no extra instructions.</dd>
         <dt>Model</dt><dd>Empty: the default model. Else haiku, sonnet, opus or fable. <code>msg.model</code> replaces it.</dd>
         <dt>Cache time</dt><dd>How long the prompt cache of the run lives between two requests: 5 or 60 minutes. Default 60. A 60-minute cache write costs more (2&times; input, against 1.25&times;), but a run that waits for the operator longer than 5 minutes reads the cache again.</dd>
+        <dt>Session</dt><dd><code>message</code> (default): each start message runs in a new session. <code>agent</code>: the node is one agent with one session that continues. See <b>Session mode agent</b> below.</dd>
+        <dt>Context limit</dt><dd>Agent mode only. Above this number of tokens, the agent writes a note and a new session continues. Default 100000.</dd>
+        <dt>Max keep-alive</dt><dd>Agent mode only. The number of keep-alive turns before a close. Default 3.</dd>
+        <dt>MQTT broker</dt><dd>Optional. A <code>mqtt-broker</code> config node. It gives the node an inbox and the <code>send</code> tool. See <b>MQTT inbox</b> below.</dd>
         <dt>Prompt</dt><dd>A mustache template over the message, for example <code>{{payload}}</code> or <code>{{stages.triage.problem}}</code>. An object value becomes JSON.</dd>
         <dt>Tools</dt><dd>A comma list of the tools of the agent. Empty: all tools. The agent gets no permission prompt.</dd>
         <dt>Project settings</dt><dd>When set, the run loads <code>CLAUDE.md</code> and <code>.claude/settings.json</code> of the folder. Default off.</dd>
@@ -596,7 +633,7 @@
         <dt>Max turns</dt><dd>Default 30.</dd>
         <dt>Max cost ($)</dt><dd>The cost limit of one run. Default 2. Empty: no limit.</dd>
         <dt>Timeout (min)</dt><dd>The time limit of one run, also while it waits for an answer. Default 30. Empty: no limit.</dd>
-        <dt>Max parallel</dt><dd>The number of runs at the same time. More start messages wait in a queue.</dd>
+        <dt>Max parallel</dt><dd>The number of runs at the same time. More start messages wait in a queue. The agent mode ignores it.</dd>
         <dt>Output schema</dt><dd>Optional JSON schema. When set, the result payload is an object that agrees with the schema.</dd>
         <dt>MCP servers</dt><dd>Optional JSON object: server name to <code>{ command, args, env }</code>. The agent gets these servers and the <code>operator</code> server.</dd>
     </dl>
@@ -645,4 +682,16 @@
     <p><b>New chat</b> (the + button) makes the node forget its last session and clears the popup log. The next message from the popup starts a new session. It is not possible while a run is active.</p>
     <p>The message box is at the bottom. Enter sends; Shift+Enter starts a new line. When no run is active, Send starts a run with your text as the task; the run continues the last session of the node. When the agent asks a question, the popup shows it with one button for each option, and Send becomes Answer. Interrupt and Stop show only while a run is active.</p>
     <p>A deploy of the node ends its live runs and clears the popup log.</p>
+
+    <h3>Session mode agent</h3>
+    <p>The node runs one turn at a time and keeps one session. A message that arrives during a turn waits. At the turn end, all waiting messages go in as one prompt, and each gets one output.</p>
+    <p>After a turn, a timer runs: the cache time minus 1 minute. Each model response starts it again. At the timer end, the node closes the session: it asks the agent for a note of 200 words maximum, stores the answer, and forgets the session. An empty answer gives no note. If a <code>send</code> has no answer yet, the node sends a keep-alive turn (prompt <code>.</code>) in place of the close, up to <b>Max keep-alive</b> times.</p>
+    <p>A context above <b>Context limit</b> at a turn end also closes the session. In a long turn, the node tells the agent to call the tool <code>handoff(note)</code>. The node then stores the note and continues the task in a new session. The input message gets its output from the new session.</p>
+    <p>A new session starts with the note and then deletes it. The note is the file <code>&lt;userDir&gt;/claude-agent/&lt;node id&gt;.note.md</code>. Stop keeps the session, and the timer runs.</p>
+    <p>Keep-alive and close turns send nothing on the outputs. The popup shows them as <i>life cycle</i> lines.</p>
+
+    <h3>MQTT inbox</h3>
+    <p>The address of the agent is <code>&lt;team&gt;/&lt;name&gt;</code>: the tab label and the node name. <code>/ + #</code> and white space become <code>-</code>. A node with no name gets no inbox.</p>
+    <p>The inbox topic is <code>agents/&lt;team&gt;/agent/&lt;name&gt;/inbox</code> (QoS 1). The payload is JSON <code>{ "from": "&lt;team&gt;/&lt;name&gt;", "text": "..." }</code>. Other payloads give a warning. An inbox message starts a turn in both session modes. Its result goes out on output 1 as a new msg.</p>
+    <p>The agent gets the tool <code>send(to, text)</code>. <code>to</code> is <code>name</code> (same team) or <code>team/name</code>. With no broker connection, the tool gives an error text. A send that has no answer yet keeps the session open with keep-alive turns.</p>
 </script>
