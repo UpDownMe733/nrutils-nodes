@@ -503,6 +503,45 @@ describe('claude-agent popup identity block', () => {
         assert.equal(t.part('about').textContent, 'opus · work root');
     });
 
+    describe('model', () => {
+        const about = (t) => t.part('about').textContent;
+        const withModel = (fields, state) => setup({}, { events: [], runs: [], session: { cacheTtl: '1h', lastActivity: null }, ...state }, fields);
+
+        it('shows the model of the selected run as family and version', async () => {
+            const t = withModel({}, { runs: [run({ model: 'claude-opus-5-5' })] });
+            await settle();
+            assert.equal(about(t), 'opus 5.5 · work root');
+        });
+
+        it('shows an ID of another format in full', async () => {
+            const t = withModel({}, { runs: [run({ model: 'my-model' })] });
+            await settle();
+            assert.equal(about(t), 'my-model · work root');
+        });
+
+        it('with no run, shows the model of the last run, and updates on a session message', async () => {
+            const t = withModel({}, { session: { cacheTtl: '1h', lastActivity: null, model: 'claude-sonnet-5-5' } });
+            await settle();
+            assert.equal(about(t), 'sonnet 5.5 · work root');
+            t.receive('session', { cacheTtl: '1h', lastActivity: null, model: 'claude-haiku-5-5' });
+            assert.equal(about(t), 'haiku 5.5 · work root');
+        });
+
+        it('with no run since the start, shows the model field of the node', async () => {
+            const t = withModel({ model: 'sonnet' });
+            await settle();
+            assert.equal(about(t), 'sonnet · work root');
+        });
+
+        it('marks a node model of another family, and not one of the same family', async () => {
+            const t = withModel({ model: 'sonnet' }, { runs: [run({ model: 'claude-opus-5-5' })] });
+            await settle();
+            assert.equal(about(t), 'opus 5.5 (node: sonnet) · work root');
+            t.receive('runs', [run({ model: 'claude-sonnet-5-5' })]);
+            assert.equal(about(t), 'sonnet 5.5 · work root');
+        });
+    });
+
     it('does not throw when the popup has gone', () => {
         const t = setup({}, undefined, full);
         t.div.childNodes = [];
@@ -763,6 +802,23 @@ describe('claude-agent popup text selection', () => {
         assert.match(css, /\.ca-bubble,\.ca-inbox-text,\.ca-log\{cursor:text\}/);
         // Only the button rule turns the selection off
         assert.doesNotMatch(css.replace('.ca-popup button{user-select:none}', ''), /user-select:(none|auto)/);
+    });
+
+    it('only the empty part of the tab row moves the popup: it gives the mouse press to the title bar', async () => {
+        const events = [];
+        class MouseEvent { constructor(type, init) { Object.assign(this, { type }, init); } }
+        const t = setup({ MouseEvent });
+        const bar = fakeElement('rect');
+        bar.id = 'nru_popup.n1.header';
+        bar.dispatchEvent = (e) => events.push(e);
+        t.head.childNodes.push(bar);
+        const spacer = walk(t.div).find((e) => e.className === 'ca-spacer');
+        let prevented = 0;
+        spacer.listeners.mousedown[0]({ clientX: 7, clientY: 9, preventDefault() { prevented++; } });
+        assert.deepEqual(events.map((e) => [e.type, e.clientX, e.clientY]), [['mousedown', 7, 9]]);
+        assert.equal(prevented, 1);
+        assert.equal(t.part('tab-chat').listeners.mousedown, undefined);
+        assert.equal(t.part('log').listeners.mousedown, undefined);
     });
 
     it('the right button menu stays in the popup, so the browser menu has Copy', async () => {

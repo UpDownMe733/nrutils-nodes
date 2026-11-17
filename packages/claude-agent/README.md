@@ -196,8 +196,11 @@ with one active run.
 ## Popup
 
 Click the node to open the popup. The top shows the name of the node (or `claude-agent`), its summary
-(when set) and a line with its model, folder and sandbox. The last line shows the settings of the node,
-not the `msg.model` or `msg.cwd` of a run. The tabs are below it: **Chat** and **Timeline**. On the right are the run
+(when set) and a line with its model, folder and sandbox. The model is the true model of the selected run, as
+family and version, for example `opus 5.5`. With no run, it is the model of the last run. With no run since the start,
+it is the model of the node, or `default model`. A model of the node with another family shows after it, for example
+`opus 5.5 (node: sonnet)`. The folder and the sandbox are the settings of the node, not the `msg.cwd` of a run.
+Drag the empty part of the tab row to move the popup. The tabs are below it: **Chat** and **Timeline**. On the right are the run
 list (with more than one run), the timer chip and **New chat**.
 The status line shows the state, the turns, the tokens used and the context size of the last model response.
 

@@ -112,6 +112,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     const queue = [];           // start messages that wait for a free slot: { msg, send, done, text }
     let lastSessionId;          // session of the newest run; the popup continues it
     let lastSessionCwd;         // folder of that session; the popup run uses it again
+    let lastModel = null;       // the model of the last run, from its init message
     let sessionActivity = null; // time of the last model response in that session; the popup counts down the cache from it
     const log = [];             // the last LOG_SIZE events of all runs, for a new popup
     let lastStatus = {};
@@ -120,13 +121,13 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     function runList() {
         return [...runs.values()].map((r) => ({
             runId: r.id, state: r.state, turns: r.turns, tokens: r.tokens === undefined ? '' : tokenText(r.tokens), context: r.context === undefined ? '' : sizeText(r.context), question: r.question,
-            startTime: r.startTime, lastActivity: r.lastActivity
+            startTime: r.startTime, lastActivity: r.lastActivity, model: r.model
         }));
     }
 
     // The session state of the popup: the cache time and the time of the last model response
     function session() {
-        return { cacheTtl, lastActivity: sessionActivity };
+        return { cacheTtl, lastActivity: sessionActivity, model: lastModel };
     }
 
     // A model response of the run. The prompt cache lives for the cache time after it.
@@ -499,8 +500,10 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
                     run.sessionId = lastSessionId = m.session_id;
                     lastSessionCwd = cwd;
                 }
-                if (m.type === 'system' && m.subtype === 'init') run.model = m.model;
-                else if (m.type === 'system' && m.subtype === 'background_tasks_changed') {
+                if (m.type === 'system' && m.subtype === 'init') {
+                    run.model = lastModel = m.model;
+                    comms.publish('runs', runList());
+                } else if (m.type === 'system' && m.subtype === 'background_tasks_changed') {
                     run.background = m.tasks.filter((t) => !t.ambient).length;
                 } else if (m.type === 'result') onResult(run, m);
                 else if (m.type === 'assistant' || m.type === 'user') {
