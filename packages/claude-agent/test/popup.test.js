@@ -664,23 +664,46 @@ describe('claude-agent summaryFromPrompt', () => {
 
 describe('claude-agent popup chat sender', () => {
     const entries = (p) => p.part('list').childNodes;
+    const long = 'line 1\nline 2\nline 3\nline 4 ' + 'x'.repeat(400);
     const events = [
         event('prompt', 'typed', { seq: 1 }),
-        event('prompt', 'Message from agent Team-B/peer (x):\nhi', { seq: 2, source: 'agent', from: 'Team-B/peer' }),
+        event('prompt', long, { seq: 2, source: 'agent', from: 'Team-B/peer', time: new Date(2026, 0, 1, 9, 5).getTime() }),
         event('prompt', '.', { seq: 3, source: 'life' })
     ];
-
-    it('the history shows typed text as operator and hides an inbox message and a keep-alive prompt', async () => {
-        const list = entries(await popup({ events }));
-        assert.equal(list.length, 1);
+    const check = (list) => {
+        assert.equal(list.length, 2);
         assert.match(list[0].childNodes[0].textContent, /^You/);
+        const card = list[1];
+        assert.ok(card.classList.contains('ca-inbox') && !card.classList.contains('ca-op'));
+        assert.equal(card.childNodes[0].textContent, 'From Team-B/peer · 09:05');
+        assert.equal(card.childNodes[1].textContent, long, 'the card has the full text');
+        assert.ok(!card.classList.contains('ca-open'), 'the card is closed');
+    };
+
+    it('the history shows typed text as operator, an inbox message as a closed card and no keep-alive prompt', async () => {
+        check(entries(await popup({ events })));
     });
 
-    it('the live view hides the same messages', async () => {
+    it('the live view shows the same entries', async () => {
         const p = await popup({});
         for (const e of events) p.receive('event', e);
-        const list = entries(p);
-        assert.equal(list.length, 1);
-        assert.match(list[0].childNodes[0].textContent, /^You/);
+        check(entries(p));
+    });
+
+    it('a click opens a long card and a second click closes it', async () => {
+        const card = entries(await popup({ events }))[1];
+        card.click();
+        assert.ok(card.classList.contains('ca-open'));
+        assert.equal(card.getAttribute('aria-expanded'), 'true');
+        card.click();
+        assert.ok(!card.classList.contains('ca-open'));
+        assert.equal(card.getAttribute('aria-expanded'), 'false');
+    });
+
+    it('a short card has no toggle', async () => {
+        const card = entries(await popup({ events: [event('prompt', 'hi', { source: 'agent', from: 'T/a' })] }))[0];
+        card.click();
+        assert.ok(!card.classList.contains('ca-open'));
+        assert.equal(card.childNodes[0].childNodes.length, 0, 'no arrow icon');
     });
 });
