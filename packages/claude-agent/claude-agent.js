@@ -93,7 +93,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     // The session mode agent: the node is one agent with one session that continues
     const agentMode = config.session === 'agent';
     const contextLimit = Number(config.contextLimit) || 100000;
-    const maxKeepAlive = Number(config.maxKeepAlive ?? 3);
+    const maxKeepAlive = config.maxKeepAlive === '' || config.maxKeepAlive == null ? 3 : Number(config.maxKeepAlive);
     const lifeMs = (cacheTtl === '5m' ? 5 : 60) * 60000 - 60000;
     const notePath = path.join(RED.settings.userDir, 'claude-agent', node.id + '.note.md');
     let lifeTimer = null;

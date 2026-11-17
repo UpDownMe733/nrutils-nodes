@@ -78,7 +78,8 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
         events: { on: (type, fn) => (handlers[type] = handlers[type] || []).push(fn) },
         nodes: { registerType: (name, d) => { def = d; } },
         notify: (text, type) => notes.push({ text, type }),
-        validators: { number: () => () => true },
+        // The rule of RED.validators.number: an empty or absent value is valid only with blankAllowed.
+        validators: { number: (blankAllowed) => (v) => (v === '' || v === undefined ? !!blankAllowed : !isNaN(v)) },
         settings: {}
     };
     vm.runInNewContext(script, { document, RED, window: {}, Date: FakeDate, setInterval, clearInterval, ...extra });
@@ -533,6 +534,14 @@ describe('claude-agent edit dialog', () => {
         assert.match(template.slice(summary, template.indexOf('>', summary)), /maxlength="120"/);
         assert.ok(template.includes('id="claude-agent-summary-from-prompt"'));
         assert.equal(setup().getDef().defaults.summary.value, '');
+    });
+
+    it('accepts a node that was saved before the life cycle fields', () => {
+        const defaults = setup().getDef().defaults;
+        for (const field of ['contextLimit', 'maxKeepAlive']) {
+            assert.equal(defaults[field].validate(undefined), true, field);
+            assert.equal(defaults[field].validate('x'), false, field);
+        }
     });
 
     const click = (prompt) => {
