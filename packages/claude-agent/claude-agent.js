@@ -118,7 +118,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
 
     function runList() {
         return [...runs.values()].map((r) => ({
-            runId: r.id, state: r.state, turns: r.turns, tokens: tokenText(r.tokens), context: sizeText(r.context), question: r.question,
+            runId: r.id, state: r.state, turns: r.turns, tokens: tokenText(r.tokens), context: r.context === undefined ? '' : sizeText(r.context), question: r.question,
             startTime: r.startTime, lastActivity: r.lastActivity
         }));
     }

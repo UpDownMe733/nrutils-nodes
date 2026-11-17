@@ -133,7 +133,7 @@
         const run = selectedRun(node);
         const status = document.getElementById('nru_popup.' + node.id + '.statusText');
         if (status) {
-            status.setStatusText(run ? run.state + ', ' + run.turns + ' turns, ' + run.tokens + ', context ' + run.context
+            status.setStatusText(run ? run.state + ', ' + run.turns + ' turns, ' + run.tokens + (run.context ? ', context ' + run.context : '')
                 : lastEnd[node.id] || 'no active run');
         }
         const ask = part(node, 'ask');
