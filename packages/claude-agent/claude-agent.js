@@ -553,11 +553,11 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         } catch {
             // Not JSON: the check below warns.
         }
-        if (!m || typeof m.from !== 'string' || typeof m.text !== 'string') {
+        if (!m || typeof m.from !== 'string' || !m.from.trim() || typeof m.text !== 'string') {
             return node.warn(`the inbox message is not the JSON { "from", "text" }: ${cut(payload.toString())}`);
         }
         openItems.delete(m.from);
-        enqueue({ _msgid: RED.util.generateId(), payload: m.text }, `${INBOX_LABEL(m.from)}\n${m.text}`, m.from || 'unknown', m.text);
+        enqueue({ _msgid: RED.util.generateId(), payload: m.text }, `${INBOX_LABEL(m.from)}\n${m.text}`, m.from, m.text);
     }
 
     if (broker) {

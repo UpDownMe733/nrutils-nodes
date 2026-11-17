@@ -383,7 +383,7 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         const sent = brokerGot.find((m) => m.topic === inbox('peer'));
         assert.ok(sent, JSON.stringify(brokerGot));
         assert.deepEqual(JSON.parse(sent.payload), { from: 'Team-A/Sender', text: 'hello' });
-        assert.ok(lifeLines('sender').includes('waiting for Team-A/peer'), lifeLines('sender').join('|'));
+        await waitFor(async () => lifeLines('sender').includes('waiting for Team-A/peer'), 5000, 'the life line waiting for Team-A/peer');
         for (let n = 1; n <= 3; n++) {
             await idle('sender');
             await fire();
@@ -431,6 +431,14 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
     it('an inbox payload that is not the JSON contract gives a warning and no run', async () => {
         await publish(inbox('Plain'), 'not json');
         await waitFor(async () => /\[warn\] \[claude-agent:Plain\] the inbox message is not/.test(log), 5000, 'warning');
+        assert.equal(prompts('plain').length, 0);
+    });
+
+    it('an inbox message with an empty sender gives a warning and no run', async () => {
+        const warnings = () => (log.match(/the inbox message is not/g) || []).length;
+        const before = warnings();
+        await publish(inbox('Plain'), JSON.stringify({ from: ' ', text: 'hi' }));
+        await waitFor(async () => warnings() === before + 1, 5000, 'warning');
         assert.equal(prompts('plain').length, 0);
     });
 
