@@ -19,7 +19,7 @@ function fakeElement(tag) {
     const listeners = {};
     const e = {
         tagName: tag.toUpperCase(), style: {}, childNodes: [], value: '', clicks: 0, focused: 0, disabled: false, title: '',
-        scrollTop: 0, scrollHeight: 0, attributes: {}, listeners,
+        scrollTop: 0, scrollHeight: 0, clientHeight: 0, attributes: {}, listeners,
         get className() { return [...classes].join(' '); },
         set className(v) { classes.clear(); String(v).split(/\s+/).filter(Boolean).forEach((c) => classes.add(c)); },
         classList: {
@@ -46,6 +46,7 @@ function fakeElement(tag) {
         get firstChild() { return e.childNodes[0]; },
         setAttribute(name, value) { e.attributes[name] = String(value); },
         getAttribute: (name) => e.attributes[name],
+        removeAttribute(name) { delete e.attributes[name]; },
         addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
         appendChild(c) { e.childNodes.push(c); return c; },
         removeChild(c) { e.childNodes.splice(e.childNodes.indexOf(c), 1); },
@@ -94,8 +95,16 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
         utils: { renderMarkdown: (text) => '<md>' + text + '</md>' }
     };
     const sanitized = [];
+    // A fake ResizeObserver: a test sets the size of the target, then calls resize() as the browser does at a layout
+    const observed = [];
+    class ResizeObserver {
+        constructor(fn) { this.fn = fn; }
+        observe(target) { observed.push({ fn: this.fn, target }); }
+    }
+    const resize = () => observed.forEach((o) => o.fn([{ target: o.target }]));
     const DOMPurify = { sanitize: (html, config) => { sanitized.push(config); return html.replace(/<script.*?<\/script>/g, ''); } };
-    vm.runInNewContext(script, { document, RED, DOMPurify, window: {}, Date: FakeDate, setInterval, clearInterval, ...extra });
+    const window = {};
+    vm.runInNewContext(script, { document, RED, DOMPurify, window, Date: FakeDate, setInterval, clearInterval, ResizeObserver, ...extra });
     const getDef = () => def;
     const answers = { 'get-log': state, 'new-chat': {} };
     const node = {
@@ -115,7 +124,7 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const part = (name) => document.getElementById('claude-agent-' + name + '-n1');
     const rebuild = () => def.nru_popupInit.call(node);
     const emit = (type, ...args) => (handlers[type] || []).forEach((fn) => fn(...args));
-    return { sanitized, emit, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
+    return { window, resize, sanitized, emit, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
 }
 
 const key = (text, init) => {
@@ -676,23 +685,71 @@ describe('claude-agent summaryFromPrompt', () => {
 
 describe('claude-agent popup chat sender', () => {
     const entries = (p) => p.part('list').childNodes;
+    const long = 'line 1\nline 2\nline 3\nline 4 ' + 'x'.repeat(400);
     const events = [
         event('prompt', 'typed', { seq: 1 }),
-        event('prompt', 'Message from agent Team-B/peer (x):\nhi', { seq: 2, source: 'agent', from: 'Team-B/peer' }),
+        event('prompt', long, { seq: 2, source: 'agent', from: 'Team-B/peer', time: new Date(2026, 0, 1, 9, 5).getTime() }),
         event('prompt', '.', { seq: 3, source: 'life' })
     ];
-
-    it('the history shows typed text as operator and hides an inbox message and a keep-alive prompt', async () => {
-        const list = entries(await popup({ events }));
-        assert.equal(list.length, 1);
+    const check = (list) => {
+        assert.equal(list.length, 2);
         assert.match(list[0].childNodes[0].textContent, /^You/);
+        const card = list[1];
+        assert.ok(card.classList.contains('ca-inbox') && !card.classList.contains('ca-op'));
+        assert.equal(card.childNodes[0].textContent, 'From Team-B/peer · 09:05');
+        assert.equal(card.childNodes[1].textContent, long, 'the card has the full text');
+        assert.ok(!card.classList.contains('ca-open'), 'the card is closed');
+    };
+
+    it('the history shows typed text as operator, an inbox message as a closed card and no keep-alive prompt', async () => {
+        check(entries(await popup({ events })));
     });
 
-    it('the live view hides the same messages', async () => {
+    it('the live view shows the same entries', async () => {
         const p = await popup({});
         for (const e of events) p.receive('event', e);
-        const list = entries(p);
-        assert.equal(list.length, 1);
-        assert.match(list[0].childNodes[0].textContent, /^You/);
+        check(entries(p));
+    });
+
+    // The browser lays out the card: the text is higher than its 3 lines (long) or not
+    const layout = (p, high) => {
+        const text = entries(p)[entries(p).length - 1].childNodes[1];
+        text.scrollHeight = high ? 200 : 50;
+        text.clientHeight = 50;
+        p.resize();
+    };
+
+    it('a click opens a long card and a second click closes it', async () => {
+        const p = await popup({ events });
+        layout(p, true);
+        const card = entries(p)[1];
+        assert.ok(card.classList.contains('ca-more'));
+        assert.equal(card.getAttribute('role'), 'button');
+        card.click();
+        assert.ok(card.classList.contains('ca-open'));
+        assert.equal(card.getAttribute('aria-expanded'), 'true');
+        card.click();
+        assert.ok(!card.classList.contains('ca-open'));
+        assert.equal(card.getAttribute('aria-expanded'), 'false');
+    });
+
+    it('a short card has no toggle', async () => {
+        const p = await popup({ events: [event('prompt', 'hi', { source: 'agent', from: 'T/a' })] });
+        layout(p, false);
+        const card = entries(p)[0];
+        card.click();
+        assert.ok(!card.classList.contains('ca-more'), 'no arrow, no mask');
+        assert.ok(!card.classList.contains('ca-open'));
+        assert.equal(card.getAttribute('role'), undefined);
+    });
+
+    it('a click that ends a text selection in the card does not toggle it', async () => {
+        const p = await popup({ events });
+        layout(p, true);
+        const card = entries(p)[1];
+        card.contains = () => true;
+        p.window.getSelection = () => ({ isCollapsed: false, anchorNode: card.childNodes[1] });
+        card.click();
+        assert.ok(!card.classList.contains('ca-open'));
     });
 });

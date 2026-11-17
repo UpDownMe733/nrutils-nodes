@@ -61,6 +61,16 @@
 .ca-md th{background:var(--red-ui-secondary-background);font-weight:600}
 .ca-md blockquote{padding-left:8px;border-left:3px solid var(--red-ui-secondary-border-color);color:var(--red-ui-secondary-text-color)}
 .ca-md hr{border:none;border-top:1px solid var(--red-ui-secondary-border-color);margin:6px 0}
+.ca-inbox{max-width:85%;padding:4px 10px 6px;border-radius:6px;border:1px solid var(--red-ui-secondary-border-color);border-left:3px solid var(--red-ui-secondary-text-color);background:var(--red-ui-secondary-background)}
+.ca-inbox.ca-more,.ca-inbox.ca-open{cursor:pointer}
+.ca-inbox:focus-visible{outline:1px solid var(--red-ui-form-input-focus-color)}
+.ca-inbox .ca-meta{display:flex;align-items:center;gap:6px;margin:0 0 2px;font-size:11px;font-weight:600;color:var(--red-ui-secondary-text-color)}
+.ca-inbox .ca-meta i{display:none;margin-left:auto;font-size:16px;line-height:1;color:var(--red-ui-primary-text-color);transition:transform .15s}
+.ca-inbox.ca-more .ca-meta i,.ca-inbox.ca-open .ca-meta i{display:inline}
+.ca-inbox.ca-open .ca-meta i{transform:rotate(180deg)}
+.ca-inbox-text{font-size:12px;line-height:1.4;max-height:calc(3 * 1.4em);overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;color:var(--red-ui-primary-text-color)}
+.ca-inbox.ca-more:not(.ca-open) .ca-inbox-text{-webkit-mask-image:linear-gradient(#000 60%,transparent);mask-image:linear-gradient(#000 60%,transparent)}
+.ca-inbox.ca-open .ca-inbox-text{max-height:300px;overflow-y:auto}
 .ca-end{align-self:center;font-size:10px;padding:1px 8px;border-radius:10px;background:var(--red-ui-tertiary-background);color:var(--red-ui-secondary-text-color)}
 .ca-end.ca-error{color:var(--red-ui-text-color-error);border:1px solid var(--red-ui-border-color-error)}
 .ca-end.ca-life{font-style:italic;border:1px dashed var(--red-ui-secondary-border-color)}
@@ -203,15 +213,59 @@
         });
     }
 
+    // A message from another agent: a closed card on the left with the sender, the time and the first 3 lines.
+    // A card with more text than 3 lines gets the class ca-more: an arrow shows, and a click or Enter opens the full text.
+    // The next click closes it. A click that ends a text selection in the card does not.
+    function inboxCard(e) {
+        const card = make('div', '', 'ca-msg ca-inbox');
+        const meta = make('div', 'From ' + e.from + ' · ' + clock(e.time), 'ca-meta');
+        const text = make('div', e.text, 'ca-inbox-text');
+        meta.appendChild(make('i', '', 'fa fa-angle-down'));
+        card.appendChild(meta);
+        card.appendChild(text);
+        const toggle = () => {
+            if (!card.classList.contains('ca-more') && !card.classList.contains('ca-open')) return;
+            card.setAttribute('aria-expanded', String(card.classList.toggle('ca-open')));
+        };
+        card.addEventListener('click', () => {
+            const s = window.getSelection && window.getSelection();
+            if (!s || s.isCollapsed || !card.contains(s.anchorNode)) toggle();
+        });
+        card.addEventListener('keydown', (k) => {
+            if (k.target !== card || (k.key !== 'Enter' && k.key !== ' ')) return;
+            k.preventDefault();
+            toggle();
+        });
+        // The measure runs at the first layout, at a resize of the popup and when the hidden tab shows.
+        if (typeof ResizeObserver === 'function') {
+            new ResizeObserver(() => {
+                if (card.classList.contains('ca-open')) return;
+                const more = text.scrollHeight > text.clientHeight + 1;
+                card.classList.toggle('ca-more', more);
+                if (more) {
+                    card.tabIndex = 0;
+                    card.setAttribute('role', 'button');
+                    card.setAttribute('aria-expanded', 'false');
+                } else {
+                    card.removeAttribute('tabindex');
+                    card.removeAttribute('role');
+                    card.removeAttribute('aria-expanded');
+                }
+            }).observe(text);
+        }
+        return card;
+    }
+
     // The chat tab: operator bubbles on the right, agent bubbles on the left, the end of a run as a pill
     function addChat(node, e) {
         const list = part(node, 'list');
         if (!list) return;
         let entry;
         // A keep-alive or close prompt is not text of the operator: the life cycle pill shows it.
-        // An inbox message from another agent is not shown here: the Timeline tab has it.
-        if (e.kind === 'prompt' && (e.source === 'life' || e.source === 'agent')) return;
-        if (OPERATOR_KINDS.includes(e.kind) || AGENT_KINDS.includes(e.kind)) {
+        if (e.kind === 'prompt' && e.source === 'life') return;
+        if (e.kind === 'prompt' && e.source === 'agent') {
+            entry = inboxCard(e);
+        } else if (OPERATOR_KINDS.includes(e.kind) || AGENT_KINDS.includes(e.kind)) {
             const operator = OPERATOR_KINDS.includes(e.kind);
             const runId = (activeRuns[node.id] || []).length > 1 && !operator ? ' ' + e.runId : '';
             entry = make('div', '', 'ca-msg ' + (operator ? 'ca-op' : 'ca-agent') + (e.kind === 'question' ? ' ca-question' : ''));
@@ -741,7 +795,7 @@
     <p>Keep-alive and close turns send nothing on the outputs. The popup shows them as <i>life cycle</i> lines.</p>
 
     <h3>MQTT inbox</h3>
-    <p>The popup shows the text of the agent as markdown: headings, lists, tables, code, links and emphasis. A link opens in a new tab. An image or other remote file does not show. The text of the operator and of a question stays plain text. The Chat tab does not show an inbox message. The Timeline tab shows it. A keep-alive turn has no bubble: the life cycle line shows it.</p>
+    <p>The popup shows the text of the agent as markdown: headings, lists, tables, code, links and emphasis. A link opens in a new tab. An image or other remote file does not show. The text of the operator and of a question stays plain text. The Chat tab shows an inbox message as a closed card on the left: the sender, the time and the first 3 lines. A click on a longer card opens the full text in the card, and a second click closes it. The Timeline tab shows the full text too. A keep-alive turn has no bubble: the life cycle line shows it.</p>
     <p>The address of the agent is <code>&lt;team&gt;/&lt;name&gt;</code>: the tab label and the node name. <code>/ + #</code> and white space become <code>-</code>. A node with no name gets no inbox.</p>
     <p>The inbox topic is <code>agents/&lt;team&gt;/agent/&lt;name&gt;/inbox</code> (QoS 1). The payload is JSON <code>{ "from": "&lt;team&gt;/&lt;name&gt;", "text": "..." }</code>. Other payloads give a warning. An inbox message starts a turn in both session modes. Its result goes out on output 1 as a new msg.</p>
     <p>The agent gets the tool <code>send(to, text)</code>. <code>to</code> is <code>name</code> (same team) or <code>team/name</code>. With no broker connection, the tool gives an error text. A send that has no answer yet keeps the session open with keep-alive turns.</p>
