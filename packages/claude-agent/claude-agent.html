@@ -633,6 +633,7 @@
             div.appendChild(root);
             showIdentity(node);
             showView(node, views[node.id] || 'chat');
+            showBadge(node, views[node.id] === 'agents' ? 0 : unread[node.id] || 0);
             showRun(node);
             popups[node.id] = node;
             startChipTimer();

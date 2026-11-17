@@ -799,6 +799,14 @@ describe('claude-agent popup chat sender', () => {
         assert.equal(entries(p).length, 0);
     });
 
+    it('a rebuilt popup keeps the count of the badge', async () => {
+        const p = await popup({});
+        p.receive('event', event('prompt', 'a', { source: 'agent', from: 'T/a' }));
+        p.rebuild();
+        assert.equal(p.part('badge').textContent, '1');
+        assert.equal(p.part('badge').style.display, '');
+    });
+
     it('the Agents tab shows with the Chat and the Timeline as tabs', async () => {
         const p = await popup({ events });
         assert.equal(p.part('agents').style.display, 'none');
