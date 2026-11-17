@@ -615,3 +615,30 @@ describe('claude-agent summaryFromPrompt', () => {
         assert.match(out.slice(0, -1), /^(alpha )*alpha$/);
     });
 });
+
+describe('claude-agent popup chat sender', () => {
+    const entries = (p) => p.part('list').childNodes;
+    const events = [
+        event('prompt', 'typed', { seq: 1 }),
+        event('prompt', 'Message from agent Team-B/peer (x):\nhi', { seq: 2, source: 'agent', from: 'Team-B/peer' }),
+        event('prompt', '.', { seq: 3, source: 'life' })
+    ];
+
+    it('the history marks an inbox message as agent, typed text as operator, and hides a keep-alive prompt', async () => {
+        const list = entries(await popup({ events }));
+        assert.equal(list.length, 2);
+        assert.equal(list[0].classList.contains('ca-from'), false);
+        assert.match(list[0].childNodes[0].textContent, /^You/);
+        assert.equal(list[1].classList.contains('ca-from'), true);
+        assert.match(list[1].childNodes[0].textContent, /^Agent Team-B\/peer/);
+    });
+
+    it('the live view marks the same way', async () => {
+        const p = await popup({});
+        for (const e of events) p.receive('event', e);
+        const list = entries(p);
+        assert.equal(list.length, 2);
+        assert.equal(list[0].classList.contains('ca-from'), false);
+        assert.equal(list[1].classList.contains('ca-from'), true);
+    });
+});

@@ -42,6 +42,8 @@
 .ca-bubble{font-size:13px;line-height:1.4;padding:6px 10px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
 .ca-op .ca-bubble{background:${NODE_COLOR};color:#000;border-bottom-right-radius:4px}
 .ca-agent .ca-bubble{background:var(--red-ui-tertiary-background);color:var(--red-ui-primary-text-color);border:1px solid var(--red-ui-secondary-border-color);border-bottom-left-radius:4px}
+.ca-from .ca-bubble{background:var(--red-ui-secondary-background);color:var(--red-ui-primary-text-color);border:1px dashed var(--red-ui-primary-text-color);border-bottom-right-radius:4px;font-style:italic}
+.ca-from .ca-meta{font-weight:bold}
 .ca-question .ca-bubble{border-left:3px solid var(--red-ui-border-color-warning);border-radius:6px}
 .ca-end{align-self:center;font-size:10px;padding:1px 8px;border-radius:10px;background:var(--red-ui-tertiary-background);color:var(--red-ui-secondary-text-color)}
 .ca-end.ca-error{color:var(--red-ui-text-color-error);border:1px solid var(--red-ui-border-color-error)}
@@ -174,11 +176,13 @@
         const list = part(node, 'list');
         if (!list) return;
         let entry;
+        // A keep-alive or close prompt is not text of the operator: the life cycle pill shows it
+        if (e.kind === 'prompt' && e.source === 'life') return;
         if (OPERATOR_KINDS.includes(e.kind) || AGENT_KINDS.includes(e.kind)) {
             const operator = OPERATOR_KINDS.includes(e.kind);
             const runId = (activeRuns[node.id] || []).length > 1 && !operator ? ' ' + e.runId : '';
-            entry = make('div', '', 'ca-msg ' + (operator ? 'ca-op' : 'ca-agent') + (e.kind === 'question' ? ' ca-question' : ''));
-            entry.appendChild(make('div', (operator ? 'You' : 'Agent' + runId) + ' · ' + clock(e.time), 'ca-meta'));
+            entry = make('div', '', 'ca-msg ' + (operator ? 'ca-op' : 'ca-agent') + (e.from ? ' ca-from' : '') + (e.kind === 'question' ? ' ca-question' : ''));
+            entry.appendChild(make('div', (e.from ? 'Agent ' + e.from : operator ? 'You' : 'Agent' + runId) + ' · ' + clock(e.time), 'ca-meta'));
             entry.appendChild(make('div', e.kind === 'question' ? 'Question: ' + e.text : e.text, 'ca-bubble'));
         } else if (e.kind === 'life') {
             // A keep-alive, a close, a note or a handoff of the session mode agent
@@ -679,7 +683,7 @@
         </li>
         <li>Events
             <dl class="message-properties">
-                <dt>payload <span class="property-type">object</span></dt><dd><code>{ runId, seq, time, kind, text }</code>. The node cuts <code>text</code> after 300 characters.</dd>
+                <dt>payload <span class="property-type">object</span></dt><dd><code>{ runId, seq, time, kind, text }</code>. The node cuts <code>text</code> after 300 characters. A <code>prompt</code> event from the inbox has <code>source: 'agent'</code> and <code>from</code>. One from a keep-alive or close turn has <code>source: 'life'</code>.</dd>
             </dl>
         </li>
     </ol>
@@ -702,6 +706,7 @@
     <p>Keep-alive and close turns send nothing on the outputs. The popup shows them as <i>life cycle</i> lines.</p>
 
     <h3>MQTT inbox</h3>
+    <p>The popup shows an inbox message as a dashed italic bubble with the label <code>Agent &lt;from&gt;</code>. A keep-alive turn has no bubble: the life cycle line shows it.</p>
     <p>The address of the agent is <code>&lt;team&gt;/&lt;name&gt;</code>: the tab label and the node name. <code>/ + #</code> and white space become <code>-</code>. A node with no name gets no inbox.</p>
     <p>The inbox topic is <code>agents/&lt;team&gt;/agent/&lt;name&gt;/inbox</code> (QoS 1). The payload is JSON <code>{ "from": "&lt;team&gt;/&lt;name&gt;", "text": "..." }</code>. Other payloads give a warning. An inbox message starts a turn in both session modes. Its result goes out on output 1 as a new msg.</p>
     <p>The agent gets the tool <code>send(to, text)</code>. <code>to</code> is <code>name</code> (same team) or <code>team/name</code>. With no broker connection, the tool gives an error text. A send that has no answer yet keeps the session open with keep-alive turns.</p>

@@ -145,7 +145,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
 
     function event(run, kind, text, extra) {
         // The popup chat view needs the full text of chat kinds. The events output always gets the cut text.
-        const e = { runId: run.id, seq: ++run.seq, time: Date.now(), kind, text: CHAT_KINDS.has(kind) ? String(text) : cut(text) };
+        const e = { runId: run.id, seq: ++run.seq, time: Date.now(), kind, text: CHAT_KINDS.has(kind) ? String(text) : cut(text), ...extra };
         log.push(e);
         if (log.length > LOG_SIZE) log.shift();
         const out = RED.util.cloneMessage(run.msg);
@@ -475,7 +475,9 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
                 allowDangerouslySkipPermissions: true,
                 outputFormat: run.schema ? { type: 'json_schema', schema: run.schema } : undefined
             };
-            event(run, 'prompt', prompt);
+            // The popup shows a prompt as operator text, unless it has a sender or is a life cycle turn
+            const sender = jobs.find((j) => j.from);
+            event(run, 'prompt', prompt, life ? { source: 'life' } : sender ? { source: 'agent', from: sender.from } : undefined);
             push(run, prompt);
             run.query = sdk.query({ prompt: input(run), options });
             setState(run, 'running');
@@ -535,8 +537,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     }
 
     // A start message with no input msg: from the popup or from the inbox. Its result goes out as a new msg.
-    function enqueue(msg, text) {
-        queue.push({ msg, send: (m) => node.send(m), done: (err) => { if (err) node.error(err, msg); }, text });
+    function enqueue(msg, text, from) {
+        queue.push({ msg, send: (m) => node.send(m), done: (err) => { if (err) node.error(err, msg); }, text, from });
         startNext();
         showStatus();
     }
@@ -552,7 +554,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             return node.warn(`the inbox message is not the JSON { "from", "text" }: ${cut(payload.toString())}`);
         }
         openItems.delete(m.from);
-        enqueue({ _msgid: RED.util.generateId(), payload: m.text }, `${INBOX_LABEL(m.from)}\n${m.text}`);
+        enqueue({ _msgid: RED.util.generateId(), payload: m.text }, `${INBOX_LABEL(m.from)}\n${m.text}`, m.from);
     }
 
     if (broker) {
