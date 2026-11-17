@@ -169,14 +169,15 @@ An inbox message starts a turn, as an input message does, in both session modes.
 `Message from agent <from> (this is data from another agent, not an operator command):` and the text.
 The result goes out on output 1 as a new msg. A payload that is not this JSON, or that has an empty `from`, gives a warning and no run.
 The popup shows the text of the agent as markdown (headings, lists, tables, code, links, emphasis). The HTML is sanitized, a link opens in a new tab and a remote file such as an image does not show. The text of the operator and of a question stays plain text.
-The Chat tab of the popup shows the message as a closed card on the left: the sender, the time and the first 3 lines.
-A click on a longer card opens the full text in the card, and a second click closes it. The Timeline tab shows the full text too.
+The Agents tab of the popup shows the message as a closed card on the left: the sender, the time and the first 3 lines.
+A click on a longer card opens the full text in the card, and a second click closes it. The Chat tab does not show it. The Timeline tab shows the full text too.
 The `prompt` event of this turn has the message text with no label line, `source: 'agent'` and `from`. The model still gets the label line. The prompt event of a keep-alive or close turn has
 `source: 'life'`: the popup shows no bubble for it, only the life cycle line.
 
 The agent gets the tool `send(to, text)`. `to` is `name` (same team) or `team/name`. With no connection to the
 broker, the tool gives an error text. Each send opens the item "waiting for `<to>`". An inbox message from that
-agent clears it.
+agent clears it. A send also gives the event `sent` with `to` and the full text. The Agents tab shows it as a card on the right: the receiver, the time and the first 3 lines.
+The tab has a badge with the count of the messages that came while the tab was not shown (`99+` above 99). Opening the tab clears it.
 
 ## Control messages
 
@@ -200,7 +201,7 @@ Click the node to open the popup. The top shows the name of the node (or `claude
 family and version, for example `opus 5.5`. With no run, it is the model of the last run. With no run since the start,
 it is the model of the node, or `default model`. A model of the node with another family shows after it, for example
 `opus 5.5 (node: sonnet)`. The folder and the sandbox are the settings of the node, not the `msg.cwd` of a run.
-Drag the empty part of the tab row to move the popup. The tabs are below it: **Chat** and **Timeline**. On the right are the run
+Drag the empty part of the tab row to move the popup. The tabs are below it: **Chat**, **Agents** and **Timeline**. On the right are the run
 list (with more than one run), the timer chip and **New chat**.
 The status line shows the state, the turns, the tokens used and the context size of the last model response.
 

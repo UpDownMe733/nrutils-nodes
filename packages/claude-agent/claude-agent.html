@@ -6,8 +6,9 @@
     const NODE_COLOR = '#9fd8d0';
     const activeRuns = {};      // nodeId to the active runs of the runtime node
     const lastEnd = {};         // nodeId to the end of the last run: the result line, "stopped" or the error
-    const views = {};           // nodeId to the popup tab: 'chat' (the default) or 'timeline'. Survives a popup rebuild.
+    const views = {};           // nodeId to the popup tab: 'chat' (the default), 'agents' or 'timeline'. Survives a popup rebuild.
     const sessions = {};        // nodeId to the last session of the runtime node: { cacheTtl, lastActivity, model }
+    const unread = {};          // nodeId to the count of agent messages that came while the Agents tab was not shown
     const popups = {};          // nodeId to the node of each popup that the editor has built
     let chipTimer = null;       // one timer for the chips of all popups
     const OPERATOR_KINDS = ['prompt', 'message', 'answer'];
@@ -37,7 +38,7 @@
 .ca-chip.ca-warn{color:var(--red-ui-text-color-warning);border-color:var(--red-ui-border-color-warning)}
 .ca-header .red-ui-button{flex:none;margin:0 0 2px}
 .ca-log{flex:1;min-height:0;overflow:auto;font-family:monospace;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}
-.ca-chat{flex:1;min-height:0;overflow:auto;flex-direction:column;gap:6px;padding:2px}
+.ca-chat,.ca-agents{flex:1;min-height:0;overflow:auto;flex-direction:column;gap:6px;padding:2px}
 .ca-list{display:flex;flex-direction:column;gap:6px}
 .ca-msg{display:flex;flex-direction:column;max-width:85%;min-width:0}
 .ca-op{align-self:flex-end;align-items:flex-end}
@@ -65,7 +66,9 @@
 .ca-md th{background:var(--red-ui-secondary-background);font-weight:600}
 .ca-md blockquote{padding-left:8px;border-left:3px solid var(--red-ui-secondary-border-color);color:var(--red-ui-secondary-text-color)}
 .ca-md hr{border:none;border-top:1px solid var(--red-ui-secondary-border-color);margin:6px 0}
-.ca-inbox{max-width:85%;padding:4px 10px 6px;border-radius:6px;border:1px solid var(--red-ui-secondary-border-color);border-left:3px solid var(--red-ui-secondary-text-color);background:var(--red-ui-secondary-background)}
+.ca-inbox{min-height:44px;box-sizing:border-box;max-width:85%;padding:4px 10px 6px;border-radius:6px;border:1px solid var(--red-ui-secondary-border-color);border-left:3px solid var(--red-ui-secondary-text-color);background:var(--red-ui-secondary-background)}
+.ca-inbox.ca-sent{align-self:flex-end;border-left-width:1px;border-right:3px solid var(--red-ui-text-color-link)}
+.ca-badge{margin-left:4px;padding:0 5px;min-width:16px;border-radius:8px;font-size:10px;line-height:16px;font-weight:600;text-align:center;background:var(--red-ui-text-color-link);color:var(--red-ui-primary-background)}
 .ca-inbox.ca-more,.ca-inbox.ca-open{cursor:pointer}
 .ca-inbox:focus-visible{outline:1px solid var(--red-ui-form-input-focus-color)}
 .ca-inbox .ca-meta{display:flex;align-items:center;gap:6px;margin:0 0 2px;font-size:11px;font-weight:600;color:var(--red-ui-secondary-text-color)}
@@ -202,7 +205,8 @@
         showRun(node);
     }
 
-    function addEvent(node, e) {
+    // live is true for an event that comes from the runtime now, false for the log that the popup loads when it opens.
+    function addEvent(node, e, live) {
         if (e.kind === 'result') lastEnd[node.id] = e.text;
         else if (e.kind === 'error') lastEnd[node.id] = 'error: ' + e.text;
         else if (e.kind === 'state' && e.text === 'stopped') lastEnd[node.id] = 'stopped';
@@ -213,6 +217,7 @@
         while (log.childNodes.length > MAX_ENTRIES) log.removeChild(log.firstChild);
         log.scrollTop = log.scrollHeight;
         addChat(node, e);
+        addAgents(node, e, live);
     }
 
     // Agent text is markdown. The HTML passes DOMPurify twice: renderMarkdown returns the raw text when marked fails.
@@ -232,12 +237,14 @@
         });
     }
 
-    // A message from another agent: a closed card on the left with the sender, the time and the first 3 lines.
+    // A message of the Agents tab: a closed card with the sender or the receiver, the time and the first 3 lines.
+    // A received message is on the left, a sent message on the right.
     // A card with more text than 3 lines gets the class ca-more: an arrow shows, and a click or Enter opens the full text.
     // The next click closes it. A click that ends a text selection in the card does not.
     function inboxCard(e) {
-        const card = make('div', '', 'ca-msg ca-inbox');
-        const meta = make('div', 'From ' + e.from + ' · ' + clock(e.time), 'ca-meta');
+        const sent = e.kind === 'sent';
+        const card = make('div', '', 'ca-msg ca-inbox' + (sent ? ' ca-sent' : ''));
+        const meta = make('div', (sent ? 'To ' + e.to : 'From ' + e.from) + ' · ' + clock(e.time), 'ca-meta');
         const text = make('div', e.text, 'ca-inbox-text');
         meta.appendChild(make('i', '', 'fa fa-angle-down'));
         card.appendChild(meta);
@@ -282,9 +289,8 @@
         let entry;
         // A keep-alive or close prompt is not text of the operator: the life cycle pill shows it.
         if (e.kind === 'prompt' && e.source === 'life') return;
-        if (e.kind === 'prompt' && e.source === 'agent') {
-            entry = inboxCard(e);
-        } else if (OPERATOR_KINDS.includes(e.kind) || AGENT_KINDS.includes(e.kind)) {
+        if (e.kind === 'prompt' && e.source === 'agent') return;
+        if (OPERATOR_KINDS.includes(e.kind) || AGENT_KINDS.includes(e.kind)) {
             const operator = OPERATOR_KINDS.includes(e.kind);
             const runId = (activeRuns[node.id] || []).length > 1 && !operator ? ' ' + e.runId : '';
             entry = make('div', '', 'ca-msg ' + (operator ? 'ca-op' : 'ca-agent') + (e.kind === 'question' ? ' ca-question' : ''));
@@ -305,15 +311,36 @@
         chat.scrollTop = chat.scrollHeight;
     }
 
+    // The Agents tab: the messages that the agent got from other agents and the messages that it sent, oldest at the top.
+    // A live message that comes while the tab is not shown adds to the badge of the tab.
+    function addAgents(node, e, live) {
+        const list = part(node, 'agents');
+        if (!list || !((e.kind === 'prompt' && e.source === 'agent') || e.kind === 'sent')) return;
+        list.appendChild(inboxCard(e));
+        while (list.childNodes.length > MAX_ENTRIES) list.removeChild(list.firstChild);
+        if (views[node.id] === 'agents') list.scrollTop = list.scrollHeight;
+        else if (live) showBadge(node, (unread[node.id] || 0) + 1);
+    }
+
+    // The badge after the label of the Agents tab: hidden at 0, "99+" above 99
+    function showBadge(node, count) {
+        unread[node.id] = count;
+        const badge = part(node, 'badge');
+        if (!badge) return;
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.style.display = count ? '' : 'none';
+    }
+
     // Show one tab of the popup
     function showView(node, view) {
         views[node.id] = view;
-        part(node, 'log').style.display = view === 'timeline' ? '' : 'none';
-        part(node, 'chat').style.display = view === 'chat' ? 'flex' : 'none';
-        part(node, 'tab-timeline').classList.toggle('selected', view === 'timeline');
-        part(node, 'tab-chat').classList.toggle('selected', view === 'chat');
-        const shown = view === 'chat' ? part(node, 'chat') : part(node, 'log');
-        shown.scrollTop = shown.scrollHeight;
+        const panes = { chat: part(node, 'chat'), agents: part(node, 'agents'), timeline: part(node, 'log') };
+        for (const [name, pane] of Object.entries(panes)) {
+            pane.style.display = name !== view ? 'none' : name === 'timeline' ? '' : 'flex';
+            part(node, 'tab-' + name).classList.toggle('selected', name === view);
+        }
+        if (view === 'agents') showBadge(node, 0);
+        panes[view].scrollTop = panes[view].scrollHeight;
     }
 
     function sendControl(node, cmd, text) {
@@ -388,7 +415,8 @@
     // The runtime has cleared its log: empty the chat and the Timeline
     function clear(node) {
         delete lastEnd[node.id];
-        for (const name of ['list', 'log']) {
+        showBadge(node, 0);
+        for (const name of ['list', 'agents', 'log']) {
             const e = part(node, name);
             if (e) e.textContent = '';
         }
@@ -525,10 +553,15 @@
             identity.appendChild(element(node, 'div', 'about', 'ca-about'));
 
             const header = make('div', '', 'ca-header');
-            for (const [view, label] of [['chat', 'Chat'], ['timeline', 'Timeline']]) {
+            for (const [view, label] of [['chat', 'Chat'], ['agents', 'Agents'], ['timeline', 'Timeline']]) {
                 const tab = element(node, 'button', 'tab-' + view, 'ca-tab', label);
                 tab.type = 'button';
                 tab.addEventListener('click', () => showView(node, view));
+                if (view === 'agents') {
+                    const badge = element(node, 'span', 'badge', 'ca-badge');
+                    badge.style.display = 'none';
+                    tab.appendChild(badge);
+                }
                 header.appendChild(tab);
             }
             // The empty part of the tab row moves the popup: it gives the mouse press to the title bar of the frame
@@ -551,6 +584,7 @@
             for (const e of [select, chip, fresh]) header.appendChild(e);
 
             const log = element(node, 'div', 'log', 'ca-log');
+            const agents = element(node, 'div', 'agents', 'ca-agents');
             const chat = element(node, 'div', 'chat', 'ca-chat');
             chat.appendChild(element(node, 'div', 'empty', 'ca-empty', 'Ask the agent a question below.'));
             chat.appendChild(element(node, 'div', 'list', 'ca-list'));
@@ -595,7 +629,7 @@
             composer.appendChild(text);
             composer.appendChild(footer);
 
-            for (const e of [identity, header, log, chat, ask, composer]) root.appendChild(e);
+            for (const e of [identity, header, log, agents, chat, ask, composer]) root.appendChild(e);
             div.appendChild(root);
             showIdentity(node);
             showView(node, views[node.id] || 'chat');
@@ -605,12 +639,12 @@
 
             node.nodeRedEditorComms.publish('get-log').then((state) => {
                 if (state.session) sessions[node.id] = state.session;
-                for (const e of state.events) addEvent(node, e);
+                for (const e of state.events) addEvent(node, e, false);
                 showRuns(node, state.runs);
             }).catch(() => showRuns(node, []));
         },
         nodeRedEditorComms_subscriptions: {
-            event: function (e) { addEvent(this, e); },
+            event: function (e) { addEvent(this, e, true); },
             runs: function (runs) { showRuns(this, runs); },
             session: function (session) { sessions[this.id] = session; showIdentity(this); showChip(this); },
             cleared: function () { clear(this); }
@@ -798,7 +832,7 @@
         </li>
         <li>Events
             <dl class="message-properties">
-                <dt>payload <span class="property-type">object</span></dt><dd><code>{ runId, seq, time, kind, text }</code>. The node cuts <code>text</code> after 300 characters. A <code>prompt</code> event from the inbox has the message text only (no label line), <code>source: 'agent'</code> and <code>from</code>. One from a keep-alive or close turn has <code>source: 'life'</code>.</dd>
+                <dt>payload <span class="property-type">object</span></dt><dd><code>{ runId, seq, time, kind, text }</code>. The node cuts <code>text</code> after 300 characters. A <code>prompt</code> event from the inbox has the message text only (no label line), <code>source: 'agent'</code> and <code>from</code>. The <code>sent</code> event of the <code>send</code> tool has <code>to</code>. One from a keep-alive or close turn has <code>source: 'life'</code>.</dd>
             </dl>
         </li>
     </ol>
@@ -822,7 +856,7 @@
     <p>Keep-alive and close turns send nothing on the outputs. The popup shows them as <i>life cycle</i> lines.</p>
 
     <h3>MQTT inbox</h3>
-    <p>The popup shows the text of the agent as markdown: headings, lists, tables, code, links and emphasis. A link opens in a new tab. An image or other remote file does not show. The text of the operator and of a question stays plain text. The Chat tab shows an inbox message as a closed card on the left: the sender, the time and the first 3 lines. A click on a longer card opens the full text in the card, and a second click closes it. The Timeline tab shows the full text too. A keep-alive turn has no bubble: the life cycle line shows it.</p>
+    <p>The popup shows the text of the agent as markdown: headings, lists, tables, code, links and emphasis. A link opens in a new tab. An image or other remote file does not show. The text of the operator and of a question stays plain text. The Agents tab shows an inbox message as a closed card on the left (the sender, the time and the first 3 lines) and a message that the agent sent with <code>send</code> as a card on the right (the receiver, the time and the first 3 lines). A click on a longer card opens the full text in the card, and a second click closes it. The badge of the tab counts the messages that came while it was not shown. The Chat tab shows none of them. The Timeline tab shows the full text too. A keep-alive turn has no bubble: the life cycle line shows it.</p>
     <p>The address of the agent is <code>&lt;team&gt;/&lt;name&gt;</code>: the tab label and the node name. <code>/ + #</code> and white space become <code>-</code>. A node with no name gets no inbox.</p>
     <p>The inbox topic is <code>agents/&lt;team&gt;/agent/&lt;name&gt;/inbox</code> (QoS 1). The payload is JSON <code>{ "from": "&lt;team&gt;/&lt;name&gt;", "text": "..." }</code>. Other payloads give a warning. An inbox message starts a turn in both session modes. Its result goes out on output 1 as a new msg.</p>
     <p>The agent gets the tool <code>send(to, text)</code>. <code>to</code> is <code>name</code> (same team) or <code>team/name</code>. With no broker connection, the tool gives an error text. A send that has no answer yet keeps the session open with keep-alive turns.</p>

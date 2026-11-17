@@ -29,7 +29,7 @@ const REASONS = {
 };
 
 // Event kinds that the popup chat view shows: the text of the operator and of the agent
-const CHAT_KINDS = new Set(['prompt', 'message', 'answer', 'text', 'question']);
+const CHAT_KINDS = new Set(['prompt', 'message', 'answer', 'text', 'question', 'sent']);
 // The life cycle of the session mode agent
 const CLOSE_PROMPT = 'Write what a new session of you must know to continue. If there is nothing, write nothing. 200 words maximum.';
 const LIMIT_HINT = 'Context limit reached. Call the handoff tool now. Give it what a new session of you must know to continue.';
@@ -151,6 +151,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         const e = { runId: run.id, seq: ++run.seq, time: Date.now(), kind, text: CHAT_KINDS.has(kind) ? String(text) : cut(text) };
         // The popup needs the sender of a prompt: the source and the address
         if (extra && extra.source) Object.assign(e, { source: extra.source, from: extra.from });
+        // The Agents tab needs the receiver of a sent message
+        if (extra && extra.to) e.to = extra.to;
         log.push(e);
         if (log.length > LOG_SIZE) log.shift();
         const out = RED.util.cloneMessage(run.msg);
@@ -238,6 +240,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             await new Promise((resolve, reject) => broker.publish({ topic: inboxTopic(target), payload: { from: address, text }, qos: 1 },
                 (err) => (err ? reject(err) : resolve())));
             openItems.add(target);
+            event(run, 'sent', text, { to: target });
             event(run, 'life', `waiting for ${target}`);
             return { content: [{ type: 'text', text: `Sent to ${target}.` }] };
         });

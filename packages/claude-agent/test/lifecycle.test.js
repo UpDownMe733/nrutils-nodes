@@ -386,6 +386,8 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         const sent = brokerGot.find((m) => m.topic === inbox('peer'));
         assert.ok(sent, JSON.stringify(brokerGot));
         assert.deepEqual(JSON.parse(sent.payload), { from: 'Team-A/Sender', text: 'hello' });
+        const sentEvent = eventsOf('sender').find((e) => e.kind === 'sent');
+        assert.ok(sentEvent && sentEvent.to === 'Team-A/peer' && sentEvent.text === 'hello', 'the sent event has the receiver and the full text');
         await waitFor(async () => lifeLines('sender').includes('waiting for Team-A/peer'), 5000, 'the life line waiting for Team-A/peer');
         for (let n = 1; n <= 3; n++) {
             await idle('sender');

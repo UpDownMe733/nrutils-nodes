@@ -744,36 +744,77 @@ describe('claude-agent summaryFromPrompt', () => {
 });
 
 describe('claude-agent popup chat sender', () => {
-    const entries = (p) => p.part('list').childNodes;
+    const entries = (p) => p.part('agents').childNodes;
     const long = 'line 1\nline 2\nline 3\nline 4 ' + 'x'.repeat(400);
+    const at = new Date(2026, 0, 1, 9, 5).getTime();
     const events = [
         event('prompt', 'typed', { seq: 1 }),
-        event('prompt', long, { seq: 2, source: 'agent', from: 'Team-B/peer', time: new Date(2026, 0, 1, 9, 5).getTime() }),
-        event('prompt', '.', { seq: 3, source: 'life' })
+        event('prompt', long, { seq: 2, source: 'agent', from: 'Team-B/peer', time: at }),
+        event('prompt', '.', { seq: 3, source: 'life' }),
+        event('sent', 'answer ' + long, { seq: 4, to: 'Team-B/peer', time: at })
     ];
-    const check = (list) => {
+    const check = (p) => {
+        const chat = p.part('list').childNodes;
+        assert.equal(chat.length, 1, 'the Chat has the typed text only');
+        assert.match(chat[0].childNodes[0].textContent, /^You/);
+        const list = entries(p);
         assert.equal(list.length, 2);
-        assert.match(list[0].childNodes[0].textContent, /^You/);
-        const card = list[1];
-        assert.ok(card.classList.contains('ca-inbox') && !card.classList.contains('ca-op'));
-        assert.equal(card.childNodes[0].textContent, 'From Team-B/peer · 09:05');
+        const [card, sent] = list;
+        assert.ok(card.classList.contains('ca-inbox') && !card.classList.contains('ca-op') && !card.classList.contains('ca-sent'));
+        assert.equal(card.childNodes[0].textContent, 'From Team-B/peer \u00b7 09:05');
         assert.equal(card.childNodes[1].textContent, long, 'the card has the full text');
         assert.ok(!card.classList.contains('ca-open'), 'the card is closed');
+        assert.ok(sent.classList.contains('ca-inbox') && sent.classList.contains('ca-sent'));
+        assert.equal(sent.childNodes[0].textContent, 'To Team-B/peer \u00b7 09:05');
+        assert.equal(sent.childNodes[1].textContent, 'answer ' + long);
     };
 
-    it('the history shows typed text as operator, an inbox message as a closed card and no keep-alive prompt', async () => {
-        check(entries(await popup({ events })));
+    it('the history shows an inbox message and a sent message as cards in the Agents tab, not in the Chat', async () => {
+        check(await popup({ events }));
     });
 
     it('the live view shows the same entries', async () => {
         const p = await popup({});
         for (const e of events) p.receive('event', e);
-        check(entries(p));
+        check(p);
+    });
+
+    it('the badge counts the live messages while the Chat shows, hides at 0, shows 99+ and clears when the tab opens', async () => {
+        const p = await popup({ events });
+        const badge = p.part('badge');
+        assert.equal(badge.style.display, 'none', 'the history does not count');
+        p.receive('event', event('prompt', 'a', { source: 'agent', from: 'T/a' }));
+        p.receive('event', event('sent', 'b', { to: 'T/a' }));
+        assert.equal(badge.textContent, '2');
+        assert.equal(badge.style.display, '');
+        p.part('tab-agents').click();
+        assert.equal(badge.style.display, 'none');
+        p.receive('event', event('sent', 'c', { to: 'T/a' }));
+        assert.equal(badge.style.display, 'none', 'a message that comes while the tab shows does not count');
+        p.part('tab-chat').click();
+        for (let i = 0; i < 100; i++) p.receive('event', event('sent', 'x', { to: 'T/a' }));
+        assert.equal(badge.textContent, '99+');
+        p.receive('cleared');
+        assert.equal(badge.style.display, 'none');
+        assert.equal(entries(p).length, 0);
+    });
+
+    it('the Agents tab shows with the Chat and the Timeline as tabs', async () => {
+        const p = await popup({ events });
+        assert.equal(p.part('agents').style.display, 'none');
+        p.part('tab-agents').click();
+        assert.equal(p.part('agents').style.display, 'flex');
+        assert.equal(p.part('chat').style.display, 'none');
+        assert.equal(p.part('log').style.display, 'none');
+        assert.ok(p.part('tab-agents').classList.contains('selected'));
+        p.part('tab-timeline').click();
+        assert.equal(p.part('agents').style.display, 'none');
+        assert.equal(p.part('log').style.display, '');
     });
 
     // The browser lays out the card: the text is higher than its 3 lines (long) or not
     const layout = (p, high) => {
-        const text = entries(p)[entries(p).length - 1].childNodes[1];
+        const text = entries(p)[0].childNodes[1];
         text.scrollHeight = high ? 200 : 50;
         text.clientHeight = 50;
         p.resize();
@@ -782,7 +823,7 @@ describe('claude-agent popup chat sender', () => {
     it('a click opens a long card and a second click closes it', async () => {
         const p = await popup({ events });
         layout(p, true);
-        const card = entries(p)[1];
+        const card = entries(p)[0];
         assert.ok(card.classList.contains('ca-more'));
         assert.equal(card.getAttribute('role'), 'button');
         card.click();
@@ -806,7 +847,7 @@ describe('claude-agent popup chat sender', () => {
     it('a click that ends a text selection in the card does not toggle it', async () => {
         const p = await popup({ events });
         layout(p, true);
-        const card = entries(p)[1];
+        const card = entries(p)[0];
         card.contains = () => true;
         p.window.getSelection = () => ({ isCollapsed: false, anchorNode: card.childNodes[1] });
         card.click();
