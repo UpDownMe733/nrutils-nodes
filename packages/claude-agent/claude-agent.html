@@ -61,13 +61,15 @@
 .ca-md th{background:var(--red-ui-secondary-background);font-weight:600}
 .ca-md blockquote{padding-left:8px;border-left:3px solid var(--red-ui-secondary-border-color);color:var(--red-ui-secondary-text-color)}
 .ca-md hr{border:none;border-top:1px solid var(--red-ui-secondary-border-color);margin:6px 0}
-.ca-inbox{max-width:85%;padding:4px 10px 6px;border-radius:6px;border:1px solid var(--red-ui-secondary-border-color);border-left:3px solid var(--red-ui-text-color-link);background:var(--red-ui-secondary-background);cursor:pointer}
+.ca-inbox{max-width:85%;padding:4px 10px 6px;border-radius:6px;border:1px solid var(--red-ui-secondary-border-color);border-left:3px solid var(--red-ui-secondary-text-color);background:var(--red-ui-secondary-background)}
+.ca-inbox.ca-more,.ca-inbox.ca-open{cursor:pointer}
 .ca-inbox:focus-visible{outline:1px solid var(--red-ui-form-input-focus-color)}
 .ca-inbox .ca-meta{display:flex;align-items:center;gap:6px;margin:0 0 2px;font-size:11px;font-weight:600;color:var(--red-ui-secondary-text-color)}
-.ca-inbox .ca-meta i{margin-left:auto;font-size:16px;line-height:1;color:var(--red-ui-primary-text-color);transition:transform .15s}
+.ca-inbox .ca-meta i{display:none;margin-left:auto;font-size:16px;line-height:1;color:var(--red-ui-primary-text-color);transition:transform .15s}
+.ca-inbox.ca-more .ca-meta i,.ca-inbox.ca-open .ca-meta i{display:inline}
 .ca-inbox.ca-open .ca-meta i{transform:rotate(180deg)}
 .ca-inbox-text{font-size:12px;line-height:1.4;max-height:calc(3 * 1.4em);overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;color:var(--red-ui-primary-text-color)}
-.ca-inbox[role=button]:not(.ca-open) .ca-inbox-text{-webkit-mask-image:linear-gradient(#000 60%,transparent);mask-image:linear-gradient(#000 60%,transparent)}
+.ca-inbox.ca-more:not(.ca-open) .ca-inbox-text{-webkit-mask-image:linear-gradient(#000 60%,transparent);mask-image:linear-gradient(#000 60%,transparent)}
 .ca-inbox.ca-open .ca-inbox-text{max-height:300px;overflow-y:auto}
 .ca-end{align-self:center;font-size:10px;padding:1px 8px;border-radius:10px;background:var(--red-ui-tertiary-background);color:var(--red-ui-secondary-text-color)}
 .ca-end.ca-error{color:var(--red-ui-text-color-error);border:1px solid var(--red-ui-border-color-error)}
@@ -212,26 +214,45 @@
     }
 
     // A message from another agent: a closed card on the left with the sender, the time and the first 3 lines.
-    // A click or Enter opens the full text in the card, and the next one closes it. A click that ends a text selection does not.
-    const INBOX_SHORT = 120;
+    // A card with more text than 3 lines gets the class ca-more: an arrow shows, and a click or Enter opens the full text.
+    // The next click closes it. A click that ends a text selection in the card does not.
     function inboxCard(e) {
         const card = make('div', '', 'ca-msg ca-inbox');
         const meta = make('div', 'From ' + e.from + ' · ' + clock(e.time), 'ca-meta');
-        card.appendChild(meta);
-        card.appendChild(make('div', e.text, 'ca-inbox-text'));
-        const text = String(e.text);
-        if (text.length <= INBOX_SHORT && text.split('\n').length <= 3) return card;
+        const text = make('div', e.text, 'ca-inbox-text');
         meta.appendChild(make('i', '', 'fa fa-angle-down'));
-        card.tabIndex = 0;
-        card.setAttribute('role', 'button');
-        card.setAttribute('aria-expanded', 'false');
-        const toggle = () => card.setAttribute('aria-expanded', String(card.classList.toggle('ca-open')));
-        card.addEventListener('click', () => { if (!(window.getSelection && String(window.getSelection()))) toggle(); });
+        card.appendChild(meta);
+        card.appendChild(text);
+        const toggle = () => {
+            if (!card.classList.contains('ca-more') && !card.classList.contains('ca-open')) return;
+            card.setAttribute('aria-expanded', String(card.classList.toggle('ca-open')));
+        };
+        card.addEventListener('click', () => {
+            const s = window.getSelection && window.getSelection();
+            if (!s || s.isCollapsed || !card.contains(s.anchorNode)) toggle();
+        });
         card.addEventListener('keydown', (k) => {
             if (k.target !== card || (k.key !== 'Enter' && k.key !== ' ')) return;
             k.preventDefault();
             toggle();
         });
+        // The measure runs at the first layout, at a resize of the popup and when the hidden tab shows.
+        if (typeof ResizeObserver === 'function') {
+            new ResizeObserver(() => {
+                if (card.classList.contains('ca-open')) return;
+                const more = text.scrollHeight > text.clientHeight + 1;
+                card.classList.toggle('ca-more', more);
+                if (more) {
+                    card.tabIndex = 0;
+                    card.setAttribute('role', 'button');
+                    card.setAttribute('aria-expanded', 'false');
+                } else {
+                    card.removeAttribute('tabindex');
+                    card.removeAttribute('role');
+                    card.removeAttribute('aria-expanded');
+                }
+            }).observe(text);
+        }
         return card;
     }
 

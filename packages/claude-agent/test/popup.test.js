@@ -19,7 +19,7 @@ function fakeElement(tag) {
     const listeners = {};
     const e = {
         tagName: tag.toUpperCase(), style: {}, childNodes: [], value: '', clicks: 0, focused: 0, disabled: false, title: '',
-        scrollTop: 0, scrollHeight: 0, attributes: {}, listeners,
+        scrollTop: 0, scrollHeight: 0, clientHeight: 0, attributes: {}, listeners,
         get className() { return [...classes].join(' '); },
         set className(v) { classes.clear(); String(v).split(/\s+/).filter(Boolean).forEach((c) => classes.add(c)); },
         classList: {
@@ -46,6 +46,7 @@ function fakeElement(tag) {
         get firstChild() { return e.childNodes[0]; },
         setAttribute(name, value) { e.attributes[name] = String(value); },
         getAttribute: (name) => e.attributes[name],
+        removeAttribute(name) { delete e.attributes[name]; },
         addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
         appendChild(c) { e.childNodes.push(c); return c; },
         removeChild(c) { e.childNodes.splice(e.childNodes.indexOf(c), 1); },
@@ -94,8 +95,16 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
         utils: { renderMarkdown: (text) => '<md>' + text + '</md>' }
     };
     const sanitized = [];
+    // A fake ResizeObserver: a test sets the size of the target, then calls resize() as the browser does at a layout
+    const observed = [];
+    class ResizeObserver {
+        constructor(fn) { this.fn = fn; }
+        observe(target) { observed.push({ fn: this.fn, target }); }
+    }
+    const resize = () => observed.forEach((o) => o.fn([{ target: o.target }]));
     const DOMPurify = { sanitize: (html, config) => { sanitized.push(config); return html.replace(/<script.*?<\/script>/g, ''); } };
-    vm.runInNewContext(script, { document, RED, DOMPurify, window: {}, Date: FakeDate, setInterval, clearInterval, ...extra });
+    const window = {};
+    vm.runInNewContext(script, { document, RED, DOMPurify, window, Date: FakeDate, setInterval, clearInterval, ResizeObserver, ...extra });
     const getDef = () => def;
     const answers = { 'get-log': state, 'new-chat': {} };
     const node = {
@@ -115,7 +124,7 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const part = (name) => document.getElementById('claude-agent-' + name + '-n1');
     const rebuild = () => def.nru_popupInit.call(node);
     const emit = (type, ...args) => (handlers[type] || []).forEach((fn) => fn(...args));
-    return { sanitized, emit, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
+    return { window, resize, sanitized, emit, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
 }
 
 const key = (text, init) => {
@@ -690,8 +699,20 @@ describe('claude-agent popup chat sender', () => {
         check(entries(p));
     });
 
+    // The browser lays out the card: the text is higher than its 3 lines (long) or not
+    const layout = (p, high) => {
+        const text = entries(p)[entries(p).length - 1].childNodes[1];
+        text.scrollHeight = high ? 200 : 50;
+        text.clientHeight = 50;
+        p.resize();
+    };
+
     it('a click opens a long card and a second click closes it', async () => {
-        const card = entries(await popup({ events }))[1];
+        const p = await popup({ events });
+        layout(p, true);
+        const card = entries(p)[1];
+        assert.ok(card.classList.contains('ca-more'));
+        assert.equal(card.getAttribute('role'), 'button');
         card.click();
         assert.ok(card.classList.contains('ca-open'));
         assert.equal(card.getAttribute('aria-expanded'), 'true');
@@ -701,9 +722,22 @@ describe('claude-agent popup chat sender', () => {
     });
 
     it('a short card has no toggle', async () => {
-        const card = entries(await popup({ events: [event('prompt', 'hi', { source: 'agent', from: 'T/a' })] }))[0];
+        const p = await popup({ events: [event('prompt', 'hi', { source: 'agent', from: 'T/a' })] });
+        layout(p, false);
+        const card = entries(p)[0];
+        card.click();
+        assert.ok(!card.classList.contains('ca-more'), 'no arrow, no mask');
+        assert.ok(!card.classList.contains('ca-open'));
+        assert.equal(card.getAttribute('role'), undefined);
+    });
+
+    it('a click that ends a text selection in the card does not toggle it', async () => {
+        const p = await popup({ events });
+        layout(p, true);
+        const card = entries(p)[1];
+        card.contains = () => true;
+        p.window.getSelection = () => ({ isCollapsed: false, anchorNode: card.childNodes[1] });
         card.click();
         assert.ok(!card.classList.contains('ca-open'));
-        assert.equal(card.childNodes[0].childNodes.length, 0, 'no arrow icon');
     });
 });
