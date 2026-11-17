@@ -145,7 +145,9 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
 
     function event(run, kind, text, extra) {
         // The popup chat view needs the full text of chat kinds. The events output always gets the cut text.
-        const e = { runId: run.id, seq: ++run.seq, time: Date.now(), kind, text: CHAT_KINDS.has(kind) ? String(text) : cut(text), ...extra };
+        const e = { runId: run.id, seq: ++run.seq, time: Date.now(), kind, text: CHAT_KINDS.has(kind) ? String(text) : cut(text) };
+        // The popup needs the sender of a prompt: the source and the address
+        if (extra && extra.source) Object.assign(e, { source: extra.source, from: extra.from });
         log.push(e);
         if (log.length > LOG_SIZE) log.shift();
         const out = RED.util.cloneMessage(run.msg);
@@ -475,9 +477,10 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
                 allowDangerouslySkipPermissions: true,
                 outputFormat: run.schema ? { type: 'json_schema', schema: run.schema } : undefined
             };
-            // The popup shows a prompt as operator text, unless it has a sender or is a life cycle turn
-            const sender = jobs.find((j) => j.from);
-            event(run, 'prompt', prompt, life ? { source: 'life' } : sender ? { source: 'agent', from: sender.from } : undefined);
+            // One prompt event for each part, so the popup shows each part with its own sender.
+            // A turn that the node writes (keep-alive, close, handoff) is a life cycle prompt, not operator text.
+            if (life || text !== undefined) event(run, 'prompt', prompt, { source: 'life' });
+            else for (const job of jobs) event(run, 'prompt', render(job), job.from ? { source: 'agent', from: job.from } : undefined);
             push(run, prompt);
             run.query = sdk.query({ prompt: input(run), options });
             setState(run, 'running');

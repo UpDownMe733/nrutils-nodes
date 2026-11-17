@@ -333,6 +333,7 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         const [msg] = await results('long', 1);
         const got = JSON.parse(msg.payload);
         assert.equal(got.prompt, 'The note of your earlier session:\nthe handoff note\n\nContinue.');
+        assert.equal(eventsOf('long').find((e) => e.kind === 'prompt' && e.text.endsWith('Continue.')).source, 'life', 'Continue. is not operator text');
         assert.equal(got.resume, null);
         assert.equal(msg._msgid !== undefined, true);
         assert.ok(lifeLines('long').some((t) => /handoff/.test(t)), lifeLines('long').join('|'));
