@@ -630,7 +630,7 @@ describe('claude-agent popup chat sender', () => {
         assert.equal(list[0].classList.contains('ca-from'), false);
         assert.match(list[0].childNodes[0].textContent, /^You/);
         assert.equal(list[1].classList.contains('ca-from'), true);
-        assert.match(list[1].childNodes[0].textContent, /^Agent Team-B\/peer/);
+        assert.match(list[1].childNodes[0].textContent, /^From Team-B\/peer/);
     });
 
     it('the live view marks the same way', async () => {

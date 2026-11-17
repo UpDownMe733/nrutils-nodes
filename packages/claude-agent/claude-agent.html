@@ -182,7 +182,7 @@
             const operator = OPERATOR_KINDS.includes(e.kind);
             const runId = (activeRuns[node.id] || []).length > 1 && !operator ? ' ' + e.runId : '';
             entry = make('div', '', 'ca-msg ' + (operator ? 'ca-op' : 'ca-agent') + (e.from ? ' ca-from' : '') + (e.kind === 'question' ? ' ca-question' : ''));
-            entry.appendChild(make('div', (e.from ? 'Agent ' + e.from : operator ? 'You' : 'Agent' + runId) + ' · ' + clock(e.time), 'ca-meta'));
+            entry.appendChild(make('div', (e.from ? 'From ' + e.from : operator ? 'You' : 'Agent' + runId) + ' · ' + clock(e.time), 'ca-meta'));
             entry.appendChild(make('div', e.kind === 'question' ? 'Question: ' + e.text : e.text, 'ca-bubble'));
         } else if (e.kind === 'life') {
             // A keep-alive, a close, a note or a handoff of the session mode agent
@@ -706,7 +706,7 @@
     <p>Keep-alive and close turns send nothing on the outputs. The popup shows them as <i>life cycle</i> lines.</p>
 
     <h3>MQTT inbox</h3>
-    <p>The popup shows an inbox message as a dashed italic bubble with the label <code>Agent &lt;from&gt;</code>. A keep-alive turn has no bubble: the life cycle line shows it.</p>
+    <p>The popup shows an inbox message as a dashed italic bubble with the label <code>From &lt;from&gt;</code>. A keep-alive turn has no bubble: the life cycle line shows it.</p>
     <p>The address of the agent is <code>&lt;team&gt;/&lt;name&gt;</code>: the tab label and the node name. <code>/ + #</code> and white space become <code>-</code>. A node with no name gets no inbox.</p>
     <p>The inbox topic is <code>agents/&lt;team&gt;/agent/&lt;name&gt;/inbox</code> (QoS 1). The payload is JSON <code>{ "from": "&lt;team&gt;/&lt;name&gt;", "text": "..." }</code>. Other payloads give a warning. An inbox message starts a turn in both session modes. Its result goes out on output 1 as a new msg.</p>
     <p>The agent gets the tool <code>send(to, text)</code>. <code>to</code> is <code>name</code> (same team) or <code>team/name</code>. With no broker connection, the tool gives an error text. A send that has no answer yet keeps the session open with keep-alive turns.</p>

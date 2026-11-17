@@ -557,7 +557,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             return node.warn(`the inbox message is not the JSON { "from", "text" }: ${cut(payload.toString())}`);
         }
         openItems.delete(m.from);
-        enqueue({ _msgid: RED.util.generateId(), payload: m.text }, `${INBOX_LABEL(m.from)}\n${m.text}`, m.from);
+        enqueue({ _msgid: RED.util.generateId(), payload: m.text }, `${INBOX_LABEL(m.from)}\n${m.text}`, m.from || 'unknown');
     }
 
     if (broker) {
