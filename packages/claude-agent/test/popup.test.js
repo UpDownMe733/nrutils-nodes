@@ -38,7 +38,7 @@ function fakeElement(tag) {
         get innerHTML() { return html; },
         set innerHTML(v) {
             html = String(v);
-            for (const tagName of ['a', 'img']) e.found[tagName] = [...html.matchAll(new RegExp('<' + tagName + '[ >]', 'g'))].map(() => fakeElement(tagName));
+            for (const tagName of ['a']) e.found[tagName] = [...html.matchAll(new RegExp('<' + tagName + '[ >]', 'g'))].map(() => fakeElement(tagName));
         },
         found: {},
         querySelectorAll: (sel) => e.found[sel] || [],
@@ -93,7 +93,8 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
         settings: {},
         utils: { renderMarkdown: (text) => '<md>' + text + '</md>' }
     };
-    const DOMPurify = { sanitize: (html) => html.replace(/<script.*?<\/script>/g, '') };
+    const sanitized = [];
+    const DOMPurify = { sanitize: (html, config) => { sanitized.push(config); return html.replace(/<script.*?<\/script>/g, ''); } };
     vm.runInNewContext(script, { document, RED, DOMPurify, window: {}, Date: FakeDate, setInterval, clearInterval, ...extra });
     const getDef = () => def;
     const answers = { 'get-log': state, 'new-chat': {} };
@@ -114,7 +115,7 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const part = (name) => document.getElementById('claude-agent-' + name + '-n1');
     const rebuild = () => def.nru_popupInit.call(node);
     const emit = (type, ...args) => (handlers[type] || []).forEach((fn) => fn(...args));
-    return { emit, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
+    return { sanitized, emit, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
 }
 
 const key = (text, init) => {
@@ -355,18 +356,24 @@ describe('claude-agent popup chat', () => {
         assert.equal(agent.innerHTML, '<md>**bold**</md>');
     });
 
-    it('a link of agent text opens in a new tab and an image gets removed, in live and loaded entries', async () => {
-        const markdown = '<a href="x">l</a><img src="y">';
+    it('a link of agent text opens in a new tab, in live and loaded entries', async () => {
+        const markdown = '<a href="x">l</a>';
         const live = await popup({});
         live.receive('event', event('text', markdown));
         const loaded = await popup({ events: [event('text', markdown)] });
         for (const { part } of [live, loaded]) {
-            const bubble = part('list').childNodes[0].childNodes[1];
-            const [a] = bubble.found.a;
+            const [a] = part('list').childNodes[0].childNodes[1].found.a;
             assert.equal(a.attributes.target, '_blank');
             assert.equal(a.attributes.rel, 'noopener noreferrer');
-            assert.equal(bubble.found.img[0].removed, true);
         }
+    });
+
+    it('the sanitizer config forbids each tag and attribute that loads a remote file', async () => {
+        const { receive, sanitized } = await popup({});
+        receive('event', event('text', 'x'));
+        const [config] = sanitized;
+        for (const tag of ['img', 'picture', 'source', 'video', 'audio', 'iframe', 'style']) assert.ok(config.FORBID_TAGS.includes(tag), tag);
+        for (const attr of ['style', 'poster', 'srcset', 'src']) assert.ok(config.FORBID_ATTR.includes(attr), attr);
     });
 
     it('operator and agent entries get their classes, a meta line and no inline colour', async () => {

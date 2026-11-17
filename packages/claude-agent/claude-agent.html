@@ -190,15 +190,20 @@
     }
 
     // Agent text is markdown. The HTML passes DOMPurify twice: renderMarkdown returns the raw text when marked fails.
-    // A link opens in a new tab. An image gets removed: a remote image would let the agent text call a server.
+    // DOMPurify drops each tag and attribute that makes the browser load a remote file, so the agent text cannot call a server.
+    const PURIFY = {
+        FORBID_TAGS: ['img', 'picture', 'source', 'video', 'audio', 'track', 'iframe', 'object', 'embed', 'style', 'link'],
+        FORBID_ATTR: ['style', 'poster', 'srcset', 'src']
+    };
+
+    // A link opens in a new tab.
     function renderMarkdown(bubble, text) {
         bubble.className += ' ca-md';
-        bubble.innerHTML = DOMPurify.sanitize(RED.utils.renderMarkdown(text));
+        bubble.innerHTML = DOMPurify.sanitize(RED.utils.renderMarkdown(text), PURIFY);
         bubble.querySelectorAll('a').forEach((a) => {
             a.setAttribute('target', '_blank');
             a.setAttribute('rel', 'noopener noreferrer');
         });
-        bubble.querySelectorAll('img').forEach((img) => img.remove());
     }
 
     // The chat tab: operator bubbles on the right, agent bubbles on the left, the end of a run as a pill
@@ -738,7 +743,7 @@
     <p>Keep-alive and close turns send nothing on the outputs. The popup shows them as <i>life cycle</i> lines.</p>
 
     <h3>MQTT inbox</h3>
-    <p>The popup shows the text of the agent as markdown: headings, lists, tables, code, links and emphasis. A link opens in a new tab. An image does not show. The text of the operator, of an inbox message and of a question stays plain text. The popup shows an inbox message as a dashed italic bubble with the label <code>From &lt;from&gt;</code>. A keep-alive turn has no bubble: the life cycle line shows it.</p>
+    <p>The popup shows the text of the agent as markdown: headings, lists, tables, code, links and emphasis. A link opens in a new tab. An image or other remote file does not show. The text of the operator, of an inbox message and of a question stays plain text. The popup shows an inbox message as a dashed italic bubble with the label <code>From &lt;from&gt;</code>. A keep-alive turn has no bubble: the life cycle line shows it.</p>
     <p>The address of the agent is <code>&lt;team&gt;/&lt;name&gt;</code>: the tab label and the node name. <code>/ + #</code> and white space become <code>-</code>. A node with no name gets no inbox.</p>
     <p>The inbox topic is <code>agents/&lt;team&gt;/agent/&lt;name&gt;/inbox</code> (QoS 1). The payload is JSON <code>{ "from": "&lt;team&gt;/&lt;name&gt;", "text": "..." }</code>. Other payloads give a warning. An inbox message starts a turn in both session modes. Its result goes out on output 1 as a new msg.</p>
     <p>The agent gets the tool <code>send(to, text)</code>. <code>to</code> is <code>name</code> (same team) or <code>team/name</code>. With no broker connection, the tool gives an error text. A send that has no answer yet keeps the session open with keep-alive turns.</p>
