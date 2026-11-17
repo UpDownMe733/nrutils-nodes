@@ -784,15 +784,16 @@ describe('claude-agent popup chat sender', () => {
         const badge = p.part('badge');
         assert.equal(badge.style.display, 'none', 'the history does not count');
         p.receive('event', event('prompt', 'a', { source: 'agent', from: 'T/a' }));
+        p.receive('event', event('prompt', 'b', { source: 'agent', from: 'T/b' }));
         p.receive('event', event('sent', 'b', { to: 'T/a' }));
-        assert.equal(badge.textContent, '2');
+        assert.equal(badge.textContent, '2', 'a sent message does not count');
         assert.equal(badge.style.display, '');
         p.part('tab-agents').click();
         assert.equal(badge.style.display, 'none');
         p.receive('event', event('sent', 'c', { to: 'T/a' }));
         assert.equal(badge.style.display, 'none', 'a message that comes while the tab shows does not count');
         p.part('tab-chat').click();
-        for (let i = 0; i < 100; i++) p.receive('event', event('sent', 'x', { to: 'T/a' }));
+        for (let i = 0; i < 100; i++) p.receive('event', event('prompt', 'x', { source: 'agent', from: 'T/a' }));
         assert.equal(badge.textContent, '99+');
         p.receive('cleared');
         assert.equal(badge.style.display, 'none');

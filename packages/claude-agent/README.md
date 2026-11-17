@@ -177,7 +177,7 @@ The `prompt` event of this turn has the message text with no label line, `source
 The agent gets the tool `send(to, text)`. `to` is `name` (same team) or `team/name`. With no connection to the
 broker, the tool gives an error text. Each send opens the item "waiting for `<to>`". An inbox message from that
 agent clears it. A send also gives the event `sent` with `to` and the full text. The Agents tab shows it as a card on the right: the receiver, the time and the first 3 lines.
-The tab has a badge with the count of the messages that came while the tab was not shown (`99+` above 99). Opening the tab clears it.
+The tab has a badge with the count of the received messages that came while the tab was not shown (`99+` above 99). Opening the tab clears it.
 
 ## Control messages
 
