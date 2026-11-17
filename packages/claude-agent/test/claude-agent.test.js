@@ -304,7 +304,7 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
     it('a run that fails before a model response does not start the cache countdown', async () => {
         await injectNode('i-nologin');
         assert.match((await caughtFrom('nologin')).error.message, /Not logged in/);
-        assert.deepEqual((await editor('nologin', 'get-log')).session, { cacheTtl: '1h', lastActivity: null, model: null });
+        assert.deepEqual((await editor('nologin', 'get-log')).session, { cacheTtl: '1h', lastActivity: null, model: 'claude-sonnet-fake' });
     });
 
     it('a question goes out on output 2 and an answer message continues the run', async () => {
