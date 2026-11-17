@@ -222,7 +222,7 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal(JSON.parse(list[1].payload).resume, 'fake-session');
         const after = await editor('run', 'get-log');
         assert.equal(after.session.cacheTtl, '1h');
-        assert.equal(after.session.model, 'claude-sonnet-fake', 'the session state has the model of the last run');
+        assert.equal(after.session.model, 'haiku', 'the session state has the model of the last run');
         assert.equal(typeof after.session.lastActivity, 'number');
         // The popup gets the new session state after a model response
         const sessions = await waitFor(async () => publishedFrom('run', 'session', from).length && publishedFrom('run', 'session', from),
@@ -241,10 +241,10 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
             return i >= 0 && list.length >= i + 2 && list.slice(i, i + 2);
         };
         assert.deepEqual((await waitFor(both, 5000, 'cleared and session publish')).map((m) => [m.messageType, m.payload]),
-            [['cleared', {}], ['session', { cacheTtl: '1h', lastActivity: null, model: 'claude-sonnet-fake' }]]);
+            [['cleared', {}], ['session', { cacheTtl: '1h', lastActivity: null, model: 'haiku' }]]);
         const state = await editor('run', 'get-log');
         assert.deepEqual(state.events, []);
-        assert.deepEqual(state.session, { cacheTtl: '1h', lastActivity: null });
+        assert.deepEqual(state.session, { cacheTtl: '1h', lastActivity: null, model: 'haiku' });
         assert.deepEqual(await editor('run', 'start', { text: 'fresh chat' }), {});
         const list = await results('result', 3);
         assert.equal(JSON.parse(list[2].payload).prompt, 'fresh chat');
@@ -304,7 +304,7 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
     it('a run that fails before a model response does not start the cache countdown', async () => {
         await injectNode('i-nologin');
         assert.match((await caughtFrom('nologin')).error.message, /Not logged in/);
-        assert.deepEqual((await editor('nologin', 'get-log')).session, { cacheTtl: '1h', lastActivity: null });
+        assert.deepEqual((await editor('nologin', 'get-log')).session, { cacheTtl: '1h', lastActivity: null, model: null });
     });
 
     it('a question goes out on output 2 and an answer message continues the run', async () => {

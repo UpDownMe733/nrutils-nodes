@@ -799,7 +799,8 @@ describe('claude-agent popup text selection', () => {
         const css = head.childNodes.map((c) => c.textContent).join('');
         assert.match(/\.ca-popup\{[^}]*\}/.exec(css)[0], /cursor:default;user-select:text/);
         assert.match(css, /\.ca-popup button\{user-select:none\}/);
-        assert.match(css, /\.ca-bubble,\.ca-inbox-text,\.ca-log\{cursor:text\}/);
+        assert.match(css, /\.ca-name,[^{]*\.ca-bubble,[^{]*\.ca-log\{cursor:text\}/);
+        assert.match(css, /\.ca-spacer\{cursor:move\}/);
         // Only the button rule turns the selection off
         assert.doesNotMatch(css.replace('.ca-popup button{user-select:none}', ''), /user-select:(none|auto)/);
     });
