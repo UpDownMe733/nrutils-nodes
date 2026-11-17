@@ -519,6 +519,27 @@ describe('claude-agent popup identity block', () => {
             assert.equal(about(t), 'my-model · work root');
         });
 
+        it('shows a dated ID with one version number in full, and a dated ID with two as family and version', async () => {
+            const t = withModel({}, { runs: [run({ model: 'claude-opus-4-20250514' })] });
+            await settle();
+            assert.equal(about(t), 'claude-opus-4-20250514 · work root');
+            t.receive('runs', [run({ model: 'claude-sonnet-4-5-20250929' })]);
+            assert.equal(about(t), 'sonnet 4.5 · work root');
+        });
+
+        it('a line with the same text keeps its text node, so a selection stays', async () => {
+            const t = withModel({}, { runs: [run({ model: 'claude-opus-5-5' })] });
+            await settle();
+            const line = t.part('about');
+            let writes = 0;
+            let text = line.textContent;
+            Object.defineProperty(line, 'textContent', { get: () => text, set: (v) => { writes++; text = v; } });
+            t.receive('runs', [run({ model: 'claude-opus-5-5', turns: 2 })]);
+            assert.equal(writes, 0);
+            t.receive('runs', [run({ model: 'claude-haiku-5-5' })]);
+            assert.equal(writes, 1);
+        });
+
         it('with no run, shows the model of the last run, and updates on a session message', async () => {
             const t = withModel({}, { session: { cacheTtl: '1h', lastActivity: null, model: 'claude-sonnet-5-5' } });
             await settle();

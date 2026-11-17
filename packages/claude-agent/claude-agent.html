@@ -126,7 +126,7 @@
         const session = sessions[node.id];
         const id = (run && run.model) || (session && session.model);
         if (!id) return node.model || 'default model';
-        const found = /claude-([a-z]+)-(\d+)-(\d+)/.exec(id);
+        const found = /claude-([a-z]+)-(\d+)-(\d{1,2})(?!\d)/.exec(id);
         const text = found ? found[1] + ' ' + found[2] + '.' + found[3] : id;
         return node.model && !(found && found[1] === node.model) ? text + ' (node: ' + node.model + ')' : text;
     }
@@ -140,7 +140,8 @@
         const summary = String(node.summary || '').trim();
         for (const [name, text] of [['name', node.name || 'claude-agent'], ['summary', summary], ['about', about.join(' · ')]]) {
             const line = part(node, name);
-            line.textContent = text;
+            // A line with the same text stays as it is, so a selection in it stays
+            if (line.textContent !== text) line.textContent = text;
             line.title = text;
         }
         part(node, 'summary').style.display = summary ? '' : 'none';
