@@ -513,7 +513,6 @@
         <input type="text" id="node-input-summary" maxlength="120" placeholder="Empty: no summary line in the popup" style="width:50%">
         <button type="button" id="claude-agent-summary-from-prompt" class="red-ui-button red-ui-button-small"><i class="fa fa-magic"></i> From system prompt</button>
     </div>
-    <div class="form-tips">Shown at the top of the popup. It is not sent to Claude. The button copies the start of the system prompt: remove any secret from it.</div>
     <div class="form-row">
         <label for="node-input-cwd">Folder</label>
         <input type="text" id="node-input-cwd" placeholder="Empty: the work root">
@@ -562,7 +561,6 @@
         <label for="node-input-broker">MQTT broker</label>
         <input type="text" id="node-input-broker">
     </div>
-    <div class="form-tips">The broker gives the node an inbox and the <code>send</code> tool. The tab label is the team, the node name is the agent name.</div>
     <div class="form-row">
         <label for="node-input-prompt">Prompt</label>
         <textarea id="node-input-prompt" rows="3" style="width:70%"></textarea>
@@ -605,7 +603,6 @@
         <label for="node-input-mcpServers">MCP servers</label>
         <textarea id="node-input-mcpServers" rows="4" style="width:70%" placeholder="optional JSON object"></textarea>
     </div>
-    <div class="form-tips">Optional JSON object: server name to { command, args, env }. The agent gets these MCP servers and the "operator" server.</div>
 </script>
 
 <script type="text/html" data-help-name="claude-agent">
