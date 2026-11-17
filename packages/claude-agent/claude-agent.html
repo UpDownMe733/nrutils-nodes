@@ -329,6 +329,7 @@
             summary: { value: '' },
             systemPrompt: { value: '' },
             model: { value: '' },
+            effort: { value: '' },
             cacheTtl: { value: '1h' },
             session: { value: 'message' },
             contextLimit: { value: 100000, validate: RED.validators.number(true) },
@@ -536,6 +537,17 @@
         </select>
     </div>
     <div class="form-row">
+        <label for="node-input-effort">Effort</label>
+        <select id="node-input-effort">
+            <option value="">default</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="xhigh">xhigh</option>
+            <option value="max">max</option>
+        </select>
+    </div>
+    <div class="form-row">
         <label for="node-input-cacheTtl">Cache time</label>
         <select id="node-input-cacheTtl">
             <option value="5m">5 minutes</option>
@@ -618,6 +630,7 @@
         <dt>Sandbox</dt><dd>A name that the node gives to the launcher program (<code>claudeAgent.launcher</code>) in the environment variable <code>NODE_RED_CLAUDE_SANDBOX</code>, with the folder in <code>NODE_RED_CLAUDE_CWD</code>. The launcher can then start the CLI in that container or machine. Empty: no sandbox.</dd>
         <dt>System prompt</dt><dd>It is added to the Claude Code system prompt. Empty: no extra instructions.</dd>
         <dt>Model</dt><dd>Empty: the default model. Else haiku, sonnet, opus or fable. <code>msg.model</code> replaces it.</dd>
+        <dt>Effort</dt><dd>How much the model thinks: <code>low</code>, <code>medium</code>, <code>high</code>, <code>xhigh</code> or <code>max</code>. Empty: the default of the model.</dd>
         <dt>Cache time</dt><dd>How long the prompt cache of the run lives between two requests: 5 or 60 minutes. Default 60. A 60-minute cache write costs more (2&times; input, against 1.25&times;), but a run that waits for the operator longer than 5 minutes reads the cache again.</dd>
         <dt>Session</dt><dd><code>message</code> (default): each start message runs in a new session. <code>agent</code>: the node is one agent with one session that continues. See <b>Session mode agent</b> below.</dd>
         <dt>Context limit</dt><dd>Agent mode only. Above this number of tokens, the agent writes a note and a new session continues. Default 100000.</dd>

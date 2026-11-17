@@ -136,7 +136,7 @@ async function answer(prompt) {
     }
     if (word === 'ask') return result('The operator said: ' + await callTool('ask_operator', { question: prompt.slice(4), options: ['yes', 'no'] }));
     result(JSON.stringify({
-        prompt, cwd: process.cwd(), model: arg('--model'), permissionMode: arg('--permission-mode'), resume: arg('--resume'),
+        prompt, cwd: process.cwd(), model: arg('--model'), effort: arg('--effort'), permissionMode: arg('--permission-mode'), resume: arg('--resume'),
         settings: readSettings(), forceCache5m: process.env.FORCE_PROMPT_CACHING_5M || null,
         cacheTtlEnv: process.env.CLAUDE_CODE_PROMPT_CACHE_TTL || null,
         subagentCacheTtlEnv: process.env.CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL || null,

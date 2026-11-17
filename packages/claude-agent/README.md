@@ -82,6 +82,7 @@ The sudo rule needs the tag `SETENV`, so that the CLI gets the environment.
 | Sandbox | A name for the launcher. Empty: none. |
 | System prompt | Text added to the Claude Code system prompt. |
 | Model | Empty (the SDK default), `haiku`, `sonnet`, `opus` or `fable`. `msg.model` replaces it. |
+| Effort | How much the model thinks: `low`, `medium`, `high`, `xhigh` or `max`. Empty: the default of the model. |
 | Cache time | `5 minutes` or `60 minutes`. Default 60 minutes. |
 | Session | `message` (default): each message starts a new session. `agent`: the node is one agent with one session that continues. See [Session mode agent](#session-mode-agent). |
 | Context limit | Agent mode only. Default 100000 tokens. |

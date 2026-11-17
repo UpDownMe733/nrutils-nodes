@@ -426,6 +426,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
                 cwd: sandbox ? settings.workRoot : cwd,
                 env: { ...env, ...(sandbox && { NODE_RED_CLAUDE_SANDBOX: sandbox, NODE_RED_CLAUDE_CWD: cwd }) },
                 model: (MSG_MODELS.has(msg.model) && msg.model) || config.model || undefined,
+                effort: config.effort || undefined,
                 maxTurns,
                 maxBudgetUsd: maxCostUsd,
                 resume,

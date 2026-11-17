@@ -56,7 +56,7 @@ function makeFlow(workRoot) {
         agent('run', [['collect-result'], [], ['collect-events']], { prompt: 'Task: {{payload}} {{topic}}', model: 'haiku', cwd: path.join(workRoot, 'project') }),
         collect('result'), collect('events'),
         inject('i-fable', 'hello', ['fable'], { model: ['fable', 'str'] }),
-        agent('fable', [['collect-fable'], [], []], { model: 'haiku' }), collect('fable'),
+        agent('fable', [['collect-fable'], [], []], { model: 'haiku', effort: 'medium' }), collect('fable'),
         inject('i-fullid', 'hello', ['fullid'], { model: ['claude-fable-5-2', 'str'] }),
         agent('fullid', [['collect-fullid'], [], []], { model: 'haiku' }), collect('fullid'),
         inject('i-sandbox', 'hello', ['sandbox']),
@@ -167,6 +167,7 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         await injectNode('i-fable');
         const [msg] = await results('fable');
         assert.equal(JSON.parse(msg.payload).model, 'fable');
+        assert.equal(JSON.parse(msg.payload).effort, 'medium', 'the Effort of the node goes to the CLI');
         assert.equal(msg.agent.weighted, 1500, '(1000 + 100 * 5) * 1, fable has the default weight');
     });
 
