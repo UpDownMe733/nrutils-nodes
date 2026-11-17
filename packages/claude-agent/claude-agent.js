@@ -391,6 +391,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             const text = (m.errors && m.errors.join('; ')) || m.result || m.subtype;
             return fail(run, failure(REASONS[m.subtype] || 'sdk_error', text));
         }
+        // Background subagents still work: their results come in a later turn of the CLI, with a new result. Close the run then.
+        if (!interrupted && !run.pending.size && run.subagents) return event(run, 'turn', m.result);
         if (!interrupted && !run.pending.size) return succeed(run, run.schema ? m.structured_output : m.result);
         // The run stays open for the pending messages, or for a new message after an interrupt.
         event(run, 'turn', interrupted ? 'interrupted' : m.result);
@@ -404,7 +406,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         const msg = jobs.length ? jobs[0].msg : {};
         const run = {
             id: crypto.randomUUID().slice(0, 8), jobs, life, msg, send: jobs.length ? jobs[0].send : () => {}, seq: 0, state: 'starting', startTime: Date.now(),
-            sessionId: undefined, model: undefined, turns: 0, messageId: null, lastActivity: null, tokens: undefined, usage: undefined,
+            sessionId: undefined, model: undefined, subagents: 0, turns: 0, messageId: null, lastActivity: null, tokens: undefined, usage: undefined,
             schema: null, pending: new Set(), inbox: [], wake: null, answer: null, question: null, query: null,
             timer: null, ended: false, hint: null
         };
@@ -497,7 +499,9 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
                     lastSessionCwd = cwd;
                 }
                 if (m.type === 'system' && m.subtype === 'init') run.model = m.model;
-                else if (m.type === 'result') onResult(run, m);
+                else if (m.type === 'system' && m.subtype === 'background_tasks_changed') {
+                    run.subagents = m.tasks.filter((t) => t.task_type === 'local_agent' && !t.ambient).length;
+                } else if (m.type === 'result') onResult(run, m);
                 else if (m.type === 'assistant' || m.type === 'user') {
                     // Each model response of the main agent gives the context size. In agent mode it also starts the timer again.
                     if (m.type === 'assistant' && m.message.model !== '<synthetic>') {

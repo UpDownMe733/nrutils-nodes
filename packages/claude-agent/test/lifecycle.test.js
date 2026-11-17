@@ -126,6 +126,7 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
     let child, base, userDir, workRoot, socket, mqtt, mqttServer;
     let log = '';
     const published = [];   // the publishes of the nodes to the popup: { messageType, nodeId, payload }
+    const subscribed = new Set();   // the topics that the nodes subscribed on the broker
     const brokerGot = [];   // the MQTT messages that the broker got: { topic, payload }
 
     const eventsOf = (nodeId) => published.filter((m) => m.nodeId === nodeId && m.messageType === 'event').map((m) => m.payload);
@@ -168,6 +169,7 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         const { Aedes } = await import('aedes');
         mqtt = await Aedes.createBroker();
         mqtt.on('publish', (packet, client) => { if (client) brokerGot.push({ topic: packet.topic, payload: packet.payload.toString() }); });
+        mqtt.on('subscribe', (subs) => subs.forEach((sub) => subscribed.add(sub.topic)));
         mqttServer = net.createServer(mqtt.handle);
         const mqttPort = await freePort();
         await new Promise((resolve) => mqttServer.listen(mqttPort, '127.0.0.1', resolve));
@@ -195,7 +197,7 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
         // The inboxes of the agents with a broker are on the broker
         await waitFor(async () => /Connected to broker/.test(log), 10000, 'mqtt connect');
-        await sleep(300);
+        await waitFor(async () => subscribed.has(inbox('Sender')) && subscribed.has(inbox('Plain')), 10000, 'the inbox subscriptions');
     });
 
     after(async () => {
@@ -348,7 +350,7 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
 
     it('stage 8: a stop keeps the session ID and the timer runs', async () => {
         await injectNode('i-stopper-0');
-        await waitFor(async () => eventsOf('stopper').some((e) => e.text === 'running'), 5000, 'running');
+        await waitFor(async () => fs.existsSync(sessionPath('stopper')), 5000, 'the session ID of the run');
         await injectNode('i-stopper-stop');
         await waitFor(async () => eventsOf('stopper').some((e) => e.text === 'stopped'), 5000, 'stopped');
         await idle('stopper');

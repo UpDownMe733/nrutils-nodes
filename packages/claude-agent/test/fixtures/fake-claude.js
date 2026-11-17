@@ -6,6 +6,8 @@
 //   silent          starts the session other-session and gives no model response and no result
 //   nologin         acts as the CLI without a login: a <synthetic> message, then an error result
 //   ask <question>  asks the operator through the ask_operator tool, then gives the answer as the result
+//   subagent        gives a result while one background subagent works. The subagent ends after half a second.
+//                   Then the agent gives a model response and the result "subagent done"
 //   maxturns        ends with the error result error_max_turns
 //   wait            gives no result: the run waits until somebody stops it
 //   slowdone        gives the result after one second
@@ -119,6 +121,15 @@ async function answer(prompt) {
         reply('The second turn.', 2500);
         await sleep(500);
         return result('done');
+    }
+    if (word === 'subagent') {
+        const task = { task_id: 'task-1', task_type: 'local_agent', description: 'a subagent' };
+        write({ type: 'system', subtype: 'background_tasks_changed', tasks: [task], session_id: sessionId });
+        result('the subagent works');
+        await sleep(500);
+        write({ type: 'system', subtype: 'background_tasks_changed', tasks: [], session_id: sessionId });
+        reply('The subagent has ended.');
+        return result('subagent done');
     }
     if (word === 'maxturns') return result('', 'error_max_turns');
     if (word === 'big') return result('done');

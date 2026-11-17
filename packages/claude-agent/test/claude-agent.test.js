@@ -83,6 +83,8 @@ function makeFlow(workRoot) {
         agent('switch', [['collect-switch'], [], ['collect-switchevents']]), collect('switch'), collect('switchevents'),
         // Two model responses, then the result
         inject('i-turns', 'twoturns', ['turns']), agent('turns', [['collect-turns'], [], []]), collect('turns'),
+        // A result while a background subagent works
+        inject('i-subagent', 'subagent', ['subagent']), agent('subagent', [['collect-subagent'], [], []]), collect('subagent'),
         { id: 'catch-all', type: 'catch', z: 'tab', scope: null, uncaught: false, wires: [['collect-catch']] }, collect('catch'),
         // GET /results/<key> answers with the messages that collect(key) stored
         { id: 'http-results', type: 'http in', z: 'tab', url: '/results/:key', method: 'get', wires: [['results']] },
@@ -375,6 +377,19 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         await waitFor(async () => publishedFrom('switch', 'session', from).some((m) => m.payload.lastActivity === null), 5000, 'session publish');
         await injectNode('i-switchstop');
         await waitFor(async () => (await results('switchevents')).some((m) => m.payload.text === 'stopped'), 10000, 'stopped');
+    });
+
+    it('a result while a background subagent works does not end the run: the run ends with the later result', async () => {
+        await injectNode('i-subagent');
+        const open = await waitFor(async () => {
+            const s = await editor('subagent', 'get-log');
+            return s.events.some((e) => e.kind === 'turn' && e.text === 'the subagent works') && s;
+        }, 10000, 'the first result');
+        assert.equal(open.runs.length, 1, 'the run is still open');
+        assert.equal(open.events.some((e) => e.kind === 'result'), false);
+        const [out] = await results('subagent');
+        assert.equal(out.payload, 'subagent done');
+        assert.deepEqual((await editor('subagent', 'get-log')).runs, []);
     });
 
     it('each model response and the result restart the cache countdown of the run and the session', async () => {
