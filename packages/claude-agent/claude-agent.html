@@ -64,9 +64,10 @@
 .ca-inbox{max-width:85%;padding:4px 10px 6px;border-radius:6px;border:1px solid var(--red-ui-secondary-border-color);border-left:3px solid var(--red-ui-text-color-link);background:var(--red-ui-secondary-background);cursor:pointer}
 .ca-inbox:focus-visible{outline:1px solid var(--red-ui-form-input-focus-color)}
 .ca-inbox .ca-meta{display:flex;align-items:center;gap:6px;margin:0 0 2px;font-size:11px;font-weight:600;color:var(--red-ui-secondary-text-color)}
-.ca-inbox .ca-meta i{margin-left:auto;transition:transform .15s}
+.ca-inbox .ca-meta i{margin-left:auto;font-size:16px;line-height:1;color:var(--red-ui-primary-text-color);transition:transform .15s}
 .ca-inbox.ca-open .ca-meta i{transform:rotate(180deg)}
 .ca-inbox-text{font-size:12px;line-height:1.4;max-height:calc(3 * 1.4em);overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;color:var(--red-ui-primary-text-color)}
+.ca-inbox[role=button]:not(.ca-open) .ca-inbox-text{-webkit-mask-image:linear-gradient(#000 60%,transparent);mask-image:linear-gradient(#000 60%,transparent)}
 .ca-inbox.ca-open .ca-inbox-text{max-height:300px;overflow-y:auto}
 .ca-end{align-self:center;font-size:10px;padding:1px 8px;border-radius:10px;background:var(--red-ui-tertiary-background);color:var(--red-ui-secondary-text-color)}
 .ca-end.ca-error{color:var(--red-ui-text-color-error);border:1px solid var(--red-ui-border-color-error)}
