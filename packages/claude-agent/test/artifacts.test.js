@@ -431,7 +431,7 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
         });
         assert.equal(await post(new URL(base).host), 200);
         assert.equal(await post('view.test'), 409);
-        assert.match(log, /viewer URL has the origin of the editor/);
+        await waitFor(async () => /viewer URL has the origin of the editor/.test(log), 5000, 'error in the log');
     });
 });
 
