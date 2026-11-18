@@ -357,28 +357,55 @@
     }
 
     // Ctrl+V of a picture adds it to the message box. A paste of text stays as it is.
-    function pastePictures(node, e) {
+    async function pastePictures(node, e) {
         const files = Array.from((e.clipboardData && e.clipboardData.items) || [])
             .filter((item) => item.kind === 'file' && IMAGE_TYPES.includes(item.type)).map((item) => item.getAsFile()).filter(Boolean);
         if (!files.length) return;
         e.preventDefault();
         e.stopPropagation();
-        const images = pasted[node.id] = pasted[node.id] || [];
         for (const file of files) {
+            let image;
+            try {
+                image = await shrink(file);
+            } catch (err) {
+                RED.notify('The picture cannot be read.', 'warning');
+                continue;
+            }
+            // Read the list after the shrink: a Send or another paste can change it while the shrink runs.
+            const images = pasted[node.id] = pasted[node.id] || [];
             if (images.length >= MAX_IMAGES) return RED.notify('A message can have ' + MAX_IMAGES + ' pictures.', 'warning');
-            const used = images.reduce((sum, i) => sum + (i.size || 0), 0);
-            if (used + file.size > MAX_IMAGE_BYTES) {
+            const used = images.reduce((sum, i) => sum + i.data.length * 0.75, 0);
+            if (used + image.data.length * 0.75 > MAX_IMAGE_BYTES) {
                 RED.notify('The pictures of a message can have 3 MB.', 'warning');
                 continue;
             }
-            const image = { mediaType: file.type, data: '', size: file.size };
             images.push(image);
-            const reader = new FileReader();
-            reader.onload = () => {
-                image.data = String(reader.result).replace(/^data:[^,]*,/, '');
-                showPasted(node);
-            };
-            reader.readAsDataURL(file);
+            showPasted(node);
+        }
+    }
+
+    // A pasted picture as { mediaType, data }. The long side becomes 1568 px at most: the model makes a larger picture
+    // smaller before it reads it. A PNG above 1 MB becomes a JPEG, so a normal screenshot fits in the 3 MB of a message.
+    async function shrink(file) {
+        const url = URL.createObjectURL(file);
+        try {
+            const img = new Image();
+            img.src = url;
+            await img.decode();
+            const scale = Math.min(1, 1568 / Math.max(img.naturalWidth, img.naturalHeight));
+            const canvas = make('canvas');
+            canvas.width = Math.round(img.naturalWidth * scale);
+            canvas.height = Math.round(img.naturalHeight * scale);
+            const context = canvas.getContext('2d');
+            context.fillStyle = '#fff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.drawImage(img, 0, 0, canvas.width, canvas.height);
+            let mediaType = 'image/png';
+            let data = canvas.toDataURL(mediaType);
+            if (data.length * 0.75 > 1024 * 1024) data = canvas.toDataURL(mediaType = 'image/jpeg', 0.85);
+            return { mediaType, data: data.replace(/^data:[^,]*,/, '') };
+        } finally {
+            URL.revokeObjectURL(url);
         }
     }
 
@@ -715,15 +742,13 @@
             send.appendChild(element(node, 'span', 'send-label', '', ' Send'));
             send.addEventListener('click', () => {
                 const run = selectedRun(node);
+                // An answer takes no pictures: they stay in the message box for the next message.
                 const answer = run && run.state === 'waiting';
-                const images = pasted[node.id] || [];
-                // The pictures stay in the box until they can go with a message.
-                if (images.some((image) => !image.data)) return RED.notify('A picture is still loading.', 'warning');
-                if (answer && images.length) return RED.notify('An answer takes no pictures. Remove them or wait for the question to end.', 'warning');
+                const images = answer ? [] : pasted[node.id] || [];
                 sendControl(node, answer ? 'answer' : 'message', text.value, images.length ? images : undefined);
                 text.value = '';
                 grow(text);
-                delete pasted[node.id];
+                if (!answer) delete pasted[node.id];
                 showPasted(node);
             });
             // Enter sends. Shift+Enter starts a new line. Enter that ends an IME composition does not send.
@@ -968,6 +993,7 @@
     <p>The timer chip in the header shows <b>Active</b>, the time since the selected run started, and <b>Cache</b>, the minutes until the prompt cache expires, for example <code>Cache 52m</code>. The cache countdown starts again at each model response. It is an estimate. <code>Cache cold</code> means that the next message reads the full context again at the full price. The chip turns amber at 5 minutes or less.</p>
     <p><b>New chat</b> (the + button) makes the node forget its last session and clears the popup log. The next message from the popup starts a new session. It is not possible while a run is active.</p>
     <p>The message box is at the bottom. Enter sends; Shift+Enter starts a new line. When no run is active, Send starts a run with your text as the task; the run continues the last session of the node. When the agent asks a question, the popup shows it with one button for each option, and Send becomes Answer. Interrupt and Stop show only while a run is active.</p>
+    <p>Paste a screenshot (Ctrl+V) into the message box to send it to the agent: 5 pictures and 3 MB at most for each message, and the popup makes a large picture smaller.</p>
     <p>A deploy of the node ends its live runs and clears the popup log.</p>
 
     <h3>Session mode agent</h3>
