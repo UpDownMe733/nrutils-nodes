@@ -99,7 +99,7 @@
         for (const item of layout(ops, narrow)) {
             if (item.head) {
                 const h = (text, right) => el('span', { class: 'd-head' + (right ? ' d-right' : ''), text });
-                if (narrow) grid.append(h('\u2212' + oldN), h('+' + newN), h('Version ' + oldN + ' and version ' + newN));
+                if (narrow) grid.append(h('v' + oldN), h('v' + newN), h('Version ' + oldN + ' and version ' + newN));
                 else grid.append(h(''), h('Version ' + oldN), h('', true), h('Version ' + newN));
             } else if (item.more) {
                 const more = el('button', { class: 'd-more', type: 'button', text: 'Show ' + item.more.length + ' same lines' });
