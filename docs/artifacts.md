@@ -42,8 +42,17 @@ publish({ path, name?, title?, entry?, note? })
 - The result to the agent: `Published "<title>" as <name>, version <n>.` An error result has the reason, for example `the file is larger than 100 MB`.
 - A publish of content that is the same as the last version makes no new version. The result says so.
 - The tool reads the files when the agent calls it. A later change of the file does not change the stored version.
-- Limits for each publish (settings, see section 9): 100 MB, 2000 files. A symbolic link, a device or a socket stops the publish with an error. The tool does not follow links.
-- A run in a sandbox: the node cannot read the files of the sandbox. The setting `claudeAgent.sandboxExec` names a program with the arguments `<sandbox> <folder> <command...>` (the same form as the launcher). The node runs `tar -cf - -- <name>` through it and reads the tar stream with its own small reader: regular files and folders only, no absolute path, no `..`. A local run uses the same reader on a local `tar`, so there is one code path. With no `sandboxExec`, a sandbox run gets the error `this node cannot read files of a sandbox`.
+- Limits for each publish (settings, see section 9): 100 MB, 2000 files.
+- The node never reads the files of the agent with its own rights. The Node-RED user can read files that the agent cannot (`settings.js`, the credentials, the ticket key). A symbolic link in a parent folder, or a file swap between a check and the read, would give them to the agent.
+  Thus the node reads all files with one code path: it runs `tar -cf - -- <name>` with the rights of the agent, and reads the tar stream with its own small reader.
+  - The setting `claudeAgent.agentExec` names a program with the arguments `<sandbox or -> <folder> <command...>`. It runs the command as the agent user, in the sandbox when a sandbox is named, else on the host.
+  - The node starts it with `spawn` and an argument array, never with a shell.
+  - With no `claudeAgent.launcher`, the agent runs as the Node-RED user. Then the node runs `tar` directly, because the agent already has these rights.
+  - With a launcher and no `agentExec`, publish gives the error `this node cannot read files with the rights of the agent`.
+- The tar reader accepts regular files and folders only. It stops the publish with an error on these:
+  - a symbolic link, a hard link, a device, a FIFO;
+  - a name (also a pax or GNU long name) that is absolute, or that has a `..` part;
+  - more bytes or more files than the limits. The reader counts on the stream, and kills `tar` at the limit.
 - Each publish emits a new event kind `artifact`: `{ id, name, version, title, type, size }`. The popup chat, the Timeline, the third output and `agent-watch` get it, the same as other events.
 
 ## 3. The store
@@ -88,12 +97,13 @@ Routes on `RED.httpAdmin`, below `/claude-agent/artifacts`. Read routes need `cl
 | --- | --- |
 | `GET /` with `?owner=&type=&since=&q=` | The list, newest first: id, name, title, owner, last version, time, type, size, number of active share links. `q` searches the titles and names. |
 | `GET /:id` | The record |
-| `POST /:id/:n/ticket` | A view URL on the view server for this version (section 6) |
-| `GET /:id/:n/download` | The file, or a zip of the folder |
-| `POST /:id/shares`, `DELETE /shares/:share` | Make and revoke a share link (section 7) |
-| `GET /:id/shares` | The share links of the artifact |
+| `POST /:id/:n/ticket` | A view URL on the view server for this version (section 6). The download URL is in it. |
+| `POST /:id/shares`, `PUT /shares/:share`, `DELETE /shares/:share` | Make, extend and revoke a share link (section 7) |
+| `GET /shares` and `GET /:id/shares` | All open share links, and the share links of one artifact |
 | `DELETE /:id` and `DELETE /:id/:n` | Delete the artifact or one version (to the bin for 30 days) |
 | `POST /:id/restore` and `POST /:id/:n/restore` | Undo a delete |
+
+The admin API sends no byte of an artifact. The admin origin holds the token of the editor: an HTML file there, or a `blob:` URL that the editor makes from artifact bytes, would run with that token. Thus the content, the thumbnails and the downloads come only from the view server. The list gives a thumbnail URL with a ticket for each image.
 
 The runtime publishes `artifacts` on the comms of the node after each publish. The open lists then update with no poll.
 
@@ -118,9 +128,9 @@ To add a type: add one renderer script, add it to the list in `viewer/index.html
 | Type | Renderer | Size |
 | --- | --- | --- |
 | Text and code (by extension, or a text test) | `<pre>` with line numbers and wrap on or off | S |
-| Markdown | `marked` (new dependency, the same library as the Node-RED editor). Relative images and links go to the files of the same artifact. An outline of the headings jumps to each part. | S |
+| Markdown | `marked` (new dependency, the same library as the Node-RED editor), then `DOMPurify` on its HTML (new dependency: HTML in markdown must not add a script, a frame or a form). Relative images and links go to the files of the same artifact. An outline of the headings jumps to each part. | S |
 | Image (png, jpeg, gif, webp, avif, bmp, ico) and SVG | `<img>`: fit to the width, zoom to 100 %, pinch zoom on touch. An SVG in `<img>` runs no script. | S |
-| PDF | The PDF viewer of the browser, in an `<iframe>` | S |
+| PDF | The PDF viewer of the browser, in an `<iframe>`. Only for the type `application/pdf` with the first bytes `%PDF-` (section 6). Else the "other" renderer. | S |
 | Audio and video | `<audio>`, `<video>` | S |
 | HTML page or application | A nested `<iframe>` of the file. Its response has the `sandbox` CSP (section 6). | S |
 | CSV and TSV | A table that scrolls in its own box, with a fixed header row, a fixed first column and a sort for each column | S |
@@ -138,13 +148,27 @@ The viewer page has no state. The theme (light or dark) comes in the URL.
 
 ## 6. Isolation
 
-The editor runs with the admin rights of Node-RED. Content of an agent must never run with these rights. Three layers protect it:
+The editor runs with the admin rights of Node-RED. Content of an agent must never run with these rights. These layers protect it:
 
-1. **Another origin.** The view server listens on its own port. A port is a part of the origin, so the viewer page cannot read the DOM, the storage or the token of the editor. The editor shows the viewer page in an `<iframe>` of that origin.
-2. **An opaque origin for each file.** Each file response has the header `Content-Security-Policy: sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads`, with no `allow-same-origin` and no `allow-top-navigation`. The browser then gives the file a unique origin. HTML of the agent cannot read the viewer page, other artifacts, cookies or storage, also when a person opens the file URL in a tab of its own. Exception: a PDF response has no `sandbox` CSP, because Chrome does not show a PDF in a sandboxed document. A PDF only gets the PDF viewer of the browser.
-3. **Strict headers.** Each response has `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Cache-Control: private, no-store`. The viewer page has `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-ancestors <editor origin> 'self'`. Thus HTML in a markdown file does not run.
+1. **No artifact byte on the admin origin.** See section 4. The editor shows content only in an `<iframe>` of the view server, and links a download to the view server.
+2. **Another origin.** The view server is its own `http.Server` on its own port, with no Express app of Node-RED. A port is a part of the origin, so the viewer page cannot read the DOM, the storage or the token of the editor.
+3. **An opaque origin for each file.** Each file response has this header (one line):
+   `Content-Security-Policy: sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads; default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval'`.
+   It has no `allow-same-origin` and no `allow-top-navigation`. The browser gives the file a unique origin. HTML of the agent cannot read the viewer page, other artifacts, cookies or storage, also in a browser tab of its own.
+4. **A strict viewer page.** The viewer page has a new random nonce for each response:
+   `Content-Security-Policy: default-src 'self'; script-src 'nonce-<n>'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors <editor origin> 'self'`.
+   `script-src 'self'` is not enough: it allows each artifact file on the same origin as a script, and a sandbox CSP has no effect on a script that another page loads. With the nonce, only the scripts of the viewer run, and `DOMPurify` removes HTML that tries to add more.
+5. **Strict headers.** Each response has `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Cache-Control: private, no-store`.
+6. **Exact paths.** The view server and the share server find a file only by an exact match of its path in the file list of the version. They never join a path from the URL to a folder.
+7. **Messages.** The editor accepts a `postMessage` only when `event.origin` is the origin of the view server. It accepts only data (for example "loaded"), never a command.
 
-Network of HTML artifacts: an HTML application can load files from `https:` (for example a chart library from a CDN). The agent wrote the page, and the agent can already send data anywhere from its shell, so this adds no new path out. The opaque origin holds no secret.
+The PDF exception: Chrome does not show a PDF in a sandboxed document, so a PDF response has no `sandbox` CSP. The view server serves a file as PDF only when its type is exactly `application/pdf` and its first bytes are `%PDF-`. The response has `nosniff`. Else the file is served as `application/octet-stream` with the sandbox CSP.
+
+Download: `/v/<ticket>/download` gives the file, or a zip of the folder, with `Content-Disposition: attachment; filename=…`, `Content-Type: application/octet-stream`, `nosniff` and the sandbox CSP.
+
+Network of HTML artifacts: the CSP of a file allows only the view server, `data:` and `blob:`. Thus a page that a person reviewed cannot change later through remote content, and it cannot track an outside reader.
+- The view server on the LAN also allows `https:` (setting `artifacts.htmlNetwork`, default `true`). An HTML application can then load a library from a CDN in the editor. The agent can already send data anywhere from its shell, so this adds no new path out.
+- The share server allows only the hosts in `artifacts.shareHosts` (default none). The preview of a share link (section 7) shows the share page, so the person sees a page that needs a host that is not on the list.
 
 View tickets: the editor asks the admin API for a view URL. The URL is `/v/<ticket>/…` with `ticket = base64url(id, n, expiry) + "." + HMAC-SHA256(key, id|n|expiry)`. It is valid for one version for 12 hours. The ticket is in the path, so relative links inside a folder artifact work. A script of the artifact can read its own ticket: that ticket opens only the same version. The key is in the store file `key`, never in `settings.js`: the editor gets the full `claudeAgent` settings block.
 
@@ -152,16 +176,18 @@ View tickets: the editor asks the admin API for a view URL. The URL is `/v/<tick
 
 Two ways:
 
-- **Download**: one file as it is, a folder as a zip (own zip writer, deflate of `zlib`, about 80 lines). This needs no host.
+- **Download**: one file as it is, a folder as a zip (own zip writer, deflate of `zlib`, about 80 lines). This needs no host. The editor links to the download URL of the view server (section 6).
 - **Share link**: `<publicUrl>/s/<share id>/`. The share id is 128 random bits. A record in `shares.json`: `{ id, artifact, version: n | "latest", created, expires, revoked, label }`.
-  - The person in the editor chooses: this version or always the latest version, and the time: 1 day, 7 days (default), 30 days, or no end.
-  - The share server serves only `/s/…` and the viewer page. It has no `/v/` route and no list. A share page shows the title, the version, the date and the content. It shows no owner, no run, no folder and no other artifact.
+  - A share link never shows more than its one artifact. Its record and its page have no owner, no run and no folder.
+  - The version: the default is the version that the person sees. "Always the latest version" is an explicit choice with this warning: "Each new version that the agent makes goes to the people with the link, with no review." An agent can be under prompt injection, so a fixed version is the safe default.
+  - The time: 1 day, 7 days (default) or 30 days. 30 days is the longest time. "Extend" sets a new end, at most 30 days from that time, and keeps the URL.
+  - The editor has one list of all open share links of all artifacts, with the end date of each and a revoke action.
+  - The share server is its own `http.Server` on its own port, with no Express app of Node-RED. It serves only `/s/…`, the download of that share and the viewer page. It has no `/v/` route and no list. A share page shows the title, the version, the date and the content.
+  - It binds to `127.0.0.1` by default (setting `artifacts.shareBind`), for a tunnel on the same host. A public host (a reverse proxy or a tunnel) sends that whole port to the internet. The view server and the editor stay on the LAN.
   - Revoke: the link stops at once. An expired or revoked link gives 404 with no detail.
-  - The share server listens on its own port. A public host (a reverse proxy or a tunnel) sends that whole port to the internet. The view server and the editor stay on the LAN.
   - With no `publicUrl` set, the editor shows no share link action, only Download.
   - Preview: before a person copies a new link, the editor shows the share page itself, so the person sees what the outside person sees.
   - Copy link uses the clipboard. The share sheet of a phone (`navigator.share`) works only when the editor is on HTTPS; on HTTP only Copy link shows.
-  - A download has `Content-Disposition: attachment` with the file name and the correct type.
 
 ## 8. The editor
 
@@ -177,11 +203,14 @@ artifacts: {
     viewPort: 1881,         // the view server. 0 or no artifacts block: no viewer, publish still stores.
     viewUrl: '',            // the URL that the browser of the editor uses for the view server. Default: the host of the editor with viewPort.
     sharePort: 0,           // the share server. 0: no share links.
+    shareBind: '127.0.0.1', // the address of the share server. Change it only when the public host is on another machine.
     publicUrl: '',          // the public URL of the share server
+    htmlNetwork: true,      // HTML on the view server can load https: files
+    shareHosts: [],         // hosts that HTML on the share server can load files from
     maxBytes: 104857600,    // 100 MB for each publish
     maxFiles: 2000
 },
-sandboxExec: ''             // the program that runs a command in a sandbox
+agentExec: ''               // the program that runs a command as the agent user (section 2)
 ```
 
 ## 10. User needs
@@ -213,13 +242,13 @@ Three users gave their needs: an operator who watches many agents, a new user, a
 
 | # | Part | Size | Needs |
 | --- | --- | --- | --- |
-| 1 | Store, publish tool for local files, event `artifact`, admin API list and record | M | — |
+| 1 | Store, publish tool with the tar reader (local `tar`, or `agentExec` on the host), event `artifact`, admin API list and record | M | `agentExec` on live, because live has a launcher |
 | 2 | View server with tickets and headers, viewer page with the renderers text, markdown, image, PDF, audio, video, HTML, other | L | a second port that the browser reaches |
 | 3 | Editor: the card in the chat, the artifacts of a node, the list of all artifacts, open the viewer | M | section 8 |
-| 4 | Download (file and zip), delete with blob clean up | S | — |
+| 4 | Download on the view server (file and zip), delete with blob clean up | S | — |
 | 5 | Compare two versions | M | — |
-| 6 | Share server and share links | M | a public host for the share port |
-| 7 | Sandbox read (`sandboxExec`, tar reader) | M | a program that the Node-RED user may run |
+| 6 | Share server, share links and the list of open links | M | a public host for the share port |
+| 7 | Read as the agent user in a sandbox (`agentExec` with a sandbox name) | S | the sandbox form of `agentExec` |
 | 8 | CSV, TSV and JSON renderers | S | — |
 | 9 | Later: syntax colours, Mermaid | S + M | new dependencies |
 | 10 | Later: a comment on a version goes to the inbox of its agent as a message | S | the MQTT inbox of the node |
@@ -229,5 +258,6 @@ Sizes: S is less than 150 lines with tests, M 150 to 400, L more than 400.
 ## 12. Open risks
 
 - An agent can publish HTML that tries to trick a person, for example a fake login form. The opaque origin stops access to data, not a lie on the screen. The viewer shows the owner and the type above each HTML artifact.
-- Chrome shows a PDF only outside a sandbox, so a PDF depends on the PDF viewer of the browser for its safety.
+- Chrome shows a PDF only outside a sandbox, so a PDF depends on the PDF viewer of the browser for its safety. The type and first byte checks of section 6 limit it to real PDF files.
+- A share link to "always the latest version" sends each new version out with no review. It is an explicit choice with a warning, and it ends after 30 days at most.
 - The store grows with no limit, because nothing deletes on its own. The list shows the size of each artifact and the total.
