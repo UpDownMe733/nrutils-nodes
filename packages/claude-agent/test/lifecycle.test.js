@@ -15,7 +15,7 @@ const { spawn } = require('child_process');
 
 const REPO = path.resolve(__dirname, '..');
 const FAKE = path.join(__dirname, 'fixtures', 'fake-claude.js');
-const CLOSE_PROMPT = 'Write what a new session of you must know to continue. If there is nothing, write nothing. 200 words maximum.';
+const CLOSE_PROMPT = 'The session ends. First, do the steps that your instructions give to save what you learned, for example to store memories. Skip this if your instructions give no such steps. Then write a note for a new session of you: the goal, the state, the next step and the open waits. Your last text is the note and nothing else. 200 words maximum. If there is nothing to continue, write nothing.';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 

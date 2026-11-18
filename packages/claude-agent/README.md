@@ -133,7 +133,7 @@ In the agent mode, the node is one agent. It runs one turn at a time and keeps o
    the session (6). Else the timer runs: the cache time minus 1 minute.
 5. **Timer end with an open item** (a `send` with no answer yet): the node sends a keep-alive turn
    (prompt `.`). After **Max keep-alive** keep-alives, it closes (6). A real message sets the count to 0.
-6. **Close**: the node asks the agent for a note of 200 words maximum. It stores the answer as the note.
+6. **Close**: the node asks the agent to do the steps that its own instructions give to save what it learned (for example to store memories). Then the node asks for a note of 200 words maximum: the goal, the state, the next step and the open waits. It stores the last text of the agent as the note.
    An empty answer gives no note. Then it forgets the session.
 7. **Context limit in a long turn**: after the next tool call, the node tells the agent one time to call
    `handoff(note)`. The node then stops the run, stores the note and starts a cold session with the note

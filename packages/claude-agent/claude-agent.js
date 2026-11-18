@@ -51,7 +51,7 @@ function checkImages(images) {
     return list;
 }
 // The life cycle of the session mode agent
-const CLOSE_PROMPT = 'Write what a new session of you must know to continue. If there is nothing, write nothing. 200 words maximum.';
+const CLOSE_PROMPT = 'The session ends. First, do the steps that your instructions give to save what you learned, for example to store memories. Skip this if your instructions give no such steps. Then write a note for a new session of you: the goal, the state, the next step and the open waits. Your last text is the note and nothing else. 200 words maximum. If there is nothing to continue, write nothing.';
 const LIMIT_HINT = 'Context limit reached. Call the handoff tool now. Give it what a new session of you must know to continue.';
 const NOTE_LABEL = 'The note of your earlier session:';
 const RECORD_HINT = (id) => `You have no note of your earlier session. The record of that session is the file ~/.claude/projects/*/${id}.jsonl. Read it before you answer. It can be large: read only the text of the user and of the assistant.`;

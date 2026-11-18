@@ -18,7 +18,7 @@
 //                   If the hook asks for the handoff tool, it calls handoff with the note "the handoff note" and
 //                   gives no result. Else the result is "no hint".
 //   send <to> <text> calls the send tool (report <to> <text> sets report true), then gives the result "send replied: " and the text of the tool
-//   Write what...   the close prompt of an agent: the result is the text of close-answer.txt in the folder,
+//   The session ends...   the close prompt of an agent: the result is the text of close-answer.txt in the folder,
 //                   else "The note of the fake."
 //   Stage           a call of the agent-watch narrator: one line for each stage of the prompt.
 //                   It appends one line to narrator-calls.log in its folder. If the prompt has the
@@ -110,7 +110,7 @@ async function answer(prompt) {
     if (prompt.split(' ')[0] === 'silent') return write({ type: 'system', subtype: 'init', session_id: 'other-session', model });
     write({ type: 'system', subtype: 'init', session_id: sessionId, model });
     const word = prompt.split(' ')[0];
-    if (prompt.startsWith('Write what a new session')) {
+    if (prompt.startsWith('The session ends.')) {
         reply('I write the note.');
         return result(fs.existsSync('close-answer.txt') ? fs.readFileSync('close-answer.txt', 'utf8') : 'The note of the fake.');
     }
