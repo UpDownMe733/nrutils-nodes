@@ -251,6 +251,32 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal(JSON.parse(list[2].payload).resume, null);
     });
 
+    it('a pasted picture goes to the agent as an image block, and the popup log keeps it', async () => {
+        const count = (await results('result', 1)).length;
+        const picture = { mediaType: 'image/png', data: 'iVBORw0KGgo=' };
+        assert.deepEqual(await editor('run', 'start', { text: 'look', images: [picture] }), {});
+        const list = await results('result', count + 1);
+        const got = JSON.parse(list[count].payload);
+        assert.equal(got.prompt, 'look');
+        assert.deepEqual(got.images, ['image/png:iVBORw0KGgo=']);
+        const sent = (await editor('run', 'get-log')).events.find((e) => e.kind === 'prompt' && e.text === 'look');
+        assert.deepEqual(sent.images, [picture]);
+        const out = (await results('events')).filter((m) => m.payload.kind === 'prompt' && m.payload.text === 'look');
+        assert.ok(out.length && out.every((m) => m.payload.images === undefined), 'the events output has no picture');
+        // A picture with no text is a valid message
+        assert.deepEqual(await editor('run', 'start', { text: '', images: [picture] }), {});
+        assert.deepEqual(JSON.parse((await results('result', count + 2))[count + 1].payload).images, ['image/png:iVBORw0KGgo=']);
+    });
+
+    it('the node refuses a bad picture', async () => {
+        const ok = { mediaType: 'image/png', data: 'iVBORw0KGgo=' };
+        assert.match((await editor('run', 'start', { text: 'x', images: [{ mediaType: 'image/svg+xml', data: 'AAAA' }] })).error, /png, jpeg, gif or webp/);
+        assert.match((await editor('run', 'start', { text: 'x', images: [{ mediaType: 'image/png', data: 'not base64!' }] })).error, /base64/);
+        assert.match((await editor('run', 'start', { text: 'x', images: [{ mediaType: 'image/png', data: 'A'.repeat(7 * 1024 * 1024) }] })).error, /5 MB/);
+        assert.match((await editor('run', 'start', { text: 'x', images: Array(6).fill(ok) })).error, /5 pictures/);
+        assert.match((await editor('run', 'start', { text: '  ' })).error, /type a message/);
+    });
+
     it('a sandbox run gives the sandbox name and the folder to the launcher in the environment', async () => {
         await injectNode('i-sandbox');
         const got = JSON.parse((await results('sandbox'))[0].payload);

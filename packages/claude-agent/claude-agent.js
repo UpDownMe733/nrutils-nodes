@@ -19,6 +19,10 @@ const { events, agentSettings, loadSdk, weightedCount, weightedText } = require(
 // The models that msg.model can choose. A different value uses the model of the node.
 const MSG_MODELS = new Set(['haiku', 'sonnet', 'opus', 'fable']);
 const LOG_SIZE = 200;
+// The pictures that the popup pastes: the types, the size of one picture (the limit of the API) and the number for one message
+const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+const IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_COUNT = 5;
 const TEXT_SIZE = 300;
 const INTERRUPTED = ['aborted_streaming', 'aborted_tools'];
 // The failure reason for each SDK error subtype. Other errors get "sdk_error".
@@ -30,6 +34,18 @@ const REASONS = {
 
 // Event kinds that the popup chat view shows: the text of the operator and of the agent
 const CHAT_KINDS = new Set(['prompt', 'message', 'answer', 'text', 'question', 'sent']);
+// The pictures of a request of the popup. Returns the list, or throws an error with the reason.
+function checkImages(images) {
+    if (images == null) return [];
+    if (!Array.isArray(images) || images.length > IMAGE_COUNT) throw new Error(`a message takes ${IMAGE_COUNT} pictures at most`);
+    return images.map((i) => {
+        if (!i || !IMAGE_TYPES.has(i.mediaType) || typeof i.data !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(i.data)) {
+            throw new Error('a picture must be png, jpeg, gif or webp, as base64');
+        }
+        if (i.data.length * 0.75 > IMAGE_BYTES) throw new Error('a picture is larger than 5 MB');
+        return { mediaType: i.mediaType, data: i.data };
+    });
+}
 // The life cycle of the session mode agent
 const CLOSE_PROMPT = 'Write what a new session of you must know to continue. If there is nothing, write nothing. 200 words maximum.';
 const LIMIT_HINT = 'Context limit reached. Call the handoff tool now. Give it what a new session of you must know to continue.';
@@ -153,15 +169,17 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         if (extra && extra.source) Object.assign(e, { source: extra.source, from: extra.from });
         // The Agents tab needs the receiver of a sent message
         if (extra && extra.to) e.to = extra.to;
+        // The popup shows the pictures of a message. The events output gets no picture.
+        if (extra && extra.images && extra.images.length) e.images = extra.images;
         log.push(e);
         if (log.length > LOG_SIZE) log.shift();
         const out = RED.util.cloneMessage(run.msg);
         out.topic = `agent/${node.id}/${run.id}`;
-        out.payload = { ...e, text: cut(e.text) };
+        out.payload = { ...e, text: cut(e.text), images: undefined };
         run.send([null, null, out]);
         comms.publish('event', e);
         // The agent-watch nodes listen here. They get the same text as the popup.
-        events.emit('event', { ...e, nodeId: node.id, z: node.z, stage: stageKey, ...extra });
+        events.emit('event', { ...e, nodeId: node.id, z: node.z, stage: stageKey, ...extra, images: undefined });
     }
 
     function setState(run, state) {
@@ -172,10 +190,14 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     }
 
     // Give a user message to the session. The run stays open until a result has used it.
-    function push(run, text) {
+    // images: the pictures of the message. Each one goes to the agent as an image block.
+    function push(run, text, images = []) {
         const uuid = crypto.randomUUID();
         run.pending.add(uuid);
-        run.inbox.push({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null, uuid });
+        const content = images.length
+            ? [...(text ? [{ type: 'text', text }] : []), ...images.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.mediaType, data: i.data } }))]
+            : text;
+        run.inbox.push({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null, uuid });
         if (run.wake) run.wake();
     }
 
@@ -495,8 +517,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             // One prompt event for each part, so the popup shows each part with its own sender.
             // A turn that the node writes (keep-alive, close, handoff) is a life cycle prompt, not operator text.
             if (life || text !== undefined) event(run, 'prompt', prompt, { source: 'life' });
-            else for (const job of jobs) event(run, 'prompt', job.shown ?? render(job), job.from ? { source: 'agent', from: job.from } : undefined);
-            push(run, prompt);
+            else for (const job of jobs) event(run, 'prompt', job.shown ?? render(job), { ...(job.from ? { source: 'agent', from: job.from } : {}), images: job.images });
+            push(run, prompt, jobs.flatMap((j) => j.images || []));
             run.query = sdk.query({ prompt: input(run), options });
             setState(run, 'running');
             for await (const m of run.query) {
@@ -559,8 +581,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     }
 
     // A start message with no input msg: from the popup or from the inbox. Its result goes out as a new msg.
-    function enqueue(msg, text, from, shown) {
-        queue.push({ msg, send: (m) => node.send(m), done: (err) => { if (err) node.error(err, msg); }, text, from, shown });
+    function enqueue(msg, text, from, shown, images) {
+        queue.push({ msg, send: (m) => node.send(m), done: (err) => { if (err) node.error(err, msg); }, text, from, shown, images });
         startNext();
         showStatus();
     }
@@ -589,7 +611,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         });
     }
 
-    function control(cmd, runId, payload) {
+    function control(cmd, runId, payload, images = []) {
         const run = runId ? runs.get(runId) : runs.size === 1 ? runs.values().next().value : null;
         if (!run) throw new Error(runId ? `no active run ${runId}` : `give a runId: the node has ${runs.size} active runs`);
         const text = payload == null ? '' : typeof payload === 'string' ? payload : JSON.stringify(payload);
@@ -601,8 +623,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             settle(run, text, false);
             setState(run, 'running');
         } else if (cmd === 'message') {
-            push(run, text);
-            event(run, 'message', text);
+            push(run, text, images);
+            event(run, 'message', text, { images });
             if (run.state === 'interrupted') setState(run, 'running');
         } else if (cmd === 'interrupt') {
             settle(run, 'The operator interrupted the turn. No answer comes.', true);
@@ -654,20 +676,26 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     });
     // The popup starts a run when the node has no active run. The run continues the last session of the node.
     comms.subscribe('start', (p) => {
-        if (!p || typeof p.text !== 'string' || !p.text.trim()) return { error: 'type a message first' };
+        let images;
+        try {
+            images = checkImages(p && p.images);
+        } catch (err) {
+            return { error: err.message };
+        }
+        if (!p || typeof p.text !== 'string' || (!p.text.trim() && !images.length)) return { error: 'type a message first' };
         const msg = { _msgid: RED.util.generateId(), payload: p.text };
         // A session is kept in its folder: resume it in the same folder, also when msg.cwd set that folder.
         if (lastSessionId) {
             msg.agent = { resume: lastSessionId };
             msg.cwd = lastSessionCwd;
         }
-        enqueue(msg, p.text);
+        enqueue(msg, p.text, undefined, undefined, images);
         return {};
     });
     comms.subscribe('control', (p) => {
         if (!p || typeof p.cmd !== 'string' || typeof p.runId !== 'string') return { error: 'bad request' };
         try {
-            control(p.cmd, p.runId, typeof p.text === 'string' ? p.text : '');
+            control(p.cmd, p.runId, typeof p.text === 'string' ? p.text : '', checkImages(p.images));
             return {};
         } catch (err) {
             return { error: err.message };

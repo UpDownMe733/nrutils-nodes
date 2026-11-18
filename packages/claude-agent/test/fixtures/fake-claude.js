@@ -149,7 +149,7 @@ async function answer(prompt) {
     }
     if (word === 'ask') return result('The operator said: ' + await callTool('ask_operator', { question: prompt.slice(4), options: ['yes', 'no'] }));
     result(JSON.stringify({
-        prompt, cwd: process.cwd(), model: arg('--model'), effort: arg('--effort'), permissionMode: arg('--permission-mode'), resume: arg('--resume'),
+        prompt, images, cwd: process.cwd(), model: arg('--model'), effort: arg('--effort'), permissionMode: arg('--permission-mode'), resume: arg('--resume'),
         settings: readSettings(), forceCache5m: process.env.FORCE_PROMPT_CACHING_5M || null,
         cacheTtlEnv: process.env.CLAUDE_CODE_PROMPT_CACHE_TTL || null,
         subagentCacheTtlEnv: process.env.CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL || null,
@@ -157,6 +157,7 @@ async function answer(prompt) {
     }));
 }
 
+let images = [];
 readline.createInterface({ input: process.stdin }).on('line', (line) => {
     const m = JSON.parse(line);
     if (m.type === 'control_request') {
@@ -169,6 +170,8 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
         if (resolve) resolve(m.response.response);
     } else if (m.type === 'user') {
         const content = m.message.content;
+        // The image blocks of the message: the type and the data
+        images = typeof content === 'string' ? [] : content.filter((b) => b.type === 'image').map((b) => b.source.media_type + ':' + b.source.data);
         answer(typeof content === 'string' ? content : content.map((b) => b.text || '').join(''));
     }
 }).on('close', () => process.exit(0));
