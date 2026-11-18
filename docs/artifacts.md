@@ -86,7 +86,7 @@ A record:
 - The node writes a record to a temporary file, then renames it. Thus a crash leaves the old record or the new record, never half.
 - At start, the node reads all records into memory. 10 000 artifacts are some MB of memory.
 - Retention: the store keeps all versions for ever. Only a person deletes: one version, or the artifact with all versions. The node never deletes on its own: the purpose is long term keeping.
-- Delete has an undo. A delete sets `deleted` to the time on the version or the record (else `deleted` is `null`). Its share links stop: the share server gives 404 for a link while its artifact or version is deleted, and does not change the link record. Thus an undo makes the links work again, except a link that a person revoked or that expired. The files stay, and the editor can undo it for 30 days. After 30 days, the node sets `purged: true`, clears the file list of the version, and removes each blob that no record uses. The version number stays in the record.
+- Delete has an undo. A delete sets `deleted` to the time on the version or the record (else `deleted` is `null`). Its share links stop: the share server gives 404 for a link while its artifact or version is deleted, and does not change the link record. Thus an undo makes the links work again, except a link that a person revoked or that expired. A link to the newest version shows the newest version that is not deleted. It gives 404 only when all versions are deleted. The files stay, and the editor can undo it for 30 days. After 30 days, the node sets `purged: true`, clears the file list of the version, and removes each blob that no record uses. The version number stays in the record.
 - The type of a file comes from its extension (a fixed table). Unknown extensions get `application/octet-stream`. The viewer tests such a file for text (valid UTF-8, no NUL byte in the first 8 KB).
 
 ## 4. The admin API
@@ -95,11 +95,11 @@ Routes on `RED.httpAdmin`, below `/claude-agent/artifacts`. Read routes need `cl
 
 | Route | Does |
 | --- | --- |
-| `GET /` with `?owner=&type=&since=&q=` | The list, newest first: id, name, title, owner, last version, time, type, size, number of active share links. `q` searches the titles and names. The response also has `totalBytes`: the bytes of all blob files on the disk (one copy of equal content, the bin included until the purge). It does not depend on the filters. |
+| `GET /` with `?owner=&type=&since=&q=` | The list, newest first: id, name, title, owner, last version, time, type, size, number of active share links (links that work now: not revoked, not expired, and not on a deleted artifact or version). `q` searches the titles and names. The response also has `totalBytes`: the bytes of all blob files on the disk (one copy of equal content, the bin included until the purge). It does not depend on the filters. |
 | `GET /:id` | The record |
 | `POST /:id/:n/ticket` | A view URL on the view server for this version (section 6). The download URL is in it. |
 | `POST /:id/shares`, `PUT /shares/:share`, `DELETE /shares/:share` | Make, extend and revoke a share link (section 7) |
-| `GET /shares` and `GET /:id/shares` | All open share links, and the share links of one artifact |
+| `GET /shares` and `GET /:id/shares` | All open share links, and the share links of one artifact. They include a link that stopped because of a delete, marked `stopped: "deleted"`, because an undo brings it back. They do not include a revoked or expired link. |
 | `DELETE /:id` and `DELETE /:id/:n` | Delete the artifact or one version (to the bin for 30 days) |
 | `POST /:id/restore` and `POST /:id/:n/restore` | Undo a delete |
 
@@ -182,7 +182,7 @@ Two ways:
   - The version: the default is the version that the person sees. "Always the newest version" is an explicit choice with this warning: "Each new version that the agent makes goes to the people with the link, with no review." An agent can be under prompt injection, so a fixed version is the safe default.
   - The time: 1 day, 7 days (default) or 30 days. 30 days is the longest time. "Extend" sets a new end of 1, 7 or 30 days from now, and keeps the URL.
   - The UI says "newest", never "latest". `latest` is only the value in `shares.json`.
-  - The editor has one list of all open share links of all artifacts, with the end date of each and a revoke action.
+  - The editor has one list of all open share links of all artifacts, with the end date of each and a revoke action. A link of a deleted artifact or version shows "Stopped: file deleted" in this list and in the share panel. The chip "Shared" counts only links that work now.
   - The share server is its own `http.Server` on its own port, with no Express app of Node-RED. It serves only `/s/…`, the download of that share and the viewer page. It has no `/v/` route and no list. A share page shows the title, the version, the date and the content.
   - It binds to `127.0.0.1` by default (setting `artifacts.shareBind`), for a tunnel on the same host. A public host (a reverse proxy or a tunnel) sends that whole port to the internet. The view server and the editor stay on the LAN.
   - Revoke: the link stops at once. An expired or revoked link gives 404 with no detail.
