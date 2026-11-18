@@ -24,6 +24,8 @@ const LOG_SIZE = 200;
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const IMAGE_BYTES = 3 * 1024 * 1024;
 const IMAGE_COUNT = 5;
+// The number of events in the popup log that keep their pictures
+const LOG_IMAGES = 5;
 const TEXT_SIZE = 300;
 const INTERRUPTED = ['aborted_streaming', 'aborted_tools'];
 // The failure reason for each SDK error subtype. Other errors get "sdk_error".
@@ -175,6 +177,11 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         if (extra && extra.images && extra.images.length) e.images = extra.images;
         log.push(e);
         if (log.length > LOG_SIZE) log.shift();
+        // Only the newest events keep their pictures: the log must not hold 200 messages of 3 MB.
+        if (e.images) {
+            let kept = 0;
+            for (let i = log.length - 1; i >= 0; i--) if (log[i].images && ++kept > LOG_IMAGES) delete log[i].images;
+        }
         const out = RED.util.cloneMessage(run.msg);
         out.topic = `agent/${node.id}/${run.id}`;
         out.payload = { ...e, text: cut(e.text), images: undefined };

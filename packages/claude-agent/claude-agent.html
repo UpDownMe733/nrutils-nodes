@@ -715,8 +715,12 @@
             send.appendChild(element(node, 'span', 'send-label', '', ' Send'));
             send.addEventListener('click', () => {
                 const run = selectedRun(node);
-                const images = (pasted[node.id] || []).filter((image) => image.data);
-                sendControl(node, run && run.state === 'waiting' ? 'answer' : 'message', text.value, images.length ? images : undefined);
+                const answer = run && run.state === 'waiting';
+                const images = pasted[node.id] || [];
+                // The pictures stay in the box until they can go with a message.
+                if (images.some((image) => !image.data)) return RED.notify('A picture is still loading.', 'warning');
+                if (answer && images.length) return RED.notify('An answer takes no pictures. Remove them or wait for the question to end.', 'warning');
+                sendControl(node, answer ? 'answer' : 'message', text.value, images.length ? images : undefined);
                 text.value = '';
                 grow(text);
                 delete pasted[node.id];

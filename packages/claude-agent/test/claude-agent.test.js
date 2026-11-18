@@ -268,6 +268,17 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         assert.deepEqual(JSON.parse((await results('result', count + 2))[count + 1].payload).images, ['image/png:iVBORw0KGgo=']);
     });
 
+    it('the popup log keeps the pictures of the newest 5 events only', async () => {
+        const picture = { mediaType: 'image/png', data: 'iVBORw0KGgo=' };
+        const before = (await results('result', 1)).length;
+        for (let i = 1; i <= 6; i++) {
+            assert.deepEqual(await editor('run', 'start', { text: 'many ' + i, images: [picture] }), {});
+            await results('result', before + i);
+        }
+        const events = (await editor('run', 'get-log')).events.filter((e) => e.kind === 'prompt' && e.text.startsWith('many '));
+        assert.deepEqual(events.map((e) => !!e.images), [false, true, true, true, true, true]);
+    });
+
     it('the node refuses a bad picture', async () => {
         const ok = { mediaType: 'image/png', data: 'iVBORw0KGgo=' };
         assert.match((await editor('run', 'start', { text: 'x', images: [{ mediaType: 'image/svg+xml', data: 'AAAA' }] })).error, /png, jpeg, gif or webp/);
