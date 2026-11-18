@@ -96,7 +96,7 @@ describe('tar reader', () => {
         assert.throws(() => read(archive(entry('a\\b', { body: 'x' }))), /not allowed/);
     });
     it('counts the bytes of a header that is not a file', () => {
-        const meta = Buffer.concat([entry('pax', { type: 'x', body: 'x'.repeat(600) }), entry('pax', { type: 'x', body: 'x'.repeat(600) })]);
+        const meta = Buffer.concat([entry('pax', { type: 'g', body: 'x'.repeat(600) }), entry('pax', { type: 'g', body: 'x'.repeat(600) })]);
         assert.throws(() => read(meta, { maxBytes: 1000, maxFiles: 5 }), (e) => e.limit === 'bytes');
     });
     it('stops on a stream that is not complete', () => assert.throws(() => read(entry('a', { body: 'x' }).subarray(0, 600)), /not complete/));
@@ -209,10 +209,12 @@ describe('store', () => {
         const start = Date.now();
         const r = await store.publish(input([['x.md', '# ' + '#'.repeat(60000) + 'x']], { name: 'redos-md' }));
         await store.publish(input([['x.html', '<title'.repeat(9000)]], { name: 'redos-html' }));
-        assert.ok(Date.now() - start < 1000);
-        assert.equal(r.version.title.length > 0, true);
+                assert.equal(r.version.title.length > 0, true);
+        await store.publish(input([['z.html', '<title>' + '<'.repeat(60000)]], { name: 'redos-html2' }));
+        await store.publish(input([['z.html', '<title>' + '<'.repeat(60000) + '</title>']], { name: 'redos-html3' }));
         const html = await store.publish(input([['y.html', '<HTML><TITLE lang="x">A <b>big</b> page</TITLE>']], { name: 'title-html' }));
         assert.equal(html.version.title, 'A big page');
+        assert.ok(Date.now() - start < 1000);
     });
     it('makes the store folders private', () => {
         assert.equal(fs.statSync(path.join(dir, 'store')).mode & 0o777, 0o700);
@@ -221,7 +223,7 @@ describe('store', () => {
     });
     it('reads the records again at the next start and keeps the key', () => {
         const again = createStore(path.join(dir, 'store'));
-        assert.equal(again.list().length, 6, 'the deleted artifact is not in the list');
+        assert.equal(again.list().length, 8, 'the deleted artifact is not in the list');
         assert.ok(again.key.equals(store.key));
         assert.equal(fs.statSync(path.join(dir, 'store', 'key')).mode & 0o777, 0o600);
     });

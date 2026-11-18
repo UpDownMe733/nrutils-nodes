@@ -35,14 +35,28 @@ function cleanName(file) {
     return name || 'file';
 }
 
-// The first heading of a markdown or HTML file, else ''. The code uses plain string search: no pattern can run for a long time.
+// Remove each <...> part and join the white space. One pass: it cannot run for a long time.
+function stripTags(text) {
+    let out = '';
+    let depth = false;
+    for (const c of text) {
+        if (c === '<') depth = true;
+        else if (c === '>' && depth) depth = false;
+        else if (!depth) out += c;
+    }
+    return out.replace(/\s+/g, ' ').trim();
+}
+
+// The first heading of a markdown or HTML file, else ''. The code uses string search and one pass: no pattern can run for a long time.
 function headingOf(file, data) {
     const text = data.subarray(0, 64 * 1024).toString('utf8');
     const type = typeOf(file);
-    const clean = (t) => t.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
     if (type === 'text/markdown') {
         const m = /^#{1,6}[ \t]+(.+)$/m.exec(text);
-        return m ? m[1].replace(/[ \t#]+$/, '').trim() : '';
+        if (!m) return '';
+        let end = m[1].length;
+        while (end > 0 && ' \t#'.includes(m[1][end - 1])) end--;
+        return m[1].slice(0, end).trim();
     }
     if (type === 'text/html') {
         const lower = text.toLowerCase();
@@ -50,7 +64,7 @@ function headingOf(file, data) {
             const open = lower.indexOf('<' + tag);
             const start = open < 0 ? -1 : lower.indexOf('>', open);
             const end = start < 0 ? -1 : lower.indexOf('</' + tag, start);
-            if (end >= 0) return clean(text.slice(start + 1, end).replace(/<[^>]*>/g, ''));
+            if (end >= 0) return stripTags(text.slice(start + 1, end));
         }
     }
     return '';
