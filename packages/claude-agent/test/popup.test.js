@@ -1009,7 +1009,7 @@ describe('claude-agent sidebar panel', () => {
         delete p.getNodes().n1;
         p.emit('nodes:remove');
         assert.equal(panelRoot(p), undefined);
-        assert.ok(p.sideTab().content.textContent.startsWith('Click a claude-agent'));
+        assert.ok(p.sideTab().content.textContent.startsWith('Select a claude-agent'));
     });
 
     const click = (p, id, extra = {}) => {
