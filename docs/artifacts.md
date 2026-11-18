@@ -25,7 +25,7 @@ outside person ──► share server (third port, behind a public host) ──�
 
 ## 2. The publish tool
 
-The node adds the tool `publish` to the MCP server `operator`, next to `send`, `handoff` and `ask_operator` (`claude-agent.js`, near `sdk.tool(`). Each run gets it.
+The node adds the tool `publish` to the MCP server `operator`, next to `send`, `handoff` and `ask_operator` (`claude-agent.js`, near `sdk.tool(`). Each run gets it, in each session mode, also with no inbox. (`handoff` is only in agent mode, and `send` only with an inbox.)
 
 ```
 publish({ path, name?, title?, entry?, note? })
@@ -53,7 +53,7 @@ publish({ path, name?, title?, entry?, note? })
   - a symbolic link, a hard link, a device, a FIFO;
   - a name (also a pax or GNU long name) that is absolute, or that has a `..` part;
   - more bytes or more files than the limits. The reader counts on the stream, and kills `tar` at the limit.
-- Each publish emits a new event kind `artifact`: `{ id, name, version, title, type, size }`. The popup chat, the Timeline, the third output and `agent-watch` get it, the same as other events.
+- Each publish emits a new event kind `artifact`. `event()` copies only the extra fields that it knows, so it gets one more field: `artifact: { id, name, version, title, type, size }`. The popup chat, the Timeline, the third output and `agent-watch` get it, the same as other events.
 
 ## 3. The store
 
@@ -67,7 +67,7 @@ artifacts/
   shares.json              the share links
 ```
 
-The id of an artifact: the SHA-256 of `<address of the agent>/<name>`, first 16 hex characters. The address is `team/name` of the node; a node with no name uses its node id.
+The id of an artifact: the SHA-256 of `<node id>/<name>`, first 16 hex characters. The node id does not change when a person renames the tab or the node, so the versions stay in one record. The record also keeps the address (`team/name`, from `NR_FLOW_NAME` and the node name) of the newest publish, for the display. A node with no name shows its node id.
 
 A record:
 
@@ -77,16 +77,16 @@ A record:
   "versions": [
     { "n": 1, "time": 1763480000000, "title": "Load test report", "note": "", "entry": "report.md",
       "files": [{ "path": "report.md", "sha256": "…", "size": 4210, "type": "text/markdown" }],
-      "run": { "runId": "…", "sessionId": "…" }, "deleted": false }
+      "run": { "runId": "…", "sessionId": "…" }, "deleted": null, "purged": false }
   ]
 }
 ```
 
-- Versions are append only. The number `n` goes up by one. A deleted version keeps its number, with `deleted: true` and no files.
+- Versions are append only. The number `n` goes up by one. A version is never removed from the record.
 - The node writes a record to a temporary file, then renames it. Thus a crash leaves the old record or the new record, never half.
 - At start, the node reads all records into memory. 10 000 artifacts are some MB of memory.
 - Retention: the store keeps all versions for ever. Only a person deletes: one version, or the artifact with all versions. The node never deletes on its own: the purpose is long term keeping.
-- Delete has an undo. A delete sets `deleted: <time>` on the version or the record, and stops its share links. The editor can undo it for 30 days. After 30 days, the node removes the files of the deleted version and each blob that no record uses. The version number stays in the record with no files.
+- Delete has an undo. A delete sets `deleted` to the time on the version or the record (else `deleted` is `null`), and stops its share links. The files stay, and the editor can undo it for 30 days. After 30 days, the node sets `purged: true`, clears the file list of the version, and removes each blob that no record uses. The version number stays in the record.
 - The type of a file comes from its extension (a fixed table). Unknown extensions get `application/octet-stream`. The viewer tests such a file for text (valid UTF-8, no NUL byte in the first 8 KB).
 
 ## 4. The admin API
@@ -105,7 +105,7 @@ Routes on `RED.httpAdmin`, below `/claude-agent/artifacts`. Read routes need `cl
 
 The admin API sends no byte of an artifact. The admin origin holds the token of the editor: an HTML file there, or a `blob:` URL that the editor makes from artifact bytes, would run with that token. Thus the content, the thumbnails and the downloads come only from the view server. The list gives a thumbnail URL with a ticket for each image.
 
-The runtime publishes `artifacts` on the comms of the node after each publish. The open lists then update with no poll.
+After each publish, delete and undo, the runtime sends the topic `claude-agent/artifacts` with `RED.comms.publish`, with the new record. The comms of a node are for that node only, so the sidebar list of all agents needs this global topic. The open lists then update with no poll.
 
 ## 5. The viewer page
 
@@ -292,10 +292,10 @@ Three users gave their needs: an operator who watches many agents, a new user, a
 
 | # | Part | Size | Needs |
 | --- | --- | --- | --- |
-| 1 | Store, publish tool with the tar reader (local `tar`, or `agentExec` on the host), event `artifact`, admin API list and record | M | `agentExec` on live, because live has a launcher |
-| 2 | View server with tickets and headers, viewer page with the renderers text, markdown, image, PDF, audio, video, HTML, other | L | a second port that the browser reaches |
+| 1 | Store, publish tool with the tar reader (local `tar`, or `agentExec` on the host), event `artifact`, global comms topic, admin API list and record | M | `agentExec` on live, because live has a launcher |
+| 2 | View server with tickets and headers, download (file and zip), thumbnail URLs in the list, viewer page with the renderers text, markdown, image, PDF, audio, video, HTML, other | L | a second port that the browser reaches |
 | 3 | Editor: the card in the chat, the artifacts of a node, the list of all artifacts, open the viewer | M | section 8 |
-| 4 | Download on the view server (file and zip), delete with blob clean up | S | — |
+| 4 | Delete, the bin with undo for 30 days, the purge of blobs, the store size line | M | — |
 | 5 | Compare two versions | M | — |
 | 6 | Share server, share links and the list of open links | M | a public host for the share port |
 | 7 | Read as the agent user in a sandbox (`agentExec` with a sandbox name) | S | the sandbox form of `agentExec` |
@@ -307,7 +307,7 @@ Sizes: S is less than 150 lines with tests, M 150 to 400, L more than 400.
 
 ## 12. Open risks
 
-- An agent can publish HTML that tries to trick a person, for example a fake login form. The opaque origin stops access to data, not a lie on the screen. The viewer shows the owner and the type above each HTML artifact.
+- An agent can publish HTML that tries to trick a person, for example a fake login form. The opaque origin stops access to data, not a lie on the screen. The viewer in the editor shows the agent and the type above each HTML artifact. A share page shows the type only, because it has no agent name (section 7).
 - Chrome shows a PDF only outside a sandbox, so a PDF depends on the PDF viewer of the browser for its safety. The type and first byte checks of section 6 limit it to real PDF files.
 - A share link to "always the newest version" sends each new version out with no review. It is an explicit choice with a warning, and it ends after 30 days at most.
-- The store grows with no limit, because nothing deletes on its own. The list shows the size of each artifact and the total.
+- The store grows with no limit, because nothing deletes on its own. The admin API list gives the size of each artifact and the total. The sidebar Files view shows the total size of the store in one line below the list.
