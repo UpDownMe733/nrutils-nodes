@@ -208,6 +208,10 @@ The look and the behaviour come from the popup UX designer, from the needs of se
   - Line 2, in the secondary colour: "Version 3 · 2 min ago". The sidebar list adds the agent name.
 - An unseen item has an accent dot at the left. A shared item has the chip "Shared". A deleted item shows "Deleted. Undo" for 10 s, then it goes.
 - Filters, in the sidebar only: a search field (title), then Agent, Type, Time (Today, 7 days, 30 days, All). The search field never gets the focus on its own.
+- The sidebar Files view only (never the popup) has one line below the list: "Files use 1.2 GB". One decimal, the unit B, KB, MB or GB, no label, no limit, no bar.
+  - Look: the secondary text colour and the small font of the editor, aligned left, 8 px padding. The line stays at the bottom and does not scroll with the list.
+  - It shows the size of the whole store, also when a filter is on. Files in the bin count until the purge.
+  - It updates on the comms topic `claude-agent/artifacts`, with no poll.
 
 ### The layout
 
@@ -309,5 +313,5 @@ Sizes: S is less than 150 lines with tests, M 150 to 400, L more than 400.
 
 - An agent can publish HTML that tries to trick a person, for example a fake login form. The opaque origin stops access to data, not a lie on the screen. The viewer in the editor shows the agent and the type above each HTML artifact. A share page shows the type only, because it has no agent name (section 7).
 - Chrome shows a PDF only outside a sandbox, so a PDF depends on the PDF viewer of the browser for its safety. The type and first byte checks of section 6 limit it to real PDF files.
-- A share link to "always the newest version" sends each new version out with no review. It is an explicit choice with a warning, and it ends after 30 days at most.
-- The store grows with no limit, because nothing deletes on its own. The admin API list gives the size of each artifact and the total. The sidebar Files view shows the total size of the store in one line below the list.
+- A share link to "always the newest version" sends each new version out with no review. It is an explicit choice with a warning. A link has no hard maximum age, because the purpose is long term sharing: "Extend" can keep it open. But each period is 30 days at most, so the link stays open only while a person extends it again.
+- The store grows with no limit, because nothing deletes on its own. The admin API list gives the size of each artifact and the total. The sidebar Files view shows the total size of the store in one line below the list (section 8).
