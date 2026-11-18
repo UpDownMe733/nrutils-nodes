@@ -268,7 +268,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         }
     }
 
-    // Keep the id of the last session of the agent in a file. A deploy, a restart and a close keep it.
+    // Keep the id of the last session of the agent in a file. A deploy and a restart keep it. A close turn deletes it.
     function storeSessionId(id) {
         fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
         fs.writeFileSync(sessionPath, id);
