@@ -56,4 +56,11 @@ describe('Files script block', () => {
         assert.equal(item.type, 'text/markdown');
         assert.equal(itemOf(record({ deleted: true })), null);
     });
+
+    it('names each type group in the Type filter, and asks for a thumbnail of an image only', () => {
+        const names = /const TYPE_NAME = \{([^}]*)\}/.exec(block)[1];
+        for (const group of ['text', 'image', 'audio', 'video', 'font', 'model', 'application']) assert.match(names, new RegExp('\\b' + group + ':'));
+        assert.match(block, /if \(\/\^image\\\/\/\.test\(item\.type\)\) watch\(icon, item\)/);
+        assert.match(block, /t\.url \+ 'thumb'/);
+    });
 });

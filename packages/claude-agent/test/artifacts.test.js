@@ -427,6 +427,32 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
         const res = await waitFor(async () => { try { return await fetch(`http://127.0.0.1:${viewPort}/v/bad/`); } catch { return null; } }, 10000, 'view server');
         assert.ok(res.status >= 400 && res.status < 500, String(res.status));
     });
+    it('opens a version through the view server with a valid ticket', async () => {
+        const [item] = (await (await api('/claude-agent/artifacts')).json()).items;
+        const { url } = await (await api(`/claude-agent/artifacts/${item.id}/1/ticket`, { method: 'POST' })).json();
+        const local = `http://127.0.0.1:${viewPort}${new URL(url).pathname}`;
+        const meta = await fetch(local + 'meta');
+        assert.equal(meta.status, 200);
+        const body = await meta.json();
+        assert.equal(body.id, item.id);
+        assert.equal(body.n, 1);
+        const file = await fetch(local + 'f/' + encodeURIComponent(body.entry || item.entry || body.files[0].path));
+        assert.equal(file.status, 200);
+    });
+    it('allows only valid and recent editor origins as frame parents', async () => {
+        const [item] = (await (await api('/claude-agent/artifacts')).json()).items;
+        const ticketUrl = `/claude-agent/artifacts/${item.id}/1/ticket`;
+        const post = (origin) => api(ticketUrl, { method: 'POST', headers: { origin } }).then((r) => r.json());
+        const ancestors = async (t) => (await fetch(`http://127.0.0.1:${viewPort}${new URL(t.url).pathname}`)).headers.get('content-security-policy').match(/frame-ancestors ([^;]*)/)[1];
+        await post('http://bad origin; script-src *');
+        const first = await post('http://editor0.test:1880');
+        assert.match(await ancestors(first), /http:\/\/editor0\.test:1880/);
+        for (let i = 1; i <= 8; i++) await post(`http://editor${i}.test:1880`);
+        const list = await ancestors(first);
+        assert.doesNotMatch(list, /bad origin|script-src/);
+        assert.doesNotMatch(list, /editor0\.test/);
+        assert.match(list, /editor8\.test/);
+    });
     it('gives a ticket for a viewer on another origin, and refuses one on the origin of the editor', async () => {
         const [item] = (await (await api('/claude-agent/artifacts')).json()).items;
         const url = `/claude-agent/artifacts/${item.id}/1/ticket`;

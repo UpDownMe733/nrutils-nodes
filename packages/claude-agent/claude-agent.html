@@ -1052,6 +1052,7 @@
 .caf-row:hover,.caf-row:focus-visible{background:var(--red-ui-secondary-background);outline:none}
 .caf-row.caf-on{background:var(--red-ui-list-item-background-selected);box-shadow:inset 3px 0 var(--red-ui-text-color-link)}
 .caf-line1{display:flex;align-items:center;gap:6px;min-width:0}
+.caf-thumb{flex:none;width:48px;height:48px;object-fit:contain}
 .caf-line1 span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .caf-line2{font-size:11px;color:var(--red-ui-secondary-text-color);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .caf-dot{position:absolute;left:4px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:3px;background:var(--red-ui-text-color-link)}
@@ -1073,6 +1074,7 @@
 .caf-bar{flex:none;display:flex;align-items:center;gap:6px;padding-bottom:6px;white-space:nowrap}
 .caf-bar select{flex:1 1 0;min-width:0;width:auto;box-sizing:border-box;height:32px;margin:0}
 .caf-bar .red-ui-button{flex:none;box-sizing:border-box;height:32px;min-height:32px;min-width:32px;margin:0}
+@media (pointer:coarse){.caf-head .red-ui-button,.caf-bar .red-ui-button{height:44px;min-height:44px;min-width:44px}}
 .caf.caf-tight .caf-bar .red-ui-button .caf-label{display:none !important}
 .caf-menu{position:absolute;z-index:5;display:flex;flex-direction:column;background:var(--red-ui-primary-background);border:1px solid var(--red-ui-secondary-border-color);border-radius:4px}
 .caf-menu .red-ui-button{min-height:44px;margin:0;text-align:left;border:none}
@@ -1278,7 +1280,37 @@
         root.appendChild(left);
         root.appendChild(pane);
 
-        const TYPE_NAME = { text: 'Text', image: 'Image', audio: 'Audio', video: 'Video', application: 'Other' };
+        const TYPE_NAME = { text: 'Text', image: 'Image', audio: 'Audio', video: 'Video', font: 'Font', model: 'Model', application: 'Other' };
+        // The thumbnail URL of each image entry, by id and version. Empty text: no thumbnail.
+        const thumbs = new Map();
+        let seen = null;
+
+        // Shows the thumbnail in place of the type icon when the row is on screen. Tickets come on demand.
+        async function thumb(icon, item) {
+            const key = item.id + '/' + item.version;
+            if (!thumbs.has(key)) {
+                thumbs.set(key, request('POST', API + '/' + item.id + '/' + item.version + '/ticket').then((t) => t.url + 'thumb', () => ''));
+            }
+            const src = await thumbs.get(key);
+            if (!src || !icon.isConnected) return;
+            const img = h('img', 'caf-thumb');
+            img.alt = '';
+            img.addEventListener('load', () => icon.isConnected && icon.replaceWith(img));
+            img.src = src;
+        }
+
+        function watch(icon, item) {
+            if (!window.IntersectionObserver) return;
+            seen = seen || new IntersectionObserver((entries) => {
+                for (const e of entries) {
+                    if (!e.isIntersecting) continue;
+                    seen.unobserve(e.target);
+                    e.target.caThumb();
+                }
+            }, { root: list });
+            icon.caThumb = () => thumb(icon, item);
+            seen.observe(icon);
+        }
 
         function fillSelect(select, values, first, name) {
             const keep = select.value;
@@ -1302,7 +1334,9 @@
             r.setAttribute('role', 'button');
             if (state.fresh.has(item.id)) r.appendChild(h('span', 'caf-dot'));
             const line1 = h('div', 'caf-line1');
-            line1.appendChild(h('i', 'fa ' + iconOf(item.type)));
+            const icon = h('i', 'fa ' + iconOf(item.type));
+            line1.appendChild(icon);
+            if (/^image\//.test(item.type)) watch(icon, item);
             line1.appendChild(h('span', '', item.title));
             if (item.shares) line1.appendChild(h('span', 'caf-chip', 'Shared'));
             r.appendChild(line1);
@@ -1316,6 +1350,8 @@
         function render() {
             const items = visible(opts, opts.all ? filter : null);
             list.textContent = '';
+            if (seen) seen.disconnect();
+            seen = null;
             for (const i of items) list.appendChild(row(i));
             if (opts.all) {
                 const all = visible(opts);
@@ -1733,7 +1769,7 @@
     <p>Each run has the tool <code>publish({ path, name, title, entry, note })</code>. The agent gives a file or a folder to the people with it. <code>path</code> must be in the work root. The same <code>name</code> from the same node makes a new version. A publish of equal content makes no new version.</p>
     <p>The node reads the files with the rights of the agent: <code>tar</code> reads them. With a launcher, <code>claudeAgent.agentExec</code> in <code>settings.js</code> runs <code>tar</code>. A symbolic link, a name outside the folder, and more than <code>claudeAgent.artifacts.maxBytes</code> (100 MB) or <code>maxFiles</code> (2000) stop the publish with an error. Each publish gives an event of the kind <code>artifact</code>. A delete moves a file or a version to the bin. The node removes its files after 30 days. See the README.</p>
 
-    <p>Each publish makes a file. The <b>Files</b> tab of the popup lists the files of the node. The <b>Files</b> tab of the sidebar lists the files of all agents, with a search box and the filters Agent and Type. A click on a file opens the viewer. <b>Full screen</b> and <b>Download</b> act on the shown version. <b>More</b> has <b>Compare</b> and <b>Delete</b>. After <b>Delete</b>, <b>Undo</b> shows for 10 seconds. A new file gives a line in the chat and a badge on the node. See the README.</p>
+    <p>Each publish makes a file. The <b>Files</b> tab of the popup lists the files of the node. The <b>Files</b> tab of the sidebar lists the files of all agents, with a search box and the filters Agent and Type. A file with an image of 1 MB or less shows a thumbnail. A click on a file opens the viewer. <b>Full screen</b> and <b>Download</b> act on the shown version. <b>More</b> has <b>Compare</b> and <b>Delete</b>. After <b>Delete</b>, <b>Undo</b> shows for 10 seconds. A new file gives a line in the chat and a badge on the node. See the README.</p>
 
     <h3>MQTT inbox</h3>
     <p>The popup shows the text of the agent as markdown: headings, lists, tables, code, links and emphasis. A link opens in a new tab. An image or other remote file does not show. The text of the operator and of a question stays plain text. The Agents tab shows an inbox message as a closed card on the left (the sender, the time and the first 3 lines) and a message that the agent sent with <code>send</code> as a card on the right (the receiver, the time and the first 3 lines). A click on a longer card opens the full text in the card, and a second click closes it. The badge of the tab counts the received messages that came while it was not shown. The Chat tab shows none of them. The Timeline tab shows the full text too. A keep-alive turn has no bubble: the life cycle line shows it.</p>

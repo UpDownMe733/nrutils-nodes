@@ -70,11 +70,20 @@ function readFiles(settings, { sandbox, dir, base }) {
     });
 }
 
+const ORIGIN = /^https?:\/\/([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?$/;
+const MAX_ORIGINS = 8;
+
 function createRuntime(RED) {
     const settings = agentSettings(RED);
     let store;
     let warned = false;
     const editorOrigins = new Set();
+    // The editor origins that the viewer may allow as frame parents: a short list of valid origins
+    const rememberOrigin = (origin) => {
+        if (typeof origin !== 'string' || !ORIGIN.test(origin) || editorOrigins.has(origin)) return;
+        editorOrigins.add(origin);
+        if (editorOrigins.size > MAX_ORIGINS) editorOrigins.delete(editorOrigins.values().next().value);
+    };
     const getStore = () => (store ??= createStore(settings.artifacts.dir));
     const viewUrl = (req) => {
         const { viewPort, viewUrl: url } = settings.artifacts;
@@ -138,9 +147,9 @@ function createRuntime(RED) {
     RED.httpAdmin.post(`${base}/:id/:n/ticket`, read, (req, res) => {
         const s = getStore();
         if (!s.version(req.params.id, req.params.n)) return missing(res);
-        if (typeof req.headers.origin === 'string') editorOrigins.add(req.headers.origin);
         const url = viewUrl(req);
         if (!url) return res.status(409).json({ error: 'the viewer is off' });
+        rememberOrigin(req.headers.origin);
         const t = ticket.make(s.key, req.params.id, Number(req.params.n));
         return res.json({ url: `${url}/v/${t}/`, download: `${url}/v/${t}/download` });
     });
@@ -167,7 +176,7 @@ function createRuntime(RED) {
     if (settings.artifacts.viewPort) {
         const tls = typeof RED.settings.https === 'function' ? RED.settings.https() : RED.settings.https;
         Promise.resolve(tls).then((options) => viewServer.start({
-            store: getStore(), port: settings.artifacts.viewPort, settings: settings.artifacts, editorOrigins, tls: options, uiPort: RED.settings.uiPort
+            store: getStore(), port: settings.artifacts.viewPort, bind: settings.artifacts.viewHost ?? RED.settings.uiHost, settings: settings.artifacts, editorOrigins, tls: options, uiPort: RED.settings.uiPort
         })).catch((err) => RED.log.error(`claude-agent: the viewer did not start on port ${settings.artifacts.viewPort}: ${err.message}`));
     }
 

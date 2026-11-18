@@ -232,6 +232,7 @@ The status line shows the state, the turns, the tokens used and the context size
 
 Each publish of an agent makes a file in the **Files** tab of the popup and in the **Files** tab of the sidebar. The sidebar tab shows the files of all agents. It has a search box and the filters Agent and Type. At the bottom it shows `Files use` and the size of the store. The popup tab shows the files of its node.
 
+- A file with an image of 1 MB or less shows a thumbnail of 48 px in the list. Other files show the icon of their type.
 - A click on a file opens it in the viewer. On a narrow popup the viewer replaces the list. **Files** at the top goes back.
 - The version list shows the versions. **Full screen** and **Download** act on the shown version. **More** has **Compare** and **Delete**.
 - **Delete** asks once. Then the line `Deleted. Undo` shows for 10 seconds. **Undo** restores the file.
