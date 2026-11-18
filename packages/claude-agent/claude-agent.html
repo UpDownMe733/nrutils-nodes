@@ -134,7 +134,7 @@
     function button(icon, label, title) {
         const b = make('button', '', 'red-ui-button red-ui-button-small');
         b.type = 'button';
-        b.setAttribute('aria-label', label);
+        if (label) b.setAttribute('aria-label', label);
         if (icon) b.appendChild(make('i', '', 'fa ' + icon));
         if (label) b.appendChild(make('span', (icon ? ' ' : '') + label));
         if (title) b.title = title;
@@ -1075,7 +1075,7 @@
 .caf-menu .red-ui-button{min-height:44px;margin:0;text-align:left;border:none}
 .caf-body{flex:1;min-height:0;display:flex;gap:6px;flex-direction:row}
 .caf-narrow .caf-body.caf-two{flex-direction:column}
-.caf-body iframe{flex:1;min-width:0;min-height:0;width:100%;border:1px solid var(--red-ui-secondary-border-color);border-radius:4px;background:#fff}
+.caf-body iframe{flex:1;min-width:0;min-height:240px;width:100%;border:1px solid var(--red-ui-secondary-border-color);border-radius:4px;background:#fff}
 .caf-note{margin:auto;padding:12px;text-align:center;color:var(--red-ui-secondary-text-color)}
 .caf-confirm{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;text-align:center;background:var(--red-ui-primary-background)}
 .caf-confirm div{display:flex;gap:8px}
@@ -1281,7 +1281,7 @@
             const keep = select.value;
             select.textContent = '';
             select.appendChild(Object.assign(h('option', '', first), { value: '' }));
-            for (const v of values) select.appendChild(Object.assign(h('option', '', name ? name[v] || v : v), { value: v }));
+            for (const v of values) select.appendChild(Object.assign(h('option', '', name ? name[v] || v.charAt(0).toUpperCase() + v.slice(1) : v), { value: v }));
             select.value = values.includes(keep) ? keep : '';
         }
 
@@ -1323,7 +1323,7 @@
             const wide = root.clientWidth >= WIDE;
             root.classList.toggle('caf-narrow', !wide);
             root.classList.toggle('caf-open', !!cur.id);
-            root.classList.toggle('caf-tight', pane.clientWidth < 420);
+            root.classList.toggle('caf-tight', pane.clientWidth < 520);
             if (cur.id && !state.items.has(cur.id)) close();
         }
 
