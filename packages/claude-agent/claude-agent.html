@@ -108,7 +108,7 @@
 .ca-side-body{position:absolute;inset:0;padding:6px;box-sizing:border-box}
 .ca-side .ca-summary,.ca-side .ca-about{display:none}
 .ca-side .ca-spacer{cursor:default}
-.ca-side-empty{padding:12px;color:var(--red-ui-secondary-text-color)}
+.ca-side-empty{padding:12px;text-align:center;color:var(--red-ui-secondary-text-color)}
 .ca-zoom{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:8px;border-radius:4px;background:rgba(0,0,0,.8);cursor:zoom-out}
 .ca-zoom img{max-width:100%;max-height:100%;object-fit:contain}
 .ca-footer{display:flex;align-items:center;justify-content:flex-end;gap:4px;min-width:0;padding:2px 4px 4px 8px}
@@ -827,7 +827,7 @@
     // The sidebar panel: the chat of the claude-agent node that the operator selected last.
     const side = { body: null, selected: null, shown: null };
     const MENU_LABEL = 'Open popup';
-    const EMPTY_TEXT = 'Click a claude-agent node to show its chat.';
+    const EMPTY_TEXT = 'Select a claude-agent node.';
 
     function showSide() {
         if (!side.body) return;

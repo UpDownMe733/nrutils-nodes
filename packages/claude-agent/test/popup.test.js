@@ -985,7 +985,7 @@ describe('claude-agent sidebar panel', () => {
     it('shows one line of text when no node was clicked', () => {
         const p = setup();
         assert.equal(panelRoot(p), undefined);
-        assert.equal(p.sideTab().content.textContent, 'Click a claude-agent node to show its chat.');
+        assert.equal(p.sideTab().content.textContent, 'Select a claude-agent node.');
         assert.equal(p.sideTab().toolbar, undefined, 'the panel has no toolbar');
     });
 
