@@ -175,6 +175,20 @@ describe('the view server', () => {
         assert.doesNotMatch(b.body.toString(), /\{\{/);
     });
 
+    it('hides the top bar only for embed=1, and keeps the title, the version and Download', async () => {
+        const bar = async (q) => /<header class="bar"( hidden)?>/.exec((await get(port, '/v/' + t1 + '/' + q)).body.toString())[1];
+        assert.equal(await bar('?embed=1'), ' hidden');
+        assert.equal(await bar(''), undefined);
+        assert.equal(await bar('?embed=0'), undefined);
+        const html = (await get(port, '/v/' + t1 + '/')).body.toString();
+        for (const id of ['title', 'version', 'download']) assert.ok(html.includes('id="' + id + '"'), id);
+    });
+
+    it('has no Close button, because window.close() does nothing on a share link', () => {
+        assert.doesNotMatch(fs.readFileSync(path.join(VIEWER, 'index.html'), 'utf8'), /id="close"|>Close</);
+        assert.doesNotMatch(fs.readFileSync(path.join(VIEWER, 'viewer.js'), 'utf8'), /window\.close|window\.top/);
+    });
+
     it('accepts only a plain host name in frame-ancestors', async () => {
         const r = await get(port, '/v/' + t1 + '/', { host: "x; script-src *" });
         assert.match(r.headers['content-security-policy'], /frame-ancestors 'self'$/);

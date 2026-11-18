@@ -226,7 +226,9 @@ function handler(opts) {
         res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'nonce-" + nonce + "'; " +
             "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; " +
             "form-action 'none'; frame-ancestors " + ancestors);
-        send(res, 200, 'text/html; charset=utf-8', page.replace(/\{\{nonce\}\}/g, nonce).replace('{{theme}}', theme));
+        // The editor frame has its own top bar: embed=1 hides the bar of the page
+        const bar = query.get('embed') === '1' ? ' hidden' : '';
+        send(res, 200, 'text/html; charset=utf-8', page.replace(/\{\{nonce\}\}/g, nonce).replace('{{theme}}', theme).replace('{{bar}}', bar));
     }
 
     function meta(res, record, version) {
