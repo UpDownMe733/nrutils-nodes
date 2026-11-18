@@ -642,6 +642,16 @@
                 if (state.session) sessions[node.id] = state.session;
                 for (const e of state.events) addEvent(node, e, false);
                 showRuns(node, state.runs);
+                // The frame of the popup shows and hides the pane again after the log comes, and each show puts the scroll at the top.
+                // Keep the newest message in view each time the pane gets a size, until the user scrolls it.
+                const pane = part(node, views[node.id] === 'agents' ? 'agents' : views[node.id] === 'timeline' ? 'log' : 'chat');
+                if (!pane || typeof ResizeObserver !== 'function') return;
+                const watch = new ResizeObserver(() => {
+                    if (pane.clientHeight) pane.scrollTop = pane.scrollHeight;
+                });
+                const release = () => watch.disconnect();
+                for (const type of ['wheel', 'touchstart', 'mousedown', 'keydown']) pane.addEventListener(type, release, { once: true });
+                watch.observe(pane);
             }).catch(() => showRuns(node, []));
         },
         nodeRedEditorComms_subscriptions: {

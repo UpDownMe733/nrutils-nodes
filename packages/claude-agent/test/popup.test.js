@@ -100,6 +100,7 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     class ResizeObserver {
         constructor(fn) { this.fn = fn; }
         observe(target) { observed.push({ fn: this.fn, target }); }
+        disconnect() { for (let i = observed.length - 1; i >= 0; i--) if (observed[i].fn === this.fn) observed.splice(i, 1); }
     }
     const resize = () => observed.forEach((o) => o.fn([{ target: o.target }]));
     const DOMPurify = { sanitize: (html, config) => { sanitized.push(config); return html.replace(/<script.*?<\/script>/g, ''); } };
@@ -897,5 +898,42 @@ describe('claude-agent popup text selection', () => {
     it('the right button menu stays in the popup, so the browser menu has Copy', async () => {
         const { div } = await popup({});
         assert.ok(div.listeners.contextmenu.length > 0);
+    });
+});
+
+describe('claude-agent popup first open', () => {
+    it('the chat shows the newest message when the popup first has a size', async () => {
+        const p = setup({}, { events: [event('text', 'old', { source: 'agent' })], runs: [], session: { cacheTtl: '1h', lastActivity: null } });
+        await settle();
+        const chat = p.part('chat');
+        chat.scrollTop = 0;
+        chat.scrollHeight = 900;
+        p.resize();
+        assert.equal(chat.scrollTop, 0, 'a pane with no size is not scrolled');
+        chat.clientHeight = 200;
+        p.resize();
+        assert.equal(chat.scrollTop, 900);
+        chat.clientHeight = 0;
+        chat.scrollTop = 0;
+        p.resize();
+        chat.clientHeight = 200;
+        p.resize();
+        assert.equal(chat.scrollTop, 900, 'the frame hides and shows the pane again: the newest message shows again');
+        chat.scrollTop = 300;
+        chat.listeners.wheel[0]();
+        p.resize();
+        assert.equal(chat.scrollTop, 300, 'after the user scrolls, the pane keeps its place');
+    });
+    it('the timeline shows the newest line when the popup opens on the timeline', async () => {
+        const p = setup({}, { events: [event('text', 'old', { source: 'agent' })], runs: [], session: { cacheTtl: '1h', lastActivity: null } });
+        await settle();
+        p.part('tab-timeline').click();
+        p.rebuild();
+        await settle();
+        const log = p.part('log');
+        log.scrollHeight = 700;
+        log.clientHeight = 200;
+        p.resize();
+        assert.equal(log.scrollTop, 700);
     });
 });
