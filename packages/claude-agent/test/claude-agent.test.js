@@ -279,6 +279,30 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         assert.deepEqual(events.map((e) => !!e.images), [false, true, true, true, true, true]);
     });
 
+    it('a pasted document goes to the agent as a document block, and the popup log keeps its name and size', async () => {
+        const count = (await results('result', 1)).length;
+        const note = { name: 'note.md', mediaType: 'text/plain', data: Buffer.from('# Hello').toString('base64') };
+        const pdf = { name: 'a.pdf', mediaType: 'application/pdf', data: 'JVBERi0=' };
+        assert.deepEqual(await editor('run', 'start', { text: 'read', documents: [note, pdf] }), {});
+        const got = JSON.parse((await results('result', count + 1))[count].payload);
+        assert.deepEqual(got.documents, ['note.md:text:# Hello', 'a.pdf:base64:JVBERi0=']);
+        const sent = (await editor('run', 'get-log')).events.find((e) => e.kind === 'prompt' && e.text === 'read');
+        assert.deepEqual(sent.documents, [{ name: 'note.md', size: 7 }, { name: 'a.pdf', size: 5 }]);
+        const out = (await results('events')).filter((m) => m.payload.kind === 'prompt' && m.payload.text === 'read');
+        assert.ok(out.length && out.every((m) => m.payload.documents === undefined), 'the events output has no document');
+    });
+
+    it('the node refuses a bad document', async () => {
+        const ok = { name: 'a.txt', mediaType: 'text/plain', data: 'QQ==' };
+        const picture = { mediaType: 'image/png', data: 'iVBORw0KGgo=' };
+        assert.match((await editor('run', 'start', { text: 'x', documents: [{ ...ok, mediaType: 'application/zip' }] })).error, /PDF or a text file/);
+        assert.match((await editor('run', 'start', { text: 'x', documents: [{ ...ok, name: '' }] })).error, /PDF or a text file/);
+        assert.match((await editor('run', 'start', { text: 'x', documents: [{ ...ok, data: 'A'.repeat(1.5e6) }] })).error, /a.txt: the file is too large/);
+        assert.match((await editor('run', 'start', { text: 'x', documents: Array(4).fill(ok), images: [picture, picture] })).error, /5 files/);
+        assert.match((await editor('run', 'start', { text: 'x', documents: [{ ...ok, mediaType: 'application/pdf', data: 'A'.repeat(2.6e6) }], images: [{ ...picture, data: 'A'.repeat(2e6) }] })).error, /3 MB/);
+        assert.deepEqual(await editor('run', 'start', { text: '', documents: [ok] }), {});
+    });
+
     it('the node refuses a bad picture', async () => {
         const ok = { mediaType: 'image/png', data: 'iVBORw0KGgo=' };
         assert.match((await editor('run', 'start', { text: 'x', images: [{ mediaType: 'image/svg+xml', data: 'AAAA' }] })).error, /png, jpeg, gif or webp/);

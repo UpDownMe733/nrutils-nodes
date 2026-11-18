@@ -220,7 +220,7 @@ the next message pays the full price. The chip is amber at 5 minutes or less.
 In the message box, Enter sends and Shift+Enter starts a new line. **Send** sends a message to the
 run, or starts a run that continues the last session. A question shows one button for each option,
 and Send becomes **Answer**. **Interrupt** and **Stop** show during a run.
-Paste a screenshot into the message box (Ctrl+V) to send it with the message. The agent gets each picture as an image. A message takes 5 pictures and 3 MB in total. The chat shows the pictures of a message. The events on output 3 have no picture data.
+Paste a screenshot or a file into the message box (Ctrl+V) to send it with the message. The agent gets each picture as an image. It gets a PDF or a text file (text, markdown, csv, json, code) as a document. A text file can have 1 MB. A message takes 5 files and 3 MB in total. The chat shows the pictures and the names of the documents of a message. The events on output 3 have no picture and no document data.
 
 ## Input
 

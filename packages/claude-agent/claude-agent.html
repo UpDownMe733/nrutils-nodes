@@ -10,15 +10,17 @@
     const sessions = {};        // nodeId to the last session of the runtime node: { cacheTtl, lastActivity, model }
     const unread = {};          // nodeId to the count of agent messages that came while the Agents tab was not shown
     const popups = {};          // nodeId to the node of each popup that the editor has built
-    const pasted = {};          // nodeId to the pictures in the message box that are not sent: [{ mediaType, data }]. Survives a popup rebuild.
+    const pasted = {};          // nodeId to the files in the message box that are not sent: pictures { mediaType, data } and documents { name, mediaType, data }. Survives a popup rebuild.
     let chipTimer = null;       // one timer for the chips of all popups
     const OPERATOR_KINDS = ['prompt', 'message', 'answer'];
     const AGENT_KINDS = ['text', 'question'];
     const END_KINDS = ['result', 'error'];
     const MAX_ENTRIES = 200;
     const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
-    const MAX_IMAGES = 5;
-    const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+    const MAX_FILES = 5;
+    const MAX_BYTES = 3 * 1024 * 1024;   // the editor sends a message in an HTTP request, and Node-RED refuses a request above 5 MB
+    const MAX_TEXT_BYTES = 1024 * 1024;
+    const TEXT_EXTENSIONS = /\.(txt|md|markdown|csv|tsv|json|jsonl|ya?ml|toml|xml|html?|css|js|mjs|ts|py|sh|c|h|cpp|java|go|rs|sql|log|ini|conf)$/i;
 
     // The look of the popup. It uses the theme variables of Node-RED, so it follows the light and the dark theme.
     // The operator bubble has the node colour with dark text: that has contrast in both themes.
@@ -96,6 +98,12 @@
 .ca-shot{position:relative;flex:none}
 .ca-shot img{display:block;height:64px;max-width:120px;object-fit:cover;border-radius:4px;border:1px solid var(--red-ui-secondary-border-color)}
 .ca-shot button{position:absolute;top:-6px;right:-6px;width:24px;height:24px;padding:0;border-radius:12px;border:1px solid var(--red-ui-secondary-border-color);background:var(--red-ui-primary-background);color:var(--red-ui-primary-text-color);font-size:14px;line-height:22px;text-align:center}
+.ca-doc{position:relative;flex:none;display:flex;flex-direction:column;justify-content:center;box-sizing:border-box;height:64px;max-width:160px;padding:6px 8px;border:1px solid var(--red-ui-secondary-border-color);border-radius:4px;background:var(--red-ui-secondary-background);font-size:12px}
+.ca-doc span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ca-doc span+span{color:var(--red-ui-secondary-text-color)}
+.ca-doc button{position:absolute;top:-6px;right:-6px;width:24px;height:24px;padding:0;border-radius:12px;border:1px solid var(--red-ui-secondary-border-color);background:var(--red-ui-primary-background);color:var(--red-ui-primary-text-color);font-size:14px;line-height:22px;text-align:center}
+.ca-docs{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;margin-bottom:2px}
+.ca-docs .ca-doc{height:40px;padding:4px 8px}
 .ca-pics{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;max-width:100%;margin-bottom:2px}
 .ca-pics img{display:block;max-height:120px;max-width:100%;border-radius:8px;border:1px solid var(--red-ui-secondary-border-color);cursor:zoom-in}
 .ca-zoom{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:8px;border-radius:4px;background:rgba(0,0,0,.8);cursor:zoom-out}
@@ -314,6 +322,21 @@
         return row;
     }
 
+    // A size as "12 KB" or "1.4 MB"
+    function sizeText(bytes) {
+        return bytes < 1024 * 1024 ? Math.max(1, Math.round(bytes / 1024)) + ' KB' : (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    }
+
+    // The chip of a document: the name and the size
+    function docChip(name, bytes) {
+        const chip = make('div', '', 'ca-doc');
+        const label = make('span', name);
+        label.title = name;
+        chip.appendChild(label);
+        chip.appendChild(make('span', sizeText(bytes)));
+        return chip;
+    }
+
     // One picture large over the popup. A click or Escape closes it.
     function zoom(node, url) {
         const root = part(node, 'text') && part(node, 'text').closest('.ca-popup');
@@ -330,56 +353,87 @@
         overlay.focus();
     }
 
-    // The row of pasted pictures above the text of the message box. Each picture has an x that removes it.
+    // The row of pasted files above the text of the message box: the pictures, then the documents. Each one has an x that removes it.
     function showPasted(node) {
         const row = part(node, 'shots');
         if (!row) return;
         row.textContent = '';
-        const images = pasted[node.id] || [];
-        row.style.display = images.length ? '' : 'none';
-        images.forEach((image, i) => {
-            const shot = make('div', '', 'ca-shot');
-            const img = make('img');
-            img.src = imageUrl(image);
-            img.alt = 'Picture ' + (i + 1);
+        const files = pasted[node.id] || [];
+        row.style.display = files.length ? '' : 'none';
+        const removeButton = (file) => {
             const remove = make('button', '×');
             remove.type = 'button';
             remove.title = 'Remove';
             remove.addEventListener('click', () => {
-                images.splice(i, 1);
+                files.splice(files.indexOf(file), 1);
                 showPasted(node);
                 part(node, 'text').focus();
             });
+            return remove;
+        };
+        files.filter((f) => !f.name).forEach((image, i) => {
+            const shot = make('div', '', 'ca-shot');
+            const img = make('img');
+            img.src = imageUrl(image);
+            img.alt = 'Picture ' + (i + 1);
             shot.appendChild(img);
-            shot.appendChild(remove);
+            shot.appendChild(removeButton(image));
             row.appendChild(shot);
+        });
+        files.filter((f) => f.name).forEach((doc) => {
+            const chip = docChip(doc.name, doc.data.length * 0.75);
+            chip.appendChild(removeButton(doc));
+            row.appendChild(chip);
         });
     }
 
-    // Ctrl+V of a picture adds it to the message box. A paste of text stays as it is.
-    async function pastePictures(node, e) {
+    // The type of a pasted document: 'application/pdf' or 'text/plain', or '' for a file that the node does not take
+    function documentType(file) {
+        if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) return 'application/pdf';
+        if (file.type.startsWith('text/') || /\/(json|xml|x-yaml|yaml|javascript)$/.test(file.type) || TEXT_EXTENSIONS.test(file.name)) return 'text/plain';
+        return '';
+    }
+
+    function base64Of(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ''));
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Ctrl+V of files adds them to the message box: a picture, a PDF or a text file. A paste of text stays as it is.
+    async function pasteFiles(node, e) {
         const files = Array.from((e.clipboardData && e.clipboardData.items) || [])
-            .filter((item) => item.kind === 'file' && IMAGE_TYPES.includes(item.type)).map((item) => item.getAsFile()).filter(Boolean);
+            .filter((item) => item.kind === 'file').map((item) => item.getAsFile()).filter(Boolean);
         if (!files.length) return;
         e.preventDefault();
         e.stopPropagation();
         for (const file of files) {
-            let image;
+            let item;
             try {
-                image = await shrink(file);
+                if (IMAGE_TYPES.includes(file.type)) {
+                    item = await shrink(file);
+                } else {
+                    const mediaType = documentType(file);
+                    if (!mediaType) { RED.notify(file.name + ': this file type is not supported.', 'warning'); continue; }
+                    const max = mediaType === 'application/pdf' ? MAX_BYTES : MAX_TEXT_BYTES;
+                    if (file.size > max) { RED.notify(file.name + ': the file is too large (max ' + max / 1024 / 1024 + ' MB).', 'warning'); continue; }
+                    item = { name: file.name, mediaType, data: await base64Of(file) };
+                }
             } catch (err) {
-                RED.notify('The picture cannot be read.', 'warning');
+                RED.notify(file.name + ': the file cannot be read.', 'warning');
                 continue;
             }
-            // Read the list after the shrink: a Send or another paste can change it while the shrink runs.
-            const images = pasted[node.id] = pasted[node.id] || [];
-            if (images.length >= MAX_IMAGES) return RED.notify('A message can have ' + MAX_IMAGES + ' pictures.', 'warning');
-            const used = images.reduce((sum, i) => sum + i.data.length * 0.75, 0);
-            if (used + image.data.length * 0.75 > MAX_IMAGE_BYTES) {
-                RED.notify('The pictures of a message can have 3 MB.', 'warning');
+            // Read the list after the wait: a Send or another paste can change it meanwhile.
+            const list = pasted[node.id] = pasted[node.id] || [];
+            if (list.length >= MAX_FILES) return RED.notify('Maximum ' + MAX_FILES + ' files.', 'warning');
+            if (list.reduce((sum, f) => sum + f.data.length * 0.75, 0) + item.data.length * 0.75 > MAX_BYTES) {
+                RED.notify('Maximum 3 MB in total.', 'warning');
                 continue;
             }
-            images.push(image);
+            list.push(item);
             showPasted(node);
         }
     }
@@ -423,6 +477,11 @@
             entry = make('div', '', 'ca-msg ' + (operator ? 'ca-op' : 'ca-agent') + (e.kind === 'question' ? ' ca-question' : ''));
             entry.appendChild(make('div', (operator ? 'You' : 'Agent' + runId) + ' · ' + clock(e.time), 'ca-meta'));
             if (operator && Array.isArray(e.images) && e.images.length) entry.appendChild(pictures(node, e.images));
+            if (operator && Array.isArray(e.documents) && e.documents.length) {
+                const docs = make('div', '', 'ca-docs');
+                for (const d of e.documents) docs.appendChild(docChip(d.name, d.size));
+                entry.appendChild(docs);
+            }
             const bubble = make('div', e.kind === 'question' ? 'Question: ' + e.text : operator ? e.text : '', 'ca-bubble');
             if (e.kind === 'text') renderMarkdown(bubble, e.text);
             if (!operator || e.text) entry.appendChild(bubble);
@@ -471,11 +530,11 @@
         panes[view].scrollTop = panes[view].scrollHeight;
     }
 
-    function sendControl(node, cmd, text, images) {
+    function sendControl(node, cmd, text, images, documents) {
         const run = selectedRun(node);
         if (!run && cmd !== 'message') return RED.notify('No active run', 'warning');
-        const request = run ? node.nodeRedEditorComms.publish('control', { cmd: cmd, runId: run.runId, text: text, images: images })
-            : node.nodeRedEditorComms.publish('start', { text: text, images: images });
+        const request = run ? node.nodeRedEditorComms.publish('control', { cmd: cmd, runId: run.runId, text: text, images: images, documents: documents })
+            : node.nodeRedEditorComms.publish('start', { text: text, images: images, documents: documents });
         request
             .then((res) => { if (res && res.error) RED.notify(res.error, 'warning'); })
             .catch((err) => RED.notify(err.status === 404 ? 'Deploy the node first' : err.message, 'warning'));
@@ -731,7 +790,7 @@
             text.rows = 1;
             text.placeholder = 'Message to the agent';
             text.addEventListener('input', () => grow(text));
-            text.addEventListener('paste', (e) => pastePictures(node, e));
+            text.addEventListener('paste', (e) => pasteFiles(node, e));
             const shots = element(node, 'div', 'shots', 'ca-shots');
             const footer = make('div', '', 'ca-footer');
             const interrupt = button('fa-pause', 'Interrupt', 'Stop the current turn. The run stays open for a new message.');
@@ -744,10 +803,12 @@
             send.appendChild(element(node, 'span', 'send-label', '', ' Send'));
             send.addEventListener('click', () => {
                 const run = selectedRun(node);
-                // An answer takes no pictures: they stay in the message box for the next message.
+                // An answer takes no files: they stay in the message box for the next message.
                 const answer = run && run.state === 'waiting';
-                const images = answer ? [] : pasted[node.id] || [];
-                sendControl(node, answer ? 'answer' : 'message', text.value, images.length ? images : undefined);
+                const files = answer ? [] : pasted[node.id] || [];
+                const images = files.filter((f) => !f.name);
+                const documents = files.filter((f) => f.name);
+                sendControl(node, answer ? 'answer' : 'message', text.value, images.length ? images : undefined, documents.length ? documents : undefined);
                 text.value = '';
                 grow(text);
                 if (!answer) delete pasted[node.id];
@@ -995,7 +1056,7 @@
     <p>The timer chip in the header shows <b>Active</b>, the time since the selected run started, and <b>Cache</b>, the minutes until the prompt cache expires, for example <code>Cache 52m</code>. The cache countdown starts again at each model response. It is an estimate. <code>Cache cold</code> means that the next message reads the full context again at the full price. The chip turns amber at 5 minutes or less.</p>
     <p><b>New chat</b> (the + button) makes the node forget its last session and clears the popup log. The next message from the popup starts a new session. It is not possible while a run is active.</p>
     <p>The message box is at the bottom. Enter sends; Shift+Enter starts a new line. When no run is active, Send starts a run with your text as the task; the run continues the last session of the node. When the agent asks a question, the popup shows it with one button for each option, and Send becomes Answer. Interrupt and Stop show only while a run is active.</p>
-    <p>Paste a screenshot (Ctrl+V) into the message box to send it to the agent: 5 pictures and 3 MB at most for each message, and the popup makes a large picture smaller.</p>
+    <p>Paste a screenshot or a file (Ctrl+V) into the message box to send it to the agent: a picture, a PDF or a text file. A message takes 5 files and 3 MB at most, a text file 1 MB. The popup makes a large picture smaller.</p>
     <p>A deploy of the node ends its live runs and clears the popup log.</p>
 
     <h3>Session mode agent</h3>

@@ -24,6 +24,8 @@ const LOG_SIZE = 200;
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const IMAGE_BYTES = 3 * 1024 * 1024;
 const IMAGE_COUNT = 5;
+// The documents that the popup pastes: a PDF or a text file. They share the 5 files and the 3 MB of the pictures.
+const DOCUMENT_TYPES = { 'application/pdf': { max: IMAGE_BYTES, label: 'a PDF' }, 'text/plain': { max: 1024 * 1024, label: 'a text file' } };
 // The number of events in the popup log that keep their pictures
 const LOG_IMAGES = 5;
 const TEXT_SIZE = 300;
@@ -49,6 +51,29 @@ function checkImages(images) {
     });
     if (list.reduce((sum, i) => sum + i.data.length * 0.75, 0) > IMAGE_BYTES) throw new Error('the pictures are larger than 3 MB');
     return list;
+}
+// The documents of a request of the popup, as { name, mediaType, data } with base64 data. Returns the list, or throws an error with the reason.
+function checkDocuments(documents, images) {
+    if (documents == null) return [];
+    if (!Array.isArray(documents) || documents.length + images.length > IMAGE_COUNT) throw new Error(`a message takes ${IMAGE_COUNT} files at most`);
+    const list = documents.map((d) => {
+        const type = d && DOCUMENT_TYPES[d.mediaType];
+        if (!type || typeof d.name !== 'string' || !d.name || typeof d.data !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(d.data)) {
+            throw new Error('a document must be a PDF or a text file, with a name, as base64');
+        }
+        if (d.data.length * 0.75 > type.max) throw new Error(`${d.name}: the file is too large`);
+        return { name: d.name, mediaType: d.mediaType, data: d.data };
+    });
+    const bytes = [...images, ...list].reduce((sum, i) => sum + i.data.length * 0.75, 0);
+    if (bytes > IMAGE_BYTES) throw new Error('the files are larger than 3 MB');
+    return list;
+}
+// The content block of a document: a PDF goes as base64, a text file as text.
+function documentBlock(d) {
+    const source = d.mediaType === 'application/pdf'
+        ? { type: 'base64', media_type: d.mediaType, data: d.data }
+        : { type: 'text', media_type: 'text/plain', data: Buffer.from(d.data, 'base64').toString('utf8') };
+    return { type: 'document', title: d.name, source };
 }
 // The life cycle of the session mode agent
 const CLOSE_PROMPT = 'The session ends. First, do the steps that your instructions give to save what you learned, for example to store memories. Skip this if your instructions give no such steps. Then write a note for a new session of you: the goal, the state, the next step and the open waits. Your last text is the note and nothing else. 200 words maximum. If there is nothing to continue, end the turn with no text, also no status of the save.';
@@ -173,6 +198,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         if (extra && extra.source) Object.assign(e, { source: extra.source, from: extra.from });
         // The Agents tab needs the receiver of a sent message
         if (extra && extra.to) e.to = extra.to;
+        // The popup shows the name and the size of each document. The data stays out of the log.
+        if (extra && extra.documents && extra.documents.length) e.documents = extra.documents.map((d) => ({ name: d.name, size: Buffer.from(d.data, 'base64').length }));
         // The popup shows the pictures of a message. The events output gets no picture.
         if (extra && extra.images && extra.images.length) e.images = extra.images;
         log.push(e);
@@ -184,11 +211,11 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         }
         const out = RED.util.cloneMessage(run.msg);
         out.topic = `agent/${node.id}/${run.id}`;
-        out.payload = { ...e, text: cut(e.text), images: undefined };
+        out.payload = { ...e, text: cut(e.text), images: undefined, documents: undefined };
         run.send([null, null, out]);
         comms.publish('event', e);
         // The agent-watch nodes listen here. They get the same text as the popup.
-        events.emit('event', { ...e, nodeId: node.id, z: node.z, stage: stageKey, ...extra, images: undefined });
+        events.emit('event', { ...e, nodeId: node.id, z: node.z, stage: stageKey, ...extra, images: undefined, documents: undefined });
     }
 
     function setState(run, state) {
@@ -200,11 +227,12 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
 
     // Give a user message to the session. The run stays open until a result has used it.
     // images: the pictures of the message. Each one goes to the agent as an image block.
-    function push(run, text, images = []) {
+    // documents: the documents of the message. Each one goes as a document block.
+    function push(run, text, images = [], documents = []) {
         const uuid = crypto.randomUUID();
         run.pending.add(uuid);
-        const content = images.length
-            ? [...(text ? [{ type: 'text', text }] : []), ...images.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.mediaType, data: i.data } }))]
+        const content = images.length || documents.length
+            ? [...(text ? [{ type: 'text', text }] : []), ...images.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.mediaType, data: i.data } })), ...documents.map(documentBlock)]
             : text;
         run.inbox.push({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null, uuid });
         if (run.wake) run.wake();
@@ -526,8 +554,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             // One prompt event for each part, so the popup shows each part with its own sender.
             // A turn that the node writes (keep-alive, close, handoff) is a life cycle prompt, not operator text.
             if (life || text !== undefined) event(run, 'prompt', prompt, { source: 'life' });
-            else for (const job of jobs) event(run, 'prompt', job.shown ?? render(job), { ...(job.from ? { source: 'agent', from: job.from } : {}), images: job.images });
-            push(run, prompt, jobs.flatMap((j) => j.images || []));
+            else for (const job of jobs) event(run, 'prompt', job.shown ?? render(job), { ...(job.from ? { source: 'agent', from: job.from } : {}), images: job.images, documents: job.documents });
+            push(run, prompt, jobs.flatMap((j) => j.images || []), jobs.flatMap((j) => j.documents || []));
             run.query = sdk.query({ prompt: input(run), options });
             setState(run, 'running');
             for await (const m of run.query) {
@@ -590,8 +618,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     }
 
     // A start message with no input msg: from the popup or from the inbox. Its result goes out as a new msg.
-    function enqueue(msg, text, from, shown, images) {
-        queue.push({ msg, send: (m) => node.send(m), done: (err) => { if (err) node.error(err, msg); }, text, from, shown, images });
+    function enqueue(msg, text, from, shown, images, documents) {
+        queue.push({ msg, send: (m) => node.send(m), done: (err) => { if (err) node.error(err, msg); }, text, from, shown, images, documents });
         startNext();
         showStatus();
     }
@@ -620,7 +648,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         });
     }
 
-    function control(cmd, runId, payload, images = []) {
+    function control(cmd, runId, payload, images = [], documents = []) {
         const run = runId ? runs.get(runId) : runs.size === 1 ? runs.values().next().value : null;
         if (!run) throw new Error(runId ? `no active run ${runId}` : `give a runId: the node has ${runs.size} active runs`);
         const text = payload == null ? '' : typeof payload === 'string' ? payload : JSON.stringify(payload);
@@ -632,8 +660,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             settle(run, text, false);
             setState(run, 'running');
         } else if (cmd === 'message') {
-            push(run, text, images);
-            event(run, 'message', text, { images });
+            push(run, text, images, documents);
+            event(run, 'message', text, { images, documents });
             if (run.state === 'interrupted') setState(run, 'running');
         } else if (cmd === 'interrupt') {
             settle(run, 'The operator interrupted the turn. No answer comes.', true);
@@ -685,26 +713,28 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     });
     // The popup starts a run when the node has no active run. The run continues the last session of the node.
     comms.subscribe('start', (p) => {
-        let images;
+        let images, documents;
         try {
             images = checkImages(p && p.images);
+            documents = checkDocuments(p && p.documents, images);
         } catch (err) {
             return { error: err.message };
         }
-        if (!p || typeof p.text !== 'string' || (!p.text.trim() && !images.length)) return { error: 'type a message first' };
+        if (!p || typeof p.text !== 'string' || (!p.text.trim() && !images.length && !documents.length)) return { error: 'type a message first' };
         const msg = { _msgid: RED.util.generateId(), payload: p.text };
         // A session is kept in its folder: resume it in the same folder, also when msg.cwd set that folder.
         if (lastSessionId) {
             msg.agent = { resume: lastSessionId };
             msg.cwd = lastSessionCwd;
         }
-        enqueue(msg, p.text, undefined, undefined, images);
+        enqueue(msg, p.text, undefined, undefined, images, documents);
         return {};
     });
     comms.subscribe('control', (p) => {
         if (!p || typeof p.cmd !== 'string' || typeof p.runId !== 'string') return { error: 'bad request' };
         try {
-            control(p.cmd, p.runId, typeof p.text === 'string' ? p.text : '', checkImages(p.images));
+            const images = checkImages(p.images);
+            control(p.cmd, p.runId, typeof p.text === 'string' ? p.text : '', images, checkDocuments(p.documents, images));
             return {};
         } catch (err) {
             return { error: err.message };
