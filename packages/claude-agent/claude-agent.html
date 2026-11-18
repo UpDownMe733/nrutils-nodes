@@ -855,8 +855,9 @@
     function openPopup(node) {
         if (window.popupStates[node.id] === 'open') return;
         const rect = document.getElementById(node.id).querySelector('rect');
-        for (const type of ['mousedown', 'click']) {
-            const event = new MouseEvent(type, { clientX: 0, clientY: 0 });
+        // The canvas waits for a mouseup after a mousedown. Without it the canvas drags the node with the mouse.
+        for (const type of ['mousedown', 'mouseup', 'click']) {
+            const event = new MouseEvent(type, { clientX: 0, clientY: 0, bubbles: true });
             event.caOpen = true;
             rect.dispatchEvent(event);
         }

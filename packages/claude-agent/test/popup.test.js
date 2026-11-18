@@ -1071,7 +1071,7 @@ describe('claude-agent sidebar panel', () => {
         assert.equal(p.canvas['red-ui-workspace-context-menu'].childNodes.length, 1);
     });
 
-    it('the item closes the menu and clicks the node of the library one time', () => {
+    it('the item closes the menu and presses, releases and clicks the node of the library one time', () => {
         const p = setup();
         const rect = fakeElement('rect');
         const group = fakeElement('g');
@@ -1080,6 +1080,7 @@ describe('claude-agent sidebar panel', () => {
         p.canvas.n1 = group;
         const seen = [];
         rect.addEventListener('mousedown', (e) => seen.push(e.type + ':' + e.caOpen));
+        rect.addEventListener('mouseup', (e) => seen.push(e.type + ':' + e.caOpen));
         rect.addEventListener('click', (e) => seen.push(e.type + ':' + e.caOpen));
         p.selection.push(p.node);
         p.menu({ type: 'workspace', x: 1, y: 2 });
@@ -1087,10 +1088,10 @@ describe('claude-agent sidebar panel', () => {
         const prevent = { preventDefault() {} };
         item.childNodes[0].listeners.click[0](prevent);
         assert.deepEqual(p.hidden, [true]);
-        assert.deepEqual(seen, ['mousedown:true', 'click:true']);
+        assert.deepEqual(seen, ['mousedown:true', 'mouseup:true', 'click:true']);
         p.popupStates.n1 = 'open';
         item.childNodes[0].listeners.click[0](prevent);
-        assert.equal(seen.length, 2, 'an open popup stays open');
+        assert.equal(seen.length, 3, 'an open popup stays open');
     });
 
     it('shows a live message one time in the popup and one time in the panel', async () => {
