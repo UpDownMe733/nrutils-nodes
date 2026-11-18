@@ -206,6 +206,7 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 - A row is 44 px high minimum.
   - Line 1: type icon, title (one line, with an ellipsis).
   - Line 2, in the secondary colour: "Version 3 · 2 min ago". The sidebar list adds the agent name.
+- An image of 1 MB or less shows a 48 px thumbnail in its row. The thumbnail loads from the `/thumb` route of the view server only when the row comes into view.
 - An unseen item has an accent dot at the left. A shared item has the chip "Shared". A deleted item shows "Deleted. Undo" for 10 s, then it goes.
 - Filters, in the sidebar only: a search field (title), then Agent, Type, Time (Today, 7 days, 30 days, All). The search field never gets the focus on its own.
 - The sidebar Files view only (never the popup) has one line below the list: "Files use 1.2 GB". One decimal, the unit B, KB, MB or GB, no label, no limit, no bar.
@@ -218,7 +219,7 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 - Width 500 px or more: the list at the left (40 %), the viewer at the right.
 - Less than 500 px: the list only. A tap shows the viewer at full width, with "‹ Files" at the top left.
 - The viewer header: title, "Version 3 (newest) ▾", then the buttons Full screen, Download, Share and More. More holds Compare and Delete.
-  Each button has a visible label and a height of 44 px. No action is on hover only. On a narrow screen the buttons wrap to a second row.
+  Each button has a visible label. Its height is 44 px on a coarse pointer (touch) and 32 px on a fine pointer (mouse). The buttons of the compare bar have the same heights. No action is on hover only. On a narrow screen the buttons wrap to a second row.
 
 ### The actions
 
