@@ -1062,6 +1062,7 @@
 .caf-head{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-bottom:6px}
 .caf-title{flex:1 1 100%;font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .caf-head select{flex:0 1 auto;width:auto;max-width:100%;height:32px;margin:0}
+.caf .red-ui-button .caf-label{display:inline !important}
 .caf-head .red-ui-button,.caf-confirm .red-ui-button{min-height:44px;margin:0}
 .caf-head .caf-back{flex:none}
 .caf-bar{flex:none;display:flex;align-items:center;gap:6px;padding-bottom:6px}
@@ -1091,7 +1092,7 @@
         const b = h('button', 'red-ui-button' + (className ? ' ' + className : ''));
         b.type = 'button';
         if (icon) b.appendChild(h('i', 'fa ' + icon));
-        b.appendChild(h('span', (icon ? ' ' : '') + label));
+        b.appendChild(h('span', 'caf-label', (icon ? ' ' : '') + label));
         return b;
     }
 
