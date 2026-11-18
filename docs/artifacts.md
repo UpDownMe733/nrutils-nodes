@@ -258,6 +258,7 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 artifacts: {
     dir: '',                // default <userDir>/claude-agent/artifacts
     viewPort: 1881,         // the view server. 0 or no artifacts block: no viewer, publish still stores.
+    viewHost: '',           // the address that the view server listens on. Default: uiHost of Node-RED, else all addresses.
     viewUrl: '',            // the URL that the browser of the editor uses for the view server. Default: the host of the editor with viewPort.
     sharePort: 0,           // the share server. 0: no share links.
     shareBind: '127.0.0.1', // the address of the share server. Change it only when the public host is on another machine.
