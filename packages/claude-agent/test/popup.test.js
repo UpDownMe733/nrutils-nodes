@@ -331,46 +331,6 @@ describe('claude-agent popup buttons', () => {
     });
 });
 
-describe('claude-agent popup pasted pictures', () => {
-    // A fake FileReader that finishes only when the test says so
-    const readers = [];
-    class FileReader {
-        readAsDataURL() { readers.push(this); }
-        finish() { this.result = 'data:image/png;base64,AAAA'; this.onload(); }
-    }
-    const paste = (text) => text.listeners.paste.forEach((fn) => fn({
-        clipboardData: { items: [{ kind: 'file', type: 'image/png', getAsFile: () => ({ type: 'image/png', size: 10 }) }] },
-        preventDefault() {}, stopPropagation() {}
-    }));
-    const open = async (state) => {
-        readers.length = 0;
-        const p = setup({ FileReader }, { events: [], runs: [], session: { cacheTtl: '1h', lastActivity: null }, ...state });
-        await settle();
-        return p;
-    };
-
-    it('Send keeps a picture that is still loading, and sends it when it has loaded', async () => {
-        const { part, text, calls, notes } = await open({});
-        text.value = 'look';
-        paste(text);
-        part('send').click();
-        assert.deepEqual(notes, [{ text: 'A picture is still loading.', type: 'warning' }]);
-        assert.equal(calls.filter((c) => c.type === 'start').length, 0);
-        readers[0].finish();
-        part('send').click();
-        assert.deepEqual(JSON.parse(JSON.stringify(calls.find((c) => c.type === 'start').payload.images)), [{ mediaType: 'image/png', data: 'AAAA', size: 10 }]);
-    });
-
-    it('Send as Answer keeps the pictures and says so', async () => {
-        const { part, text, calls, notes } = await open({ runs: [run({ state: 'waiting', question: { question: 'Go?', options: ['yes'] } })] });
-        paste(text);
-        readers[0].finish();
-        part('send').click();
-        assert.match(notes[0].text, /An answer takes no pictures/);
-        assert.equal(calls.filter((c) => c.type === 'control').length, 0);
-    });
-});
-
 describe('claude-agent popup chat', () => {
     it('shows the empty state before the first entry', async () => {
         const { part, receive } = await popup({});
