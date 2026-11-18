@@ -70,32 +70,49 @@
         return [num(o && o.a), cell(o ? 'del' : 'none', o && o.text), num(p && p.b, true), cell(p ? 'add' : 'none', p && p.text)];
     }
 
-    function renderDiff(box, ops) {
-        const narrow = NARROW.matches;
-        const grid = el('div', { class: 'diff' + (narrow ? ' narrow' : '') });
-        const add = (cells) => grid.append(...cells);
+    // The layout of the diff: { head: true }, { row: [old op, new op] } (wide), { row: [op] } (narrow)
+    // or { more: [same ops] } for a hidden run of same lines. It shows CONTEXT same lines next to each change.
+    function layout(ops, narrow) {
+        const out = [{ head: true }];
+        const rows = (list) => list.forEach(o => out.push({ row: narrow ? [o] : [o, o] }));
         const list = blocks(ops);
         list.forEach((b, k) => {
             if (b.same) {
-                // Hide the middle of a long run of same lines: show CONTEXT lines next to each change
                 const head = k === 0 ? 0 : CONTEXT, tail = k === list.length - 1 ? 0 : CONTEXT;
-                if (b.same.length <= head + tail + 1) return b.same.forEach(o => add(row(narrow, o)));
-                b.same.slice(0, head).forEach(o => add(row(narrow, o)));
-                const hidden = b.same.slice(head, b.same.length - tail);
-                const more = el('button', { class: 'd-more', type: 'button', text: 'Show ' + hidden.length + ' same lines' });
+                if (b.same.length <= head + tail + 1) return rows(b.same);
+                rows(b.same.slice(0, head));
+                out.push({ more: b.same.slice(head, b.same.length - tail) });
+                rows(b.same.slice(b.same.length - tail));
+            } else if (narrow) {
+                b.del.concat(b.add).forEach(o => out.push({ row: [o] }));
+            } else {
+                for (let r = 0; r < Math.max(b.del.length, b.add.length); r++) out.push({ row: [b.del[r], b.add[r]] });
+            }
+        });
+        return out;
+    }
+
+    function renderDiff(box, ops, oldN, newN) {
+        const narrow = NARROW.matches;
+        const grid = el('div', { class: 'diff' + (narrow ? ' narrow' : '') });
+        const cells = (item) => narrow ? row(true, item.row[0]) : row(false, item.row[0], item.row[1]);
+        for (const item of layout(ops, narrow)) {
+            if (item.head) {
+                const h = (text, right) => el('span', { class: 'd-head' + (right ? ' d-right' : ''), text });
+                if (narrow) grid.append(h('v' + oldN), h('v' + newN), h('Version ' + oldN + ' and version ' + newN));
+                else grid.append(h(''), h('Version ' + oldN), h('', true), h('Version ' + newN));
+            } else if (item.more) {
+                const more = el('button', { class: 'd-more', type: 'button', text: 'Show ' + item.more.length + ' same lines' });
                 more.addEventListener('click', () => {
                     const frag = document.createDocumentFragment();
-                    hidden.forEach(o => frag.append(...row(narrow, o)));
+                    item.more.forEach(o => frag.append(...cells({ row: [o, o] })));
                     more.replaceWith(frag);
                 });
                 grid.append(more);
-                b.same.slice(b.same.length - tail).forEach(o => add(row(narrow, o)));
-            } else if (narrow) {
-                b.del.concat(b.add).forEach(o => add(row(true, o)));
             } else {
-                for (let r = 0; r < Math.max(b.del.length, b.add.length); r++) add(row(false, b.del[r], b.add[r]));
+                grid.append(...cells(item));
             }
-        });
+        }
         box.append(grid);
     }
 
@@ -114,21 +131,26 @@
     const TEXT = ['text', 'markdown', 'csv', 'json', 'html'];
 
     viewer.diff = diff;
+    viewer.diffLayout = layout;
 
     viewer.compare = async (content, file) => {
         const ticket = new URLSearchParams(location.search).get('compare');
         const box = el('div', { class: 'box compare' });
         content.replaceChildren(box);
+        const otherBase = viewer.base.replace(/[^/]+\/$/, ticket + '/');
         let other;
         try {
-            if (!/^[A-Za-z0-9_.-]+$/.test(ticket)) throw new Error('bad ticket');
-            const r = await fetch('/v/' + ticket + '/meta');
+            // The exact ticket form: no "." or ".." can change the path
+            if (!/^[A-Za-z0-9_-]{1,100}\.[A-Za-z0-9_-]{43}$/.test(ticket)) throw new Error('bad ticket');
+            const r = await fetch(otherBase + 'meta');
             if (!r.ok) throw new Error('HTTP ' + r.status);
             other = await r.json();
+            // Compare only two versions of the same artifact
+            if (other.id !== viewer.meta.id) throw new Error('other artifact');
         } catch (e) {
             return box.replaceChildren(el('div', { class: 'hint', text: 'The other version cannot load.' }));
         }
-        const otherUrl = (p) => '/v/' + ticket + '/f/' + viewer.encodePath(p);
+        const otherUrl = (p) => otherBase + 'f/' + viewer.encodePath(p);
         const here = { meta: viewer.meta, file, url: viewer.url };
         const path = file ? file.path : viewer.meta.entry;
         const there = { meta: other, file: other.files.find(f => f.path === path) || null, url: otherUrl };
@@ -156,9 +178,9 @@
             }
             const added = ops.filter(o => o.op === 'add').length, removed = ops.filter(o => o.op === 'del').length;
             tools.append(el('span', { class: 'd-count' }, el('span', { class: 'd-add', text: '+' + added }), ' ', el('span', { class: 'd-del', text: '−' + removed })));
-            renderDiff(box, ops);
+            renderDiff(box, ops, old.meta.n, neu.meta.n);
             // The layout changes between wide and narrow: make the rows again
-            NARROW.onchange = () => { box.querySelector('.diff').remove(); renderDiff(box, ops); };
+            NARROW.onchange = () => { box.querySelector('.diff').remove(); renderDiff(box, ops, old.meta.n, neu.meta.n); };
         } else if (kind === 'image') {
             const fig = (s) => el('figure', {}, el('img', { src: s.url(path), alt: 'Version ' + s.meta.n }), el('figcaption', { class: 'secondary', text: caption(s.meta, s.file) }));
             box.append(el('div', { class: 'd-images' }, fig(old), fig(neu)));

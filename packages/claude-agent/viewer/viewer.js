@@ -81,6 +81,9 @@
             renderers.push(renderer);
         },
 
+        // The path of this version: /v/<ticket>/, also below a path prefix
+        base,
+
         // The URL of a file of this version
         url(p) {
             return base + 'f/' + encodePath(p);
@@ -100,9 +103,11 @@
 
         // The note above a file that shows only its first part
         cutNote(file) {
+            // The Download button of the page gives the file when the version has one file, else a zip
             return el('div', { class: 'cut-note' },
                 el('span', { text: 'This shows the first ' + size(TEXT_LIMIT) + ' of ' + size(file.size) + '.' }),
-                el('a', { class: 'button', href: viewer.url(file.path), download: file.path.split('/').pop(), text: 'Download' }));
+                viewer.meta.files.length > 1
+                    ? el('a', { class: 'button', href: viewer.url(file.path), download: file.path.split('/').pop(), text: 'Download this file' }) : '');
         },
 
         file(p) {
@@ -168,12 +173,14 @@
         const file = viewer.file(h.get('file') || '') || viewer.file(viewer.meta.entry) || viewer.meta.files[0];
         fileList(file && file.path);
         if (viewer.compare && new URLSearchParams(location.search).get('compare')) {
-            return viewer.compare(content, file);
+            await viewer.compare(content, file);
+        } else if (!file) {
+            content.replaceChildren(el('div', { class: 'hint', text: 'This version has no files.' }));
+        } else {
+            const box = el('div', { class: 'box' });
+            content.replaceChildren(box);
+            await viewer.renderInto(box, file, { anchor: h.get('at') });
         }
-        if (!file) return content.replaceChildren(el('div', { class: 'hint', text: 'This version has no files.' }));
-        const box = el('div', { class: 'box' });
-        content.replaceChildren(box);
-        await viewer.renderInto(box, file, { anchor: h.get('at') });
         // Tell the editor that the page loaded. Only data, no command.
         if (window.parent !== window) window.parent.postMessage({ type: 'loaded' }, '*');
     }

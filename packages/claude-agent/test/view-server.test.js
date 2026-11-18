@@ -18,6 +18,7 @@ const ticket = require('../artifacts/ticket.js');
 
 const VIEWER = path.join(__dirname, '..', 'viewer');
 const ID = '3f9c0e1a7b2d4c55';
+const ID_IMG = '3f9c0e1a7b2d4c66';
 
 // A fake store: the blobs in a temporary folder, the records in memory
 function fakeStore(dir) {
@@ -97,6 +98,13 @@ describe('the helpers', () => {
         await assert.rejects(view.writeZip(out, [{ path: 'a', read }, { path: 'a', read }], 0), /cannot hold/);
         await view.writeZip(out, [{ path: 'a/b..c', read }, { path: 'ü .md', read }], 0);
     });
+
+    it('closes the stream of a zip client that reads no more, so the zip lock is free again', async () => {
+        const out = new (require('events'))();
+        Object.assign(out, { destroyed: false, write: () => false, destroy() { this.destroyed = true; this.emit('close'); } });
+        await assert.rejects(view.writeZip(out, [{ path: 'a', read: async () => Buffer.from('x') }], 0, 20), /closed/);
+        assert.equal(out.destroyed, true);
+    });
 });
 
 describe('the view server', () => {
@@ -127,6 +135,10 @@ describe('the view server', () => {
         t1 = ticket.make(store.key, ID, 1);
         t2 = ticket.make(store.key, ID, 2);
         tDel = ticket.make(store.key, ID, 3);
+        const img = Buffer.from('89504e47', 'hex');
+        store.records[ID_IMG] = { id: ID_IMG, name: 'chart', owner: { address: 't/a', nodeId: 'n1' }, versions: [
+            { n: 1, time: Date.now(), title: 'Chart', entry: 'c.png', deleted: null, purged: false, files: [file(store, 'c.png', 'image/png', img)] },
+            { n: 2, time: Date.now(), title: 'Chart', entry: 'c.png', deleted: null, purged: false, files: [file(store, 'c.png', 'image/png', Buffer.alloc(1024 * 1024 + 1))] }] };
         server = http.createServer(view.handler({ store, htmlNetwork: true, uiPort: 1880, editorOrigins: origins }));
         await new Promise(r => server.listen(0, '127.0.0.1', r));
         port = server.address().port;
@@ -281,6 +293,16 @@ describe('the view server', () => {
         assert.equal(files.find(f => f.path === 'img/a b.png').data.toString('hex'), '89504e47');
     });
 
+    it('gives a thumbnail only for an entry image of 1 MB or less', async () => {
+        const small = await get(port, '/v/' + ticket.make(store.key, ID_IMG, 1) + '/thumb');
+        assert.equal(small.status, 200);
+        assert.equal(small.headers['content-type'], 'image/png');
+        assert.match(small.headers['content-security-policy'], /^sandbox /);
+        assert.equal(small.body.toString('hex'), '89504e47');
+        assert.equal((await get(port, '/v/' + ticket.make(store.key, ID_IMG, 2) + '/thumb')).status, 404);
+        assert.equal((await get(port, '/v/' + t1 + '/thumb')).status, 404);
+    });
+
     it('accepts only GET and HEAD', async () => {
         const r = await get(port, '/v/' + t1 + '/meta', {}, 'POST');
         assert.equal(r.status, 405);
@@ -410,6 +432,25 @@ describe('the renderers', () => {
         assert.deepEqual(ops(['a'], []), ['d1: a']);
         assert.deepEqual(ops(['a', 'b'], ['a', 'b']), ['s1:1 a', 's2:2 b']);
         assert.deepEqual(ops(['x', 'a', 'b'], ['a', 'b', 'y']), ['d1: x', 's2:1 a', 's3:2 b', 'a:3 y']);
+    });
+
+    it('lays out the diff with a head, the changes, 3 same lines of context and hidden runs', () => {
+        const A = Array.from({ length: 20 }, (_, i) => 'l' + i), B = A.slice();
+        B[10] = 'x';
+        B.push('y', 'z');
+        const ops = viewer.diff(A, B);
+        const show = (narrow) => JSON.parse(JSON.stringify(viewer.diffLayout(ops, narrow))).map(i => i.head ? 'head'
+            : i.more ? 'more ' + i.more[0].a + '-' + i.more[i.more.length - 1].a
+            : i.row.map(o => o ? o.op[0] + (o.a || o.b) : '_').join(' '));
+        assert.deepEqual(show(false), ['head', 'more 1-7', 's8 s8', 's9 s9', 's10 s10', 'd11 a11', 's12 s12', 's13 s13', 's14 s14',
+            'more 15-17', 's18 s18', 's19 s19', 's20 s20', '_ a21', '_ a22']);
+        assert.deepEqual(show(true).slice(4, 7), ['s10', 'd11', 'a11']);
+        assert.equal(show(true).length, 16);
+        assert.deepEqual(JSON.parse(JSON.stringify(viewer.diffLayout(viewer.diff(['a'], ['b']), false))).length, 2);
+    });
+
+    it('gives the base path of the version for the other ticket of a compare', () => {
+        assert.equal(viewer.base, '/v/T/');
     });
 
     it('gives no diff when the changed part is too large for the table', () => {

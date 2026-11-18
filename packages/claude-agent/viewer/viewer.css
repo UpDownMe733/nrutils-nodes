@@ -169,13 +169,14 @@ a { color: var(--link); }
 .diff.narrow { grid-template-columns: max-content max-content minmax(0, 1fr); }
 .d-num { padding: 0 8px; text-align: right; color: var(--text2); user-select: none; min-width: 3.5em; }
 .d-text { padding: 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.d-head { position: sticky; top: 0; padding: 4px 8px; background: var(--bg2); color: var(--text2); font: bold 12px "Helvetica Neue", Arial, Helvetica, sans-serif; border-bottom: 1px solid var(--border); }
 .d-right { border-left: 1px solid var(--border); }
 .d-text.del { background: var(--del); }
 .d-text.add { background: var(--add); }
 .d-text.none { background: var(--bg3); }
 .d-more {
-    grid-column: 1 / -1; min-height: 36px; border: 0; border-top: 1px solid var(--border2); border-bottom: 1px solid var(--border2);
-    background: var(--bg2); color: var(--link); font: 13px "Helvetica Neue", Arial, Helvetica, sans-serif; cursor: pointer;
+    grid-column: 1 / -1; min-height: 44px; border: 0; border-top: 1px solid var(--border2); border-bottom: 1px solid var(--border2);
+    background: var(--bg2); color: var(--text2); font: 13px "Helvetica Neue", Arial, Helvetica, sans-serif; cursor: pointer;
 }
 .d-more:hover, .d-more:focus-visible { background: var(--hover); }
 .d-images { display: flex; flex-wrap: wrap; gap: 16px; padding: 12px; }
