@@ -364,8 +364,6 @@
         e.preventDefault();
         e.stopPropagation();
         for (const file of files) {
-            const images = pasted[node.id] = pasted[node.id] || [];
-            if (images.length >= MAX_IMAGES) return RED.notify('A message can have ' + MAX_IMAGES + ' pictures.', 'warning');
             let image;
             try {
                 image = await shrink(file);
@@ -373,6 +371,9 @@
                 RED.notify('The picture cannot be read.', 'warning');
                 continue;
             }
+            // Read the list after the shrink: a Send or another paste can change it while the shrink runs.
+            const images = pasted[node.id] = pasted[node.id] || [];
+            if (images.length >= MAX_IMAGES) return RED.notify('A message can have ' + MAX_IMAGES + ' pictures.', 'warning');
             const used = images.reduce((sum, i) => sum + i.data.length * 0.75, 0);
             if (used + image.data.length * 0.75 > MAX_IMAGE_BYTES) {
                 RED.notify('The pictures of a message can have 3 MB.', 'warning');
@@ -741,11 +742,13 @@
             send.appendChild(element(node, 'span', 'send-label', '', ' Send'));
             send.addEventListener('click', () => {
                 const run = selectedRun(node);
-                const images = (pasted[node.id] || []).filter((image) => image.data);
-                sendControl(node, run && run.state === 'waiting' ? 'answer' : 'message', text.value, images.length ? images : undefined);
+                // An answer takes no pictures: they stay in the message box for the next message.
+                const answer = run && run.state === 'waiting';
+                const images = answer ? [] : pasted[node.id] || [];
+                sendControl(node, answer ? 'answer' : 'message', text.value, images.length ? images : undefined);
                 text.value = '';
                 grow(text);
-                delete pasted[node.id];
+                if (!answer) delete pasted[node.id];
                 showPasted(node);
             });
             // Enter sends. Shift+Enter starts a new line. Enter that ends an IME composition does not send.
