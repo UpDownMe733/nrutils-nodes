@@ -1070,7 +1070,10 @@
 .caf-head .red-ui-button{box-sizing:border-box;height:32px;min-height:32px;min-width:32px;margin:0}
 .caf-confirm .red-ui-button{min-height:44px;margin:0}
 .caf-head .caf-back{flex:none}
-.caf-bar{flex:none;display:flex;align-items:center;gap:6px;padding-bottom:6px}
+.caf-bar{flex:none;display:flex;align-items:center;gap:6px;padding-bottom:6px;white-space:nowrap}
+.caf-bar select{flex:1 1 0;min-width:0;width:auto;box-sizing:border-box;height:32px;margin:0}
+.caf-bar .red-ui-button{flex:none;box-sizing:border-box;height:32px;min-height:32px;min-width:32px;margin:0}
+.caf.caf-tight .caf-bar .red-ui-button .caf-label{display:none !important}
 .caf-menu{position:absolute;z-index:5;display:flex;flex-direction:column;background:var(--red-ui-primary-background);border:1px solid var(--red-ui-secondary-border-color);border-radius:4px}
 .caf-menu .red-ui-button{min-height:44px;margin:0;text-align:left;border:none}
 .caf-body{flex:1;min-height:0;display:flex;gap:6px;flex-direction:row}
@@ -1095,6 +1098,7 @@
     function btn(icon, label, className) {
         const b = h('button', 'red-ui-button' + (className ? ' ' + className : ''));
         b.type = 'button';
+        b.setAttribute('aria-label', label);
         if (icon) b.appendChild(h('i', 'fa ' + icon));
         b.appendChild(h('span', 'caf-label', (icon ? ' ' : '') + label));
         return b;
