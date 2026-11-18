@@ -131,7 +131,7 @@ a { color: var(--link); }
 }
 .grid th { position: sticky; top: 0; z-index: 1; padding: 0; background: var(--bg2); border-bottom-color: var(--border); }
 .grid th button {
-    display: block; width: 100%; min-height: 36px; padding: 4px 22px 4px 8px; border: 0; background: none;
+    display: block; width: 100%; min-height: 44px; padding: 4px 22px 4px 8px; border: 0; background: none;
     color: var(--text); font: inherit; font-weight: bold; text-align: left; cursor: pointer; position: relative;
 }
 .grid th button:hover, .grid th button:focus-visible { background: var(--hover); }
@@ -142,11 +142,13 @@ a { color: var(--link); }
 .grid th:first-child { z-index: 2; }
 .box:has(> .grid-box) { display: flex; flex-direction: column; }
 .tools .secondary { align-self: center; }
+.cut-note { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border2); background: var(--bg2); }
 
 /* JSON: a tree of <details> elements */
 .json { padding: 8px 12px; font: 13px/1.6 Menlo, Consolas, "DejaVu Sans Mono", monospace; overflow-wrap: anywhere; }
 .json details > :not(summary) { margin-left: 1.4em; }
-.json summary { cursor: pointer; min-height: 24px; }
+.json summary { cursor: pointer; min-height: 44px; box-sizing: border-box; padding: 11px 0; }
+.j-more { margin: 4px 0; }
 .json summary:hover { background: var(--hover); }
 .j-leaf { padding-left: 1.1em; }
 .j-key { color: var(--text); font-weight: bold; }

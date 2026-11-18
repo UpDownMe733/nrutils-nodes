@@ -1,6 +1,6 @@
 'use strict';
 
-// Checks the view server of the artifacts (artifacts-view.js) with a fake store in a temporary folder,
+// Checks the view server of the artifacts (artifacts/view-server.js) with a fake store in a temporary folder,
 // and the match rules of the renderers of the viewer page in a small fake DOM.
 
 const { describe, it, before, after } = require('node:test');
@@ -13,7 +13,8 @@ const zlib = require('zlib');
 const vm = require('vm');
 const crypto = require('crypto');
 
-const view = require('../artifacts-view.js');
+const view = require('../artifacts/view-server.js');
+const ticket = require('../artifacts/ticket.js');
 
 const VIEWER = path.join(__dirname, '..', 'viewer');
 const ID = '3f9c0e1a7b2d4c55';
@@ -33,6 +34,11 @@ function fakeStore(dir) {
     return {
         key, records, put,
         record: (id) => records[id] || null,
+        version: (id, n) => {
+            const r = records[id];
+            const v = r && !r.deleted && r.versions.find(x => x.n === Number(n));
+            return v && !v.deleted && !v.purged ? v : undefined;
+        },
         blobPath: (sha) => path.join(blobs, sha)
     };
 }
@@ -75,47 +81,30 @@ function unzip(buf) {
     return out;
 }
 
-describe('view tickets', () => {
-    const key = crypto.randomBytes(32);
-
-    it('reads its own ticket', () => {
-        assert.deepEqual(view.readTicket(key, view.makeTicket(key, ID, 3)), { id: ID, n: 3 });
-    });
-
-    it('refuses a ticket of another key, a changed ticket and an expired ticket', () => {
-        const t = view.makeTicket(key, ID, 3);
-        assert.equal(view.readTicket(crypto.randomBytes(32), t), null);
-        const other = Buffer.from(ID + '|4|' + (Date.now() + 1000)).toString('base64url');
-        assert.equal(view.readTicket(key, other + t.slice(t.indexOf('.'))), null);
-        assert.equal(view.readTicket(key, view.makeTicket(key, ID, 3, Date.now() - 13 * 3600 * 1000)), null);
-        assert.equal(view.readTicket(key, 'x'), null);
-        assert.equal(view.readTicket(key, undefined), null);
-    });
-
-    it('gives the URLs of a version, with a thumbnail only for an image entry', () => {
-        const u = view.urls('http://h:1881', 'T', { entry: 'a b.png', files: [{ path: 'a b.png', type: 'image/png' }] });
-        assert.deepEqual(u, { view: 'http://h:1881/v/T/', download: 'http://h:1881/v/T/download', thumb: 'http://h:1881/v/T/f/a%20b.png' });
-        assert.equal(view.urls('b', 'T', { entry: 'r.md', files: [{ path: 'r.md', type: 'text/markdown' }] }).thumb, null);
-    });
-
-    it('takes the base URL from viewUrl, else from the host of the editor', () => {
-        assert.equal(view.baseUrl({ protocol: 'https', hostname: 'nr.lan' }, { artifacts: { viewPort: 1990 } }), 'https://nr.lan:1990');
-        assert.equal(view.baseUrl({ protocol: 'http', hostname: 'h' }, { artifacts: { viewUrl: 'https://v.example/' } }), 'https://v.example');
-        assert.equal(view.baseUrl({ protocol: 'http', hostname: '::1' }, {}), 'http://[::1]:1881');
-    });
-
+describe('the helpers', () => {
     it('makes the download name from the title and the version', () => {
         assert.equal(view.downloadName({ title: 'Load test: report', n: 3 }, '.md'), 'Load test_ report-v3.md');
         assert.equal(view.downloadName({ title: 'notes.md', n: 1 }, '.md'), 'notes-v1.md');
         assert.equal(view.downloadName({ title: '', n: 2 }, '.zip'), 'file-v2.zip');
     });
+
+    it('refuses a zip name that can write outside the folder of the unzip, and a duplicate', async () => {
+        const out = { write: () => true, destroyed: false };
+        const read = async () => Buffer.from('x');
+        for (const name of ['/etc/x', 'a\\b', '../x', 'a/../b', 'a//b', './a', 'a/', 'a\u0001b', '']) {
+            await assert.rejects(view.writeZip(out, [{ path: name, read }], 0), /cannot hold/, JSON.stringify(name));
+        }
+        await assert.rejects(view.writeZip(out, [{ path: 'a', read }, { path: 'a', read }], 0), /cannot hold/);
+        await view.writeZip(out, [{ path: 'a/b..c', read }, { path: 'ü .md', read }], 0);
+    });
 });
 
 describe('the view server', () => {
     let dir, store, server, port, t1, t2, tDel;
+    const origins = new Set();
 
     before(async () => {
-        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-view-'));
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'view-server-'));
         store = fakeStore(dir);
         fs.writeFileSync(path.join(dir, 'secret.txt'), 'secret');
         const v1 = {
@@ -135,10 +124,10 @@ describe('the view server', () => {
         };
         const v3 = { n: 3, time: Date.now(), title: 'Report', entry: 'a.md', deleted: Date.now(), purged: false, files: [] };
         store.records[ID] = { id: ID, name: 'report', owner: { address: 't/a', nodeId: 'n1' }, versions: [v1, v2, v3] };
-        t1 = view.makeTicket(store.key, ID, 1);
-        t2 = view.makeTicket(store.key, ID, 2);
-        tDel = view.makeTicket(store.key, ID, 3);
-        server = http.createServer(view.handler({ store, htmlNetwork: true, uiPort: 1880 }));
+        t1 = ticket.make(store.key, ID, 1);
+        t2 = ticket.make(store.key, ID, 2);
+        tDel = ticket.make(store.key, ID, 3);
+        server = http.createServer(view.handler({ store, htmlNetwork: true, uiPort: 1880, editorOrigins: origins }));
         await new Promise(r => server.listen(0, '127.0.0.1', r));
         port = server.address().port;
     });
@@ -179,9 +168,21 @@ describe('the view server', () => {
         assert.match(r.headers['content-security-policy'], /frame-ancestors 'self'$/);
     });
 
+    it('uses the known editor origins in frame-ancestors of the page and of each file, and ignores a bad origin', async () => {
+        origins.add('https://nr.lan:1880').add("http://x; script-src *").add('http://[::1]:1880').add('http://h/path');
+        try {
+            for (const p of ['/', '/f/index.html', '/f/doc.pdf', '/meta']) {
+                const r = await get(port, '/v/' + t2 + p, { host: 'other:1881' });
+                assert.match(r.headers['content-security-policy'], /frame-ancestors 'self' https:\/\/nr\.lan:1880 http:\/\/\[::1\]:1880$/, p);
+            }
+        } finally {
+            origins.clear();
+        }
+    });
+
     it('sends a dead link page for a bad, an expired or a deleted ticket', async () => {
-        const expired = view.makeTicket(store.key, ID, 1, Date.now() - 13 * 3600 * 1000);
-        for (const t of ['nonsense', expired, tDel, view.makeTicket(store.key, ID, 9), view.makeTicket(store.key, 'ffffffffffffffff', 1)]) {
+        const expired = ticket.make(store.key, ID, 1, 1000, Date.now() - 2000);
+        for (const t of ['nonsense', expired, tDel, ticket.make(store.key, ID, 9), ticket.make(store.key, 'ffffffffffffffff', 1)]) {
             const r = await get(port, '/v/' + t + '/');
             assert.equal(r.status, 404);
             assert.match(r.body.toString(), /This link does not work\./);
@@ -212,7 +213,7 @@ describe('the view server', () => {
         assert.equal(r.status, 200);
         assert.equal(r.headers['content-type'], 'text/html; charset=utf-8');
         const csp = r.headers['content-security-policy'];
-        assert.match(csp, /^sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads; default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' https:$/);
+        assert.match(csp, /^sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads; default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' https:; frame-ancestors 'self' http:\/\/127\.0\.0\.1:1880 https:\/\/127\.0\.0\.1:1880$/);
         assert.doesNotMatch(csp, /allow-same-origin|allow-top-navigation/);
         assert.equal((await get(port, '/v/' + t2 + '/f/img/a%20b.png')).headers['content-type'], 'image/png');
     });
@@ -222,7 +223,7 @@ describe('the view server', () => {
         await new Promise(r => s.listen(0, '127.0.0.1', r));
         const r = await get(s.address().port, '/v/' + t2 + '/f/index.html');
         s.close();
-        assert.match(r.headers['content-security-policy'], /'unsafe-eval'$/);
+        assert.match(r.headers['content-security-policy'], /'unsafe-eval'; frame-ancestors/);
     });
 
     it('finds a file only by an exact path of the file list', async () => {
@@ -238,7 +239,7 @@ describe('the view server', () => {
     it('serves a real PDF with no sandbox, and a fake PDF as a download type with the sandbox', async () => {
         const real = await get(port, '/v/' + t2 + '/f/doc.pdf');
         assert.equal(real.headers['content-type'], 'application/pdf');
-        assert.equal(real.headers['content-security-policy'], undefined);
+        assert.match(real.headers['content-security-policy'], /^frame-ancestors 'self' /, 'no sandbox: Chrome shows no PDF in a sandbox');
         assert.equal(real.headers['x-content-type-options'], 'nosniff');
         const fake = await get(port, '/v/' + t2 + '/f/fake.pdf');
         assert.equal(fake.headers['content-type'], 'application/octet-stream');
@@ -255,6 +256,9 @@ describe('the view server', () => {
         assert.equal(r.body.toString(), 'abc');
         r = await get(port, p, { range: 'bytes=20000-' });
         assert.equal(r.status, 416);
+        r = await get(port, p, { range: 'bytes=0-1,5-6' });
+        assert.equal(r.status, 200, 'more than one range gives the full file');
+        assert.equal(r.body.length, 11000);
         r = await get(port, '/v/' + t2 + '/f/empty.bin');
         assert.equal(r.status, 200);
         assert.equal(r.body.length, 0);
@@ -287,7 +291,7 @@ describe('the view server', () => {
         for (const p of ['viewer.js', 'viewer.css', 'renderers/markdown.js', 'lib/marked.js', 'lib/purify.js']) {
             assert.equal((await get(port, '/viewer/' + p)).status, 200, p);
         }
-        for (const p of ['index.html', '../artifacts-view.js', '%2e%2e/artifacts-view.js', 'constructor', 'renderers/', 'lib/']) {
+        for (const p of ['index.html', '../viewer.js', '%2e%2e/view-server.js', 'constructor', 'renderers/', 'lib/']) {
             assert.equal((await get(port, '/viewer/' + p)).status, 404, p);
         }
         assert.equal((await get(port, '/viewer/viewer.css')).headers['content-type'], 'text/css; charset=utf-8');
@@ -301,28 +305,21 @@ describe('the view server', () => {
     });
 });
 
-describe('start and stop', () => {
-    it('starts no server with no artifacts block or with viewPort 0', async () => {
-        const RED = { settings: { claudeAgent: {} }, log: { error() {} } };
-        assert.equal(await view.start(RED, {}), null);
-        RED.settings.claudeAgent.artifacts = { viewPort: 0 };
-        assert.equal(await view.start(RED, {}), null);
+describe('start', () => {
+    it('serves on the port, and stops on close', async () => {
+        const store = { key: Buffer.alloc(32), record: () => null, version: () => undefined };
+        const v = await view.start({ store, port: 0, bind: '127.0.0.1', settings: { htmlNetwork: true } });
+        assert.ok(v.port > 0);
+        assert.equal((await get(v.port, '/v/x/')).status, 404);
+        await v.close();
+        await assert.rejects(get(v.port, '/v/x/'));
     });
 
-    it('starts one server for the process, and stops it', async () => {
-        const RED = { settings: { uiHost: '127.0.0.1', claudeAgent: { artifacts: { viewPort: 0 } } }, log: { error() {} } };
-        const probe = http.createServer();
-        await new Promise(r => probe.listen(0, '127.0.0.1', r));
-        const port = probe.address().port;
-        await new Promise(r => probe.close(r));
-        RED.settings.claudeAgent.artifacts.viewPort = port;
-        const a = await view.start(RED, { key: Buffer.alloc(32), record: () => null });
-        const b = await view.start(RED, {});
-        assert.equal(a, b);
-        await new Promise(r => a.listening ? r() : a.once('listening', r));
-        assert.equal((await get(port, '/v/x/')).status, 404);
-        await view.stop();
-        await assert.rejects(get(port, '/v/x/'));
+    it('rejects when the port is in use', async () => {
+        const store = { key: Buffer.alloc(32), record: () => null, version: () => undefined };
+        const a = await view.start({ store, port: 0, bind: '127.0.0.1' });
+        await assert.rejects(view.start({ store, port: a.port, bind: '127.0.0.1' }), /EADDRINUSE/);
+        await a.close();
     });
 });
 
@@ -377,6 +374,9 @@ describe('the renderers', () => {
         const { compare } = registered.find(r => r.name === 'csv');
         assert.deepEqual(['10', '', '9', '-1.5', '2e1'].sort(compare), ['-1.5', '9', '10', '2e1', '']);
         assert.deepEqual(['b10', 'B2', 'a'].sort(compare), ['a', 'B2', 'b10']);
+        const down = (x, y) => compare(x, y, -1);
+        assert.deepEqual(['10', '', '9', '-1.5', ''].sort(down), ['10', '9', '-1.5', '', ''], 'an empty cell stays last in the down sort');
+        assert.deepEqual(['a', '', 'B2'].sort(down), ['B2', 'a', '']);
     });
 
     it('keeps the exact text of a JSON number that a JavaScript number cannot hold', () => {

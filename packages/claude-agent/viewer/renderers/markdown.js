@@ -35,6 +35,7 @@
 
     viewer.register({
         name: 'markdown',
+        cuts: true,
         match: (file) => file.type === 'text/markdown',
         render: async (box, file, ctx) => {
             const source = await ctx.text(file.path);

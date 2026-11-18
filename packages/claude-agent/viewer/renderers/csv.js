@@ -30,15 +30,16 @@
     const NUMBER = /^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$/;
     const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
-    // Compares two cells: numbers as numbers, else as text. An empty cell is always last.
-    function compare(a, b) {
+    // Compares two cells: numbers as numbers, else as text. dir: 1 up, -1 down. An empty cell is last in the two directions.
+    function compare(a, b, dir = 1) {
         if (a === '' || b === '') return (a === '') - (b === '');
-        if (NUMBER.test(a) && NUMBER.test(b)) return parseFloat(a) - parseFloat(b);
-        return collator.compare(a, b);
+        if (NUMBER.test(a) && NUMBER.test(b)) return (parseFloat(a) - parseFloat(b)) * dir;
+        return collator.compare(a, b) * dir;
     }
 
     viewer.register({
         name: 'csv',
+        cuts: true,
         parse, compare,
         match: (file) => file.type === 'text/csv' || file.type === 'text/tab-separated-values',
         render: async (box, file, ctx) => {
@@ -68,7 +69,7 @@
             function sort(c) {
                 sortDir = sortCol === c ? (sortDir + 1) % 3 : 1;
                 sortCol = sortDir ? c : -1;
-                order.sort((a, b) => sortDir ? (compare(body[a][c] || '', body[b][c] || '') * (sortDir === 1 ? 1 : -1) || a - b) : a - b);
+                order.sort((a, b) => sortDir ? (compare(body[a][c] || '', body[b][c] || '', sortDir === 1 ? 1 : -1) || a - b) : a - b);
                 for (const [k, th] of [...thead.querySelectorAll('th')].entries()) {
                     th.setAttribute('aria-sort', k === sortCol ? (sortDir === 1 ? 'ascending' : 'descending') : 'none');
                 }

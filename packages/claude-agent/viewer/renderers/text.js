@@ -4,6 +4,7 @@
 
 viewer.register({
     name: 'text',
+    cuts: true,
     match: (file) => file.isText || /^text\//.test(file.type) ||
         /^application\/(json|xml|javascript|x-sh|x-yaml|yaml|toml|sql|x-httpd-php)$/.test(file.type) || /\+(json|xml)$/.test(file.type),
     render: async (box, file, ctx) => {

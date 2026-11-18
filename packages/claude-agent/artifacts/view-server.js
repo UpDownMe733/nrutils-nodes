@@ -17,7 +17,7 @@
 //   /v/<ticket>/download    the file, or a zip of all files of the version
 //   /viewer/<asset>         the scripts and the style of the viewer page (a fixed list)
 //
-// The store object gives: record(id), blobPath(sha256) and key (a Buffer).
+// The store (store.js) gives: key, record(id), version(id, n) and blobPath(sha256).
 
 const fs = require('fs');
 const path = require('path');
@@ -25,65 +25,19 @@ const http = require('http');
 const https = require('https');
 const zlib = require('zlib');
 const crypto = require('crypto');
+const ticket = require('./ticket');
 
-const TICKET_MS = 12 * 60 * 60 * 1000;
-const VIEWER_DIR = path.join(__dirname, 'viewer');
+const VIEWER_DIR = path.join(__dirname, '..', 'viewer');
 
 // The CSP of each artifact file. The file gets an opaque origin: no allow-same-origin, no allow-top-navigation.
 const SANDBOX = 'sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads';
-function fileCsp(htmlNetwork) {
-    return SANDBOX + "; default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval'" + (htmlNetwork ? ' https:' : '');
+function fileCsp(htmlNetwork, ancestors) {
+    return SANDBOX + "; default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval'" + (htmlNetwork ? ' https:' : '') +
+        '; frame-ancestors ' + ancestors;
 }
 
-// ---- Tickets: base64url("id|n|expiry") + "." + base64url(HMAC-SHA256(key, "id|n|expiry"))
-
-function mac(key, body) {
-    return crypto.createHmac('sha256', key).update(body).digest('base64url');
-}
-
-function makeTicket(key, id, n, now = Date.now()) {
-    const body = id + '|' + n + '|' + (now + TICKET_MS);
-    return Buffer.from(body).toString('base64url') + '.' + mac(key, body);
-}
-
-// Gives { id, n } for a valid ticket that has not expired, else null
-function readTicket(key, ticket, now = Date.now()) {
-    const m = /^([A-Za-z0-9_-]{1,100})\.([A-Za-z0-9_-]{43})$/.exec(ticket || '');
-    if (!m) return null;
-    const body = Buffer.from(m[1], 'base64url').toString();
-    const want = Buffer.from(mac(key, body));
-    const got = Buffer.from(m[2]);
-    if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) return null;
-    const p = /^([0-9a-f]{16})\|([1-9][0-9]{0,8})\|([0-9]{1,15})$/.exec(body);
-    if (!p || Number(p[3]) < now) return null;
-    return { id: p[1], n: Number(p[2]) };
-}
-
-// The URL of the view server for the browser of the editor. req is the request of the admin API.
-function baseUrl(req, settings) {
-    const a = (settings && settings.artifacts) || {};
-    if (a.viewUrl) return String(a.viewUrl).replace(/\/+$/, '');
-    let host = req.hostname || 'localhost';
-    if (host.includes(':') && !host.startsWith('[')) host = '[' + host + ']';
-    return req.protocol + '://' + host + ':' + (a.viewPort || 1881);
-}
-
-const IMAGE = /^image\/(png|jpeg|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon|svg\+xml)$/;
-
-// The URLs of one version: the viewer page, the download, and a thumbnail when the entry is an image
-function urls(base, ticket, version) {
-    const v = base + '/v/' + ticket + '/';
-    const entry = version.files.find(f => f.path === version.entry);
-    return {
-        view: v,
-        download: v + 'download',
-        thumb: entry && IMAGE.test(entry.type) ? v + 'f/' + encodePath(entry.path) : null
-    };
-}
-
-function encodePath(p) {
-    return p.split('/').map(encodeURIComponent).join('/');
-}
+// An origin that frame-ancestors can hold: a scheme, a plain host and a port, with no path
+const ORIGIN = /^https?:\/\/([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?$/;
 
 // ---- The zip writer (store or deflate, UTF-8 names, no zip64: a publish is 100 MB and 2000 files at most)
 
@@ -93,10 +47,20 @@ const CRC_TABLE = new Int32Array(256).map((_, n) => {
     return c;
 });
 
-function crc32(buf) {
+function tableCrc32(buf) {
     let c = -1;
     for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
     return (c ^ -1) >>> 0;
+}
+
+// zlib.crc32 is in Node.js 20.15 and later. The table is for an older Node.js.
+const crc32 = zlib.crc32 ? (buf) => zlib.crc32(buf) : tableCrc32;
+
+// A name in a zip must be relative, with "/" only and no "." or ".." segment: an unzip program must not write outside its folder.
+function zipNameError(name, seen) {
+    if (!name || name.startsWith('/') || /[\\\u0000-\u001f\u007f]/.test(name)) return true;
+    if (name.split('/').some(s => s === '' || s === '.' || s === '..')) return true;
+    return seen.has(name);
 }
 
 function dosTime(ms) {
@@ -106,8 +70,14 @@ function dosTime(ms) {
     return { time, date };
 }
 
-// Writes the zip to the stream out. files: [{ path, data }]. Gives a promise.
+// Writes the zip to the stream out. files: [{ path, read() }]. Gives a promise.
+// A bad or a duplicate name stops the zip before the first byte.
 async function writeZip(out, files, ms) {
+    const seen = new Set();
+    for (const f of files) {
+        if (zipNameError(f.path, seen)) throw new Error('the zip cannot hold the name ' + JSON.stringify(f.path));
+        seen.add(f.path);
+    }
     const { time, date } = dosTime(ms);
     const central = [];
     let offset = 0;
@@ -206,9 +176,11 @@ function disposition(name) {
     return 'attachment; filename="' + ascii + '"; filename*=UTF-8\'\'' + encodeURIComponent(name);
 }
 
-// Makes the request handler. opts: { store, htmlNetwork, uiPort }
+// Makes the request handler. opts: { store, htmlNetwork, editorOrigins, uiPort }
+// editorOrigins: an iterable of the origins of the editor, read on each request. uiPort: the editor port for a guess.
 function handler(opts) {
     const { store } = opts;
+    let zipping = false;
     const assets = assetList();
     const page = fs.readFileSync(path.join(VIEWER_DIR, 'index.html'), 'utf8');
 
@@ -223,30 +195,29 @@ function handler(opts) {
     }
 
     // The version of a valid ticket, when it is not deleted or purged
-    function lookup(ticket) {
-        const t = readTicket(store.key, ticket);
-        if (!t) return null;
-        const record = store.record(t.id);
-        if (!record || record.deleted) return null;
-        const version = record.versions.find(v => v.n === t.n);
-        if (!version || version.deleted || version.purged) return null;
-        return { record, version };
+    function lookup(text) {
+        const t = ticket.verify(store.key, text);
+        const version = t && store.version(t.id, t.n);
+        return version ? { record: store.record(t.id), version } : null;
     }
 
-    // The editor may put the viewer page in a frame. Its origin is the host of this request with the editor port.
+    // The editor may put the viewer page and its files in a frame. Its origins come from the ticket requests.
+    // With no known origin, the guess is the host of this request with the editor port.
     function frameAncestors(req) {
+        const known = [...(opts.editorOrigins || [])].filter(o => typeof o === 'string' && ORIGIN.test(o));
+        if (known.length) return ["'self'", ...new Set(known)].join(' ');
         const host = String(req.headers.host || '').replace(/:[0-9]+$/, '');
         if (!/^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])$/.test(host)) return "'self'";
         const port = ':' + (opts.uiPort || 1880);
         return "'self' http://" + host + port + ' https://' + host + port;
     }
 
-    function viewerPage(req, res, query) {
+    function viewerPage(res, query, ancestors) {
         const nonce = crypto.randomBytes(16).toString('base64');
         const theme = /^(light|dark)$/.test(query.get('theme') || '') ? query.get('theme') : '';
         res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'nonce-" + nonce + "'; " +
             "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; " +
-            "form-action 'none'; frame-ancestors " + frameAncestors(req));
+            "form-action 'none'; frame-ancestors " + ancestors);
         send(res, 200, 'text/html; charset=utf-8', page.replace(/\{\{nonce\}\}/g, nonce).replace('{{theme}}', theme));
     }
 
@@ -272,12 +243,13 @@ function handler(opts) {
         }
     }
 
-    async function serveFile(req, res, file) {
+    async function serveFile(req, res, file, ancestors) {
         const blob = store.blobPath(file.sha256);
         const stat = await fs.promises.stat(blob);
         let type = file.type || 'application/octet-stream';
         if (await isPdf(file, blob)) {
-            res.removeHeader('Content-Security-Policy');
+            // Chrome shows no PDF in a sandboxed document. The PDF viewer of the browser runs no script of the file.
+            res.setHeader('Content-Security-Policy', 'frame-ancestors ' + ancestors);
         } else {
             if (type === 'application/pdf') type = 'application/octet-stream';
             if (/^text\//.test(type)) type += '; charset=utf-8';
@@ -285,8 +257,9 @@ function handler(opts) {
         res.setHeader('Content-Type', type);
         res.setHeader('Accept-Ranges', 'bytes');
         let start = 0, end = stat.size - 1;
+        // A request for more than one range gets the full file: a multipart response is not necessary for a viewer.
         const range = req.headers.range;
-        if (range) {
+        if (range && !range.includes(',')) {
             const m = /^bytes=([0-9]*)-([0-9]*)$/.exec(range);
             if (m && (m[1] || m[2])) {
                 if (m[1]) { start = Number(m[1]); if (m[2]) end = Math.min(Number(m[2]), end); }
@@ -315,10 +288,20 @@ function handler(opts) {
             if (req.method === 'HEAD' || stat.size === 0) return res.end();
             return fs.createReadStream(blob).on('error', () => res.destroy()).pipe(res);
         }
+        // One zip at a time: a zip reads each file into memory.
+        if (zipping) {
+            res.setHeader('Retry-After', '5');
+            return send(res, 503, 'text/plain; charset=utf-8', 'An other download is in progress. Try again soon.');
+        }
         res.setHeader('Content-Disposition', disposition(downloadName(version, '.zip')));
         if (req.method === 'HEAD') return res.end();
         const files = version.files.map(f => ({ path: f.path, read: () => fs.promises.readFile(store.blobPath(f.sha256)) }));
-        await writeZip(res, files, version.time);
+        zipping = true;
+        try {
+            await writeZip(res, files, version.time);
+        } finally {
+            zipping = false;
+        }
         res.end();
     }
 
@@ -348,8 +331,9 @@ function handler(opts) {
             res.writeHead(302, { Location: '/v/' + m[1] + '/' + url.search });
             return res.end();
         }
-        if (rest === '') return viewerPage(req, res, url.searchParams);
-        res.setHeader('Content-Security-Policy', fileCsp(opts.htmlNetwork));
+        const ancestors = frameAncestors(req);
+        if (rest === '') return viewerPage(res, url.searchParams, ancestors);
+        res.setHeader('Content-Security-Policy', fileCsp(opts.htmlNetwork, ancestors));
         if (rest === 'meta') return meta(res, record, version);
         if (rest === 'download') return download(req, res, version);
         if (rest.startsWith('f/')) {
@@ -357,7 +341,7 @@ function handler(opts) {
             try { want = rest.slice(2).split('/').map(decodeURIComponent).join('/'); } catch { return notFound(res); }
             const file = version.files.find(f => f.path === want);
             if (!file) return notFound(res);
-            return serveFile(req, res, file);
+            return serveFile(req, res, file, ancestors);
         }
         return notFound(res);
     }
@@ -370,31 +354,24 @@ function handler(opts) {
     };
 }
 
-// ---- One view server for each Node-RED process
+// ---- Start
 
-let server = null;
-
-// Starts the view server from RED.settings.claudeAgent.artifacts. No artifacts block or viewPort 0: no server.
-async function start(RED, store) {
-    if (server) return server;
-    const a = (RED.settings.claudeAgent || {}).artifacts;
-    const port = a ? (a.viewPort === undefined ? 1881 : a.viewPort) : 0;
-    if (!port) return null;
-    const handle = handler({ store, htmlNetwork: a.htmlNetwork !== false, uiPort: RED.settings.uiPort });
-    // The view server uses HTTPS when the editor does: a page on HTTPS cannot show a frame on HTTP.
-    let tls = RED.settings.https;
-    if (typeof tls === 'function') tls = await tls();
-    server = tls ? https.createServer(tls, handle) : http.createServer(handle);
-    server.on('error', (err) => RED.log.error('claude-agent: the view server cannot start on port ' + port + ': ' + err.message));
-    server.listen(port, RED.settings.uiHost || undefined);
-    return server;
+// Starts the view server. settings: the artifacts settings (htmlNetwork). tls: the https options of the editor, or none:
+// a page on HTTPS cannot show a frame on HTTP. uiPort: the editor port for the frame-ancestors guess.
+// Gives a promise of { port, close() }. The promise rejects when the port cannot be opened.
+function start({ store, port, bind, settings = {}, editorOrigins, tls, uiPort }) {
+    const handle = handler({ store, htmlNetwork: settings.htmlNetwork !== false, editorOrigins, uiPort });
+    const server = tls ? https.createServer(tls, handle) : http.createServer(handle);
+    return new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(port, bind || undefined, () => {
+            server.off('error', reject);
+            resolve({
+                port: server.address().port,
+                close: () => new Promise(done => { server.closeAllConnections(); server.close(() => done()); })
+            });
+        });
+    });
 }
 
-function stop() {
-    if (!server) return Promise.resolve();
-    const s = server;
-    server = null;
-    return new Promise(resolve => { s.closeAllConnections && s.closeAllConnections(); s.close(() => resolve()); });
-}
-
-module.exports = { makeTicket, readTicket, baseUrl, urls, handler, start, stop, writeZip, crc32, downloadName };
+module.exports = { start, handler, writeZip, crc32, downloadName };

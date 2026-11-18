@@ -7,6 +7,8 @@
     const renderers = [];
     const base = location.pathname.replace(/[^/]*$/, '');   // /v/<ticket>/
     const TEXT_PROBE = 8192;
+    // A text file larger than this shows only its first part: a larger DOM makes the page slow
+    const TEXT_LIMIT = 2 * 1024 * 1024;
 
     function encodePath(p) {
         return p.split('/').map(encodeURIComponent).join('/');
@@ -47,6 +49,13 @@
         return out.join('/');
     }
 
+    // A cut at the end of bytes can split a UTF-8 character: remove up to 3 bytes of an incomplete sequence
+    function cutUtf8(bytes) {
+        let i = bytes.length - 1, k = 0;
+        while (k < 3 && i >= 0 && (bytes[i] & 0xc0) === 0x80) { i--; k++; }
+        return i >= 0 && bytes[i] >= 0xc0 ? bytes.slice(0, i) : bytes;
+    }
+
     // A file of type application/octet-stream shows as text when its first 8 KB are valid UTF-8 with no NUL byte
     async function probeText(file) {
         if (file.type !== 'application/octet-stream') return;
@@ -54,12 +63,7 @@
             const r = await fetch(viewer.url(file.path), { headers: { Range: 'bytes=0-' + (TEXT_PROBE - 1) } });
             let bytes = new Uint8Array(await r.arrayBuffer());
             if (bytes.includes(0)) return;
-            // A cut at the end can split a character: remove up to 3 bytes of an incomplete UTF-8 sequence
-            if (file.size > TEXT_PROBE) {
-                let i = bytes.length - 1, k = 0;
-                while (k < 3 && i >= 0 && (bytes[i] & 0xc0) === 0x80) { i--; k++; }
-                if (i >= 0 && bytes[i] >= 0xc0) bytes = bytes.slice(0, i);
-            }
+            if (file.size > TEXT_PROBE) bytes = cutUtf8(bytes);
             new TextDecoder('utf-8', { fatal: true }).decode(bytes);
             file.isText = true;
         } catch (e) {
@@ -71,7 +75,7 @@
         meta: null,
         theme: document.documentElement.dataset.theme ||
             (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-        el, size, date, resolve, dir, encodePath,
+        el, size, date, resolve, dir, encodePath, TEXT_LIMIT,
 
         register(renderer) {
             renderers.push(renderer);
@@ -82,10 +86,23 @@
             return base + 'f/' + encodePath(p);
         },
 
+        // The text of a file. A file larger than TEXT_LIMIT gives its first TEXT_LIMIT bytes, up to the last full line.
         async text(p) {
-            const r = await fetch(viewer.url(p));
+            const file = viewer.file(p);
+            const big = file && file.size > TEXT_LIMIT;
+            const r = await fetch(viewer.url(p), big ? { headers: { Range: 'bytes=0-' + (TEXT_LIMIT - 1) } } : {});
             if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.text();
+            if (!big) return r.text();
+            const text = new TextDecoder().decode(cutUtf8(new Uint8Array(await r.arrayBuffer())));
+            const end = text.lastIndexOf('\n');
+            return end > 0 ? text.slice(0, end + 1) : text;
+        },
+
+        // The note above a file that shows only its first part
+        cutNote(file) {
+            return el('div', { class: 'cut-note' },
+                el('span', { text: 'This shows the first ' + size(TEXT_LIMIT) + ' of ' + size(file.size) + '.' }),
+                el('a', { class: 'button', href: viewer.url(file.path), download: file.path.split('/').pop(), text: 'Download' }));
         },
 
         file(p) {
@@ -117,6 +134,7 @@
             const r = await viewer.pick(file);
             try {
                 await r.render(box, file, Object.assign({ url: viewer.url, text: viewer.text, theme: viewer.theme }, ctx));
+                if (r.cuts && file.size > TEXT_LIMIT) box.prepend(viewer.cutNote(file));
             } catch (e) {
                 viewer.fallback(box, file);
             }

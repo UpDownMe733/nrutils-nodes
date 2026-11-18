@@ -142,7 +142,10 @@
             return box.append(el('div', { class: 'other' }, el('div', { text }), facts(old.meta, old.file, neu.meta, neu.file)));
         }
         const kind = (await viewer.pick(file)).name;
-        if (TEXT.includes(kind)) {
+        if (TEXT.includes(kind) && Math.max(old.file.size, neu.file.size) > viewer.TEXT_LIMIT) {
+            box.append(el('div', { class: 'other' },
+                el('div', { text: 'The file is too large for a line compare.' }), facts(old.meta, old.file, neu.meta, neu.file)));
+        } else if (TEXT.includes(kind)) {
             const get = async (s) => { const r = await fetch(s.url(path)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); };
             let ops;
             try { ops = diff(lines(await get(old)), lines(await get(neu))); } catch (e) { ops = undefined; }
