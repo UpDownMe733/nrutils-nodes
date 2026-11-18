@@ -67,7 +67,7 @@ artifacts/
   shares.json              the share links
 ```
 
-The id of an artifact: the SHA-256 of `<node id>/<name>`, first 16 hex characters. The node id does not change when a person renames the tab or the node, so the versions stay in one record. The record also keeps the address (`team/name`, from `NR_FLOW_NAME` and the node name) of the newest publish, for the display. A node with no name shows its node id.
+The id of an artifact: the SHA-256 of `<node id>/<name>`, first 16 hex characters. The node id does not change when a person renames the tab or the node, so the versions stay in one record. The record also keeps the address (`team/name`, from `NR_FLOW_NAME` and the node name) of the newest publish, for the display. A node with no name shows its node id. A copy or an import of a node gives a new node id, so its new versions go into a new record. This is accepted: the copy is a new agent.
 
 A record:
 
@@ -86,7 +86,7 @@ A record:
 - The node writes a record to a temporary file, then renames it. Thus a crash leaves the old record or the new record, never half.
 - At start, the node reads all records into memory. 10 000 artifacts are some MB of memory.
 - Retention: the store keeps all versions for ever. Only a person deletes: one version, or the artifact with all versions. The node never deletes on its own: the purpose is long term keeping.
-- Delete has an undo. A delete sets `deleted` to the time on the version or the record (else `deleted` is `null`), and stops its share links. The files stay, and the editor can undo it for 30 days. After 30 days, the node sets `purged: true`, clears the file list of the version, and removes each blob that no record uses. The version number stays in the record.
+- Delete has an undo. A delete sets `deleted` to the time on the version or the record (else `deleted` is `null`). Its share links stop: the share server gives 404 for a link while its artifact or version is deleted, and does not change the link record. Thus an undo makes the links work again, except a link that a person revoked or that expired. The files stay, and the editor can undo it for 30 days. After 30 days, the node sets `purged: true`, clears the file list of the version, and removes each blob that no record uses. The version number stays in the record.
 - The type of a file comes from its extension (a fixed table). Unknown extensions get `application/octet-stream`. The viewer tests such a file for text (valid UTF-8, no NUL byte in the first 8 KB).
 
 ## 4. The admin API
@@ -95,7 +95,7 @@ Routes on `RED.httpAdmin`, below `/claude-agent/artifacts`. Read routes need `cl
 
 | Route | Does |
 | --- | --- |
-| `GET /` with `?owner=&type=&since=&q=` | The list, newest first: id, name, title, owner, last version, time, type, size, number of active share links. `q` searches the titles and names. |
+| `GET /` with `?owner=&type=&since=&q=` | The list, newest first: id, name, title, owner, last version, time, type, size, number of active share links. `q` searches the titles and names. The response also has `totalBytes`: the bytes of all blob files on the disk (one copy of equal content, the bin included until the purge). It does not depend on the filters. |
 | `GET /:id` | The record |
 | `POST /:id/:n/ticket` | A view URL on the view server for this version (section 6). The download URL is in it. |
 | `POST /:id/shares`, `PUT /shares/:share`, `DELETE /shares/:share` | Make, extend and revoke a share link (section 7) |
@@ -105,7 +105,7 @@ Routes on `RED.httpAdmin`, below `/claude-agent/artifacts`. Read routes need `cl
 
 The admin API sends no byte of an artifact. The admin origin holds the token of the editor: an HTML file there, or a `blob:` URL that the editor makes from artifact bytes, would run with that token. Thus the content, the thumbnails and the downloads come only from the view server. The list gives a thumbnail URL with a ticket for each image.
 
-After each publish, delete and undo, the runtime sends the topic `claude-agent/artifacts` with `RED.comms.publish`, with the new record. The comms of a node are for that node only, so the sidebar list of all agents needs this global topic. The open lists then update with no poll.
+After each publish, delete and undo, the runtime sends the topic `claude-agent/artifacts` with `RED.comms.publish`, with the new record and the new `totalBytes`. The comms of a node are for that node only, so the sidebar list of all agents needs this global topic. The open lists then update with no poll.
 
 ## 5. The viewer page
 
@@ -314,4 +314,4 @@ Sizes: S is less than 150 lines with tests, M 150 to 400, L more than 400.
 - An agent can publish HTML that tries to trick a person, for example a fake login form. The opaque origin stops access to data, not a lie on the screen. The viewer in the editor shows the agent and the type above each HTML artifact. A share page shows the type only, because it has no agent name (section 7).
 - Chrome shows a PDF only outside a sandbox, so a PDF depends on the PDF viewer of the browser for its safety. The type and first byte checks of section 6 limit it to real PDF files.
 - A share link to "always the newest version" sends each new version out with no review. It is an explicit choice with a warning. A link has no hard maximum age, because the purpose is long term sharing: "Extend" can keep it open. But each period is 30 days at most, so the link stays open only while a person extends it again.
-- The store grows with no limit, because nothing deletes on its own. The admin API list gives the size of each artifact and the total. The sidebar Files view shows the total size of the store in one line below the list (section 8).
+- The store grows with no limit, because nothing deletes on its own. The admin API list gives the size of each artifact and `totalBytes`. The sidebar Files view shows the total size of the store in one line below the list (section 8).
