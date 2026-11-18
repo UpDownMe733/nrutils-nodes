@@ -1074,7 +1074,6 @@
 .caf-menu{position:absolute;z-index:5;display:flex;flex-direction:column;background:var(--red-ui-primary-background);border:1px solid var(--red-ui-secondary-border-color);border-radius:4px}
 .caf-menu .red-ui-button{min-height:44px;margin:0;text-align:left;border:none}
 .caf-body{flex:1;min-height:0;display:flex;gap:6px;flex-direction:row}
-.caf-narrow .caf-body.caf-two{flex-direction:column}
 .caf-body iframe{flex:1;min-width:0;min-height:240px;width:100%;border:1px solid var(--red-ui-secondary-border-color);border-radius:4px;background:#fff}
 .caf-note{margin:auto;padding:12px;text-align:center;color:var(--red-ui-secondary-text-color)}
 .caf-confirm{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;text-align:center;background:var(--red-ui-primary-background)}
@@ -1262,7 +1261,7 @@
             owners = h('select');
             types = h('select');
             const time = h('select');
-            for (const [v, t] of [['', 'All files'], ['today', 'Today'], ['7', '7 days'], ['30', '30 days']]) time.appendChild(Object.assign(h('option', '', t), { value: v }));
+            for (const [v, t] of [['', 'Any time'], ['today', 'Today'], ['7', '7 days'], ['30', '30 days']]) time.appendChild(Object.assign(h('option', '', t), { value: v }));
             owners.addEventListener('change', () => { filter.owner = owners.value; render(); });
             types.addEventListener('change', () => { filter.type = types.value; render(); });
             time.addEventListener('change', () => { filter.time = time.value; render(); });
@@ -1323,7 +1322,7 @@
             const wide = root.clientWidth >= WIDE;
             root.classList.toggle('caf-narrow', !wide);
             root.classList.toggle('caf-open', !!cur.id);
-            root.classList.toggle('caf-tight', pane.clientWidth < 520);
+            root.classList.toggle('caf-tight', pane.clientWidth < 380);
             if (cur.id && !state.items.has(cur.id)) close();
         }
 
@@ -1445,8 +1444,10 @@
                 const other = await frames(Number(pick.value));
                 const mine = await frames(v.n);
                 body.textContent = '';
-                body.classList.add('caf-two');
-                for (const t of [other, mine]) body.appendChild(t ? frame(t) : h('div', 'caf-note', 'This file cannot show here.'));
+                if (!other || !mine) return body.appendChild(h('div', 'caf-note', 'This file cannot show here.'));
+                const f = frame(mine);
+                f.src += '&compare=' + encodeURIComponent(other.url.split('/v/')[1].split('/')[0]);
+                body.appendChild(f);
             };
             pick.addEventListener('change', show);
             head.after(bar);

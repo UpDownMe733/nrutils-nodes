@@ -16,6 +16,7 @@ const { agentSettings } = require('../shared');
 const { createStore, NAME_RULE } = require('./store');
 const { tarReader } = require('./tar');
 const ticket = require('./ticket');
+const viewServer = require('./view-server');
 
 const MB = 1024 * 1024;
 const TIME_LIMIT_MS = 120 * 1000;
@@ -73,6 +74,7 @@ function createRuntime(RED) {
     const settings = agentSettings(RED);
     let store;
     let warned = false;
+    const editorOrigins = new Set();
     const getStore = () => (store ??= createStore(settings.artifacts.dir));
     const viewUrl = (req) => {
         const { viewPort, viewUrl: url } = settings.artifacts;
@@ -136,6 +138,7 @@ function createRuntime(RED) {
     RED.httpAdmin.post(`${base}/:id/:n/ticket`, read, (req, res) => {
         const s = getStore();
         if (!s.version(req.params.id, req.params.n)) return missing(res);
+        if (typeof req.headers.origin === 'string') editorOrigins.add(req.headers.origin);
         const url = viewUrl(req);
         if (!url) return res.status(409).json({ error: 'the viewer is off' });
         const t = ticket.make(s.key, req.params.id, Number(req.params.n));
@@ -159,6 +162,14 @@ function createRuntime(RED) {
     const purge = () => getStore().purge().forEach(announce);
     purge();
     setInterval(purge, 3600 * 1000).unref();
+
+    // The view server
+    if (settings.artifacts.viewPort) {
+        const tls = typeof RED.settings.https === 'function' ? RED.settings.https() : RED.settings.https;
+        Promise.resolve(tls).then((options) => viewServer.start({
+            store: getStore(), port: settings.artifacts.viewPort, settings: settings.artifacts, editorOrigins, tls: options, uiPort: RED.settings.uiPort
+        })).catch((err) => RED.log.error(`claude-agent: the viewer did not start on port ${settings.artifacts.viewPort}: ${err.message}`));
+    }
 
     return { publish, getStore, settings };
 }

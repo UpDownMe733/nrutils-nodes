@@ -278,7 +278,7 @@ describe('readFiles', () => {
 });
 
 describe('publish in a real Node-RED', { timeout: 60000 }, () => {
-    let child, base, userDir, workRoot, socket;
+    let child, base, viewPort, userDir, workRoot, socket;
     let log = '';
     const comms = [];
     const api = (p, o) => fetch(base + p, o);
@@ -313,17 +313,19 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
         fs.writeFileSync(path.join(userDir, 'exec.sh'), '#!/bin/sh\ncd "$2" || exit 1\nshift 2\nexec "$@"\n', { mode: 0o755 });
         fs.mkdirSync(path.join(userDir, 'node_modules', '@nrutils'), { recursive: true });
         fs.symlinkSync(REPO, path.join(userDir, 'node_modules', '@nrutils', 'node-red-claude-agent'));
-        const port = await new Promise((resolve, reject) => {
+        const freePort = () => new Promise((resolve, reject) => {
             const srv = net.createServer();
             srv.listen(0, '127.0.0.1', () => { const { port: p } = srv.address(); srv.close(() => resolve(p)); });
             srv.on('error', reject);
         });
+        const port = await freePort();
+        viewPort = await freePort();
         base = `http://127.0.0.1:${port}`;
         fs.writeFileSync(path.join(userDir, 'settings.js'), `module.exports = {
             uiHost: '127.0.0.1', uiPort: ${port}, flowFile: 'flows.json', credentialSecret: false,
             diagnostics: { enabled: false }, telemetry: { enabled: false },
             claudeAgent: { launcher: ${JSON.stringify(FAKE)}, agentExec: ${JSON.stringify(path.join(userDir, 'exec.sh'))}, workRoot: ${JSON.stringify(workRoot)},
-                artifacts: { viewPort: 1, viewUrl: 'http://view.test/' } }
+                artifacts: { viewPort: ${viewPort}, viewUrl: 'http://view.test/' } }
         };`);
         child = spawn(process.execPath, [require.resolve('node-red/red.js'), '-u', userDir, '-s', path.join(userDir, 'settings.js')], { stdio: ['ignore', 'pipe', 'pipe'] });
         child.stdout.on('data', (d) => { log += d; });
@@ -420,6 +422,10 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
         assert.deepEqual(ticket.verify(key, t), { id: item.id, n: 1 });
         assert.equal((await api(`/claude-agent/artifacts/${item.id}/9/ticket`, { method: 'POST' })).status, 404);
         assert.equal((await api('/claude-agent/artifacts/0000000000000000')).status, 404);
+    });
+    it('starts the view server on its port, and it refuses a bad ticket', async () => {
+        const res = await waitFor(async () => { try { return await fetch(`http://127.0.0.1:${viewPort}/v/bad/`); } catch { return null; } }, 10000, 'view server');
+        assert.ok(res.status >= 400 && res.status < 500, String(res.status));
     });
     it('gives a ticket for a viewer on another origin, and refuses one on the origin of the editor', async () => {
         const [item] = (await (await api('/claude-agent/artifacts')).json()).items;
