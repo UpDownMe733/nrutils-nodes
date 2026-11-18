@@ -76,7 +76,8 @@ A record:
 - Versions are append only. The number `n` goes up by one. A deleted version keeps its number, with `deleted: true` and no files.
 - The node writes a record to a temporary file, then renames it. Thus a crash leaves the old record or the new record, never half.
 - At start, the node reads all records into memory. 10 000 artifacts are some MB of memory.
-- Retention: the store keeps all versions for ever. Only a person deletes: one version, or the artifact with all versions. After a delete, the node removes each blob that no record uses. The node never deletes on its own: the purpose is long term keeping.
+- Retention: the store keeps all versions for ever. Only a person deletes: one version, or the artifact with all versions. The node never deletes on its own: the purpose is long term keeping.
+- Delete has an undo. A delete sets `deleted: <time>` on the version or the record, and stops its share links. The editor can undo it for 30 days. After 30 days, the node removes the files of the deleted version and each blob that no record uses. The version number stays in the record with no files.
 - The type of a file comes from its extension (a fixed table). Unknown extensions get `application/octet-stream`. The viewer tests such a file for text (valid UTF-8, no NUL byte in the first 8 KB).
 
 ## 4. The admin API
@@ -85,13 +86,14 @@ Routes on `RED.httpAdmin`, below `/claude-agent/artifacts`. Read routes need `cl
 
 | Route | Does |
 | --- | --- |
-| `GET /` with `?owner=&q=&type=` | The list: id, name, title, owner, last version, time, type, size |
+| `GET /` with `?owner=&type=&since=&q=` | The list, newest first: id, name, title, owner, last version, time, type, size, number of active share links. `q` searches the titles and names. |
 | `GET /:id` | The record |
 | `POST /:id/:n/ticket` | A view URL on the view server for this version (section 6) |
 | `GET /:id/:n/download` | The file, or a zip of the folder |
 | `POST /:id/shares`, `DELETE /shares/:share` | Make and revoke a share link (section 7) |
 | `GET /:id/shares` | The share links of the artifact |
-| `DELETE /:id` and `DELETE /:id/:n` | Delete the artifact or one version |
+| `DELETE /:id` and `DELETE /:id/:n` | Delete the artifact or one version (to the bin for 30 days) |
+| `POST /:id/restore` and `POST /:id/:n/restore` | Undo a delete |
 
 The runtime publishes `artifacts` on the comms of the node after each publish. The open lists then update with no poll.
 
@@ -116,19 +118,19 @@ To add a type: add one renderer script, add it to the list in `viewer/index.html
 | Type | Renderer | Size |
 | --- | --- | --- |
 | Text and code (by extension, or a text test) | `<pre>` with line numbers and wrap on or off | S |
-| Markdown | `marked` (new dependency, the same library as the Node-RED editor). Relative images and links go to the files of the same artifact. | S |
-| Image (png, jpeg, gif, webp, avif, bmp, ico) and SVG | `<img>`: fit to the box, zoom to 100 %. An SVG in `<img>` runs no script. | S |
+| Markdown | `marked` (new dependency, the same library as the Node-RED editor). Relative images and links go to the files of the same artifact. An outline of the headings jumps to each part. | S |
+| Image (png, jpeg, gif, webp, avif, bmp, ico) and SVG | `<img>`: fit to the width, zoom to 100 %, pinch zoom on touch. An SVG in `<img>` runs no script. | S |
 | PDF | The PDF viewer of the browser, in an `<iframe>` | S |
 | Audio and video | `<audio>`, `<video>` | S |
 | HTML page or application | A nested `<iframe>` of the file. Its response has the `sandbox` CSP (section 6). | S |
-| CSV and TSV | A table with a fixed header row and a sort for each column | S |
+| CSV and TSV | A table that scrolls in its own box, with a fixed header row, a fixed first column and a sort for each column | S |
 | JSON | A tree that opens and closes | S |
 | Other | The name, the type, the size, and Download | S |
 | Later: syntax colours for code | `highlight.js` (new dependency) | S |
 | Later: Mermaid diagrams (`.mmd`, and code blocks in markdown) | `mermaid` (new dependency, about 3 MB) | M |
 
 Compare two versions:
-- Text types: a line diff (own code, an LCS diff, about 100 lines), side by side or in one column.
+- Text types: a line diff (own code, an LCS diff, about 100 lines), side by side on a wide screen, stacked in one column on a narrow screen.
 - Images: the two images side by side.
 - Other types: the size and the SHA-256 of each version.
 
@@ -157,6 +159,9 @@ Two ways:
   - Revoke: the link stops at once. An expired or revoked link gives 404 with no detail.
   - The share server listens on its own port. A public host (a reverse proxy or a tunnel) sends that whole port to the internet. The view server and the editor stay on the LAN.
   - With no `publicUrl` set, the editor shows no share link action, only Download.
+  - Preview: before a person copies a new link, the editor shows the share page itself, so the person sees what the outside person sees.
+  - Copy link uses the clipboard. The share sheet of a phone (`navigator.share`) works only when the editor is on HTTPS; on HTTP only Copy link shows.
+  - A download has `Content-Disposition: attachment` with the file name and the correct type.
 
 ## 8. The editor
 
@@ -181,7 +186,28 @@ sandboxExec: ''             // the program that runs a command in a sandbox
 
 ## 10. User needs
 
-<!-- The needs of three users: one who watches many agents, one who is new, one on a small screen and touch. -->
+Three users gave their needs: an operator who watches many agents, a new user, and a user on a small screen with touch. The design follows them as below.
+
+| Need | Users | Where in the design |
+| --- | --- | --- |
+| A new artifact never opens a popup, takes the focus or covers the canvas. A small sign on the node and one line in the chat or panel are enough. | all | section 8 |
+| The chat shows the publish at its time: title, type in words or icon with word, version, time, agent. | new | event `artifact`, section 8 |
+| One list for all agents, newest first, filters for agent, type and time, search by title. Find an old thing in 10 seconds. | watcher | admin API `GET /` with `owner`, `type`, `since`, `q` |
+| One stable title for all versions; a clear "latest". | watcher, small screen | the name is the key; the title of the newest version shows |
+| Read with one click, fast, inline. A big file or an HTML page must not make the editor slow. | all | the viewer runs in its own frame and process of the other origin; the list loads no content, only an image thumbnail |
+| Compare a version with the one before. On a small screen: stacked, not side by side. | all | section 5, compare |
+| A wide table scrolls in its own frame with the first column fixed. A long document has an outline. A big image fits and pinch zoom works. | small screen | the renderers of section 5 |
+| An HTML application opens full screen in its own page, with a way back. | small screen | the viewer URL opens in a browser tab of its own |
+| No version is overwritten. Nothing is lost after a restart or an update. | all | append-only versions, plain files in the user directory |
+| Delete asks first, says which share links stop, and has an undo. | all | section 3, delete goes to a bin for 30 days |
+| A share link is never made on its own. It says in words who can open it ("anyone with the link"), fixed version or latest, and the end date. It can be stopped at once. | all | section 7 |
+| A preview of what the outside person sees, before the link goes out. | watcher | the editor opens the share page itself |
+| The outside person sees only the content, the title, the version and the date: no agent names, prompts, paths or other things. No login. A readable page on a phone. | all | section 7 |
+| HTML of an agent never reaches Node-RED or the cookies. | all | section 6 |
+| Copy link, and the share sheet of the phone. Downloads have the right file name and type. | small screen | section 7, `Content-Disposition` with the file name |
+| All actions work with one finger, 44 px targets, a visible text label, no hover, no right click. | small screen | section 8 |
+| Plain words: not "artifact", "publish", "slug", "revision" or a hash. Use words such as "file", "new version", "shared link". "Shared" shows in words. | new | section 8 |
+| A comment on a thing goes back to the agent as a task. | watcher (nice to have) | later part 10 |
 
 ## 11. The build order
 
@@ -196,6 +222,7 @@ sandboxExec: ''             // the program that runs a command in a sandbox
 | 7 | Sandbox read (`sandboxExec`, tar reader) | M | a program that the Node-RED user may run |
 | 8 | CSV, TSV and JSON renderers | S | — |
 | 9 | Later: syntax colours, Mermaid | S + M | new dependencies |
+| 10 | Later: a comment on a version goes to the inbox of its agent as a message | S | the MQTT inbox of the node |
 
 Sizes: S is less than 150 lines with tests, M 150 to 400, L more than 400.
 
