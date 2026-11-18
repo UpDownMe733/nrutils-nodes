@@ -120,6 +120,11 @@
             } catch (e) {
                 viewer.fallback(box, file);
             }
+        },
+
+        // Shows one file with the renderer of this name, for example the text of a file that did not parse
+        renderWith(name, box, file, ctx) {
+            return renderers.find(r => r.name === name).render(box, file, ctx);
         }
     };
     window.viewer = viewer;

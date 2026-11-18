@@ -356,11 +356,34 @@ describe('the renderers', () => {
         const want = {
             'text/markdown': 'markdown', 'image/png': 'image', 'image/svg+xml': 'image', 'image/jpeg': 'image',
             'application/pdf': 'pdf', 'audio/mpeg': 'media', 'video/mp4': 'media', 'text/html': 'html',
-            'text/plain': 'text', 'application/javascript': 'text', 'application/ld+json': 'text',
+            'text/plain': 'text', 'application/javascript': 'text', 'application/ld+json': 'json', 'application/json': 'json',
+            'text/csv': 'csv', 'text/tab-separated-values': 'csv',
             'application/octet-stream': 'other', 'application/zip': 'other', 'image/tiff': 'other'
         };
         for (const [type, name] of Object.entries(want)) assert.equal(pick(type), name, type);
         assert.equal(pick('application/octet-stream', { isText: true }), 'text');
+    });
+
+    it('reads CSV and TSV with quotes, line breaks in quotes and a BOM', () => {
+        const { parse } = registered.find(r => r.name === 'csv');
+        const rows = (text, sep) => JSON.parse(JSON.stringify(parse(text, sep)));
+        assert.deepEqual(rows('\ufeffa,b\r\n1,"x, ""y""\nz"\n2,\n', ','), [['a', 'b'], ['1', 'x, "y"\nz'], ['2', '']]);
+        assert.deepEqual(rows('a\tb\n1\t2', '\t'), [['a', 'b'], ['1', '2']]);
+        assert.deepEqual(rows('', ','), []);
+    });
+
+    it('sorts numbers as numbers, text as text, and an empty cell last', () => {
+        const { compare } = registered.find(r => r.name === 'csv');
+        assert.deepEqual(['10', '', '9', '-1.5', '2e1'].sort(compare), ['-1.5', '9', '10', '2e1', '']);
+        assert.deepEqual(['b10', 'B2', 'a'].sort(compare), ['a', 'B2', 'b10']);
+    });
+
+    it('keeps the exact text of a JSON number that a JavaScript number cannot hold', () => {
+        const { parse } = registered.find(r => r.name === 'json');
+        const v = parse('{"id": 12345678901234567890, "n": 1.5, "s": "x"}');
+        assert.equal(v.id.text, '12345678901234567890');
+        assert.equal(v.n, 1.5);
+        assert.throws(() => parse('{bad'));
     });
 
     it('resolves a relative link inside the artifact only', () => {
