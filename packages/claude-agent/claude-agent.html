@@ -877,11 +877,16 @@
         showSide();
     }
 
-    // A left-click on a claude-agent node shows its chat in the panel. It does not open the popup: the block ends the click before the library sees it.
+    // A click on a claude-agent node shows its chat in the panel. A drag or a click with a key does not show it.
+    // The popup does not open: the block ends the click before the library sees it.
+    let pressAt = null;
+    document.addEventListener('mousedown', (event) => { pressAt = { x: event.clientX, y: event.clientY }; }, true);
     document.addEventListener('click', (event) => {
         if (event.caOpen || !agentOf(event.target)) return;
         event.stopPropagation();
-        if (event.button === 0 && RED.sidebar && RED.sidebar.show && side.body) RED.sidebar.show('claude-agent');
+        const dragged = pressAt && Math.hypot(event.clientX - pressAt.x, event.clientY - pressAt.y) > 4;
+        const plain = event.button === 0 && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+        if (plain && !dragged && RED.sidebar && RED.sidebar.show && side.body) RED.sidebar.show('claude-agent');
     }, true);
 
     // A right-click on a claude-agent node adds the first item to the context menu of the canvas.
@@ -892,7 +897,7 @@
             const selection = options && options.type === 'workspace' && RED.view.selection();
             const nodes = (selection && selection.nodes) || [];
             const menu = document.getElementById('red-ui-workspace-context-menu');
-            if (nodes.length === 1 && nodes[0].type === 'claude-agent' && menu) {
+            if (nodes.length === 1 && nodes[0].type === 'claude-agent' && menu && window.popupStates[nodes[0].id] !== 'open') {
                 const link = make('a', '', '');
                 link.href = '#';
                 link.appendChild(make('span', MENU_LABEL, 'red-ui-menu-label'));
@@ -1180,7 +1185,7 @@
     <p>Each run has the tool <code>ask_operator(question, options)</code>. The run waits for an answer from output 2, from a control message, or from the popup.</p>
     <p>A run waits for its background tasks, subagents and shell jobs. It ends with the first result that comes when no background task works.</p>
     <p>A failed run goes to a <code>catch</code> node. <code>msg.agent.reason</code> is one of <code>max_turns</code>, <code>max_cost</code>, <code>timeout</code>, <code>schema</code>, <code>sdk_error</code> or <code>node_closed</code>.</p>
-    <p>Right-click the node and choose <b>Open popup</b>, the first item of the menu. A left-click on the node shows its chat in the sidebar panel and does not open the popup. The top of the popup shows the name of the node (or claude-agent), its summary (when set) and a line with its model, folder and sandbox. The model is the true model of the selected run, for example <code>opus 5.5</code>. With no run, it is the model of the last run. A model of the node with another family shows after it, for example <code>opus 5.5 (node: sonnet)</code>. The folder and the sandbox are the settings of the node, not the msg.cwd of a run. Drag the empty part of the tab row to move the popup. The two tabs are below it. Chat shows the text of the operator on the right and the text of the agent on the left. Timeline shows all events. The status line shows the state, the turns, the tokens used and the context size of the last model response.</p>
+    <p>Right-click the node and choose <b>Open popup</b>, the first item of the menu. A left-click on the node shows its chat in the sidebar panel and does not open the popup. Click × at the top of the popup to close it. The top of the popup shows the name of the node (or claude-agent), its summary (when set) and a line with its model, folder and sandbox. The model is the true model of the selected run, for example <code>opus 5.5</code>. With no run, it is the model of the last run. A model of the node with another family shows after it, for example <code>opus 5.5 (node: sonnet)</code>. The folder and the sandbox are the settings of the node, not the msg.cwd of a run. Drag the empty part of the tab row to move the popup. The two tabs are below it. Chat shows the text of the operator on the right and the text of the agent on the left. Timeline shows all events. The status line shows the state, the turns, the tokens used and the context size of the last model response.</p>
     <p>The <b>Claude agent</b> tab of the sidebar shows the same chat as the popup. Both work at the same time and share the message box. A left-click on a claude-agent node shows its chat in the panel. The panel keeps that chat when you select other nodes.</p>
     <p>The timer chip in the header shows <b>Active</b>, the time since the selected run started, and <b>Cache</b>, the minutes until the prompt cache expires, for example <code>Cache 52m</code>. The cache countdown starts again at each model response. It is an estimate. <code>Cache cold</code> means that the next message reads the full context again at the full price. The chip turns amber at 5 minutes or less.</p>
     <p><b>New chat</b> (the + button) makes the node forget its last session and clears the popup log. The next message from the popup starts a new session. It is not possible while a run is active.</p>

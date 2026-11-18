@@ -1025,6 +1025,17 @@ describe('claude-agent sidebar panel', () => {
         assert.deepEqual(p.shown, ['claude-agent']);
     });
 
+    it('a drag of the node, or a click with a key, does not show the panel tab but still stops the popup click', () => {
+        const p = setup();
+        p.captured.filter((c) => c.type === 'mousedown' && c.capture).forEach((c) => c.fn({ clientX: 10, clientY: 10 }));
+        assert.equal(click(p, 'n1', { clientX: 60, clientY: 10 }).stopped, true);
+        assert.equal(click(p, 'n1', { clientX: 11, clientY: 10, shiftKey: true }).stopped, true);
+        assert.equal(click(p, 'n1', { clientX: 11, clientY: 10, ctrlKey: true }).stopped, true);
+        assert.deepEqual(p.shown, []);
+        click(p, 'n1', { clientX: 11, clientY: 10 });
+        assert.deepEqual(p.shown, ['claude-agent']);
+    });
+
     it('a click on another node, or on a click of the open call, goes on', () => {
         const p = setup();
         p.addNode('n3', { type: 'inject' });
@@ -1041,6 +1052,14 @@ describe('claude-agent sidebar panel', () => {
         const menu = p.canvas['red-ui-workspace-context-menu'];
         assert.equal(menu.childNodes.length, 2);
         assert.equal(menu.childNodes[0].textContent, 'Open popup');
+    });
+
+    it('the menu has no Open popup item when the popup is open', () => {
+        const p = setup();
+        p.selection.push(p.node);
+        p.popupStates.n1 = 'open';
+        p.menu({ type: 'workspace', x: 1, y: 2 });
+        assert.equal(p.canvas['red-ui-workspace-context-menu'].childNodes.length, 1);
     });
 
     it('the menu of another selection has no Open popup item', () => {
