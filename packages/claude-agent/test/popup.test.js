@@ -1003,6 +1003,21 @@ describe('claude-agent sidebar panel', () => {
         assert.equal(panelRoot(p).dataset.node, 'n2', 'another selection keeps the chat');
     });
 
+    it('a right-click selection keeps the chat of the panel until the next left press', () => {
+        const p = setup();
+        const two = p.addNode('n2');
+        const fire = (type, init) => p.captured.filter((c) => c.type === type && c.capture).forEach((c) => c.fn({ button: 0, ...init }));
+        select(p, p.node);
+        fire('mousedown', { button: 2 });
+        select(p, two);
+        fire('contextmenu', {});
+        select(p, two);
+        assert.equal(panelRoot(p).dataset.node, 'n1', 'a right-click keeps the chat');
+        fire('mousedown', {});
+        select(p, two);
+        assert.equal(panelRoot(p).dataset.node, 'n2', 'a left-click changes the chat');
+    });
+
     it('shows the text again when the node of the chat is removed', () => {
         const p = setup();
         select(p, p.node);

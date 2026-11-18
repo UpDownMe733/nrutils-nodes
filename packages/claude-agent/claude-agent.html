@@ -863,6 +863,13 @@
         }
     }
 
+    // A right-click selects the node, but it must not change the chat of the panel.
+    // The flag stays until the next left press or key.
+    let rightClick = false;
+    document.addEventListener('mousedown', (event) => { rightClick = event.button === 2; }, true);
+    document.addEventListener('contextmenu', () => { rightClick = true; }, true);
+    document.addEventListener('keydown', () => { rightClick = false; }, true);
+
     if (RED.sidebar && RED.sidebar.addTab) {
         addStyle();
         side.body = make('div', '', 'ca-side-body');
@@ -871,7 +878,7 @@
         RED.sidebar.addTab({ id: 'claude-agent', name: 'Claude agent', iconClass: 'fa fa-comments-o', content: $(side.body), enableOnEdit: true });
         RED.events.on('view:selection-changed', (selection) => {
             const nodes = (selection && selection.nodes) || [];
-            if (nodes.length === 1 && nodes[0].type === 'claude-agent') side.selected = nodes[0].id;
+            if (nodes.length === 1 && nodes[0].type === 'claude-agent' && !rightClick) side.selected = nodes[0].id;
             showSide();
         });
         for (const type of ['flows:loaded', 'nodes:add', 'nodes:remove', 'nodes:change']) RED.events.on(type, () => showSide());
