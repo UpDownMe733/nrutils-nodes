@@ -31,6 +31,11 @@
         return (n / 1024 / 1024).toFixed(1) + ' MB';
     }
 
+    // The version line of the top bar, for example "Version 3 · 18 Nov 2026"
+    function versionText(m) {
+        return 'Version ' + m.n + ' · ' + date(m.time);
+    }
+
     function date(ms) {
         return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     }
@@ -75,7 +80,7 @@
         meta: null,
         theme: document.documentElement.dataset.theme ||
             (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-        el, size, date, resolve, dir, encodePath, TEXT_LIMIT,
+        el, size, date, versionText, resolve, dir, encodePath, TEXT_LIMIT,
 
         register(renderer) {
             renderers.push(renderer);
@@ -198,7 +203,7 @@
         document.title = m.title;
         document.getElementById('title').textContent = m.title;
         document.getElementById('title').title = m.title;
-        document.getElementById('version').textContent = 'Version ' + m.n + (m.newest ? ' (newest)' : '') + ' · ' + date(m.time);
+        document.getElementById('version').textContent = versionText(m);
         window.addEventListener('hashchange', show);
         await show();
     }

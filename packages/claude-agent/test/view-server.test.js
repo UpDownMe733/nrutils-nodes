@@ -428,6 +428,10 @@ describe('the renderers', () => {
         assert.throws(() => parse('{bad'));
     });
 
+    it('shows the version line of the top bar as "Version 3 · 18 Nov 2026"', () => {
+        assert.equal(viewer.versionText({ n: 3, newest: true, time: Date.UTC(2026, 10, 18, 12) }), 'Version 3 · 18 Nov 2026');
+    });
+
     it('resolves a relative link inside the artifact only', () => {
         assert.equal(viewer.resolve('docs/a.md', 'b.png'), 'docs/b.png');
         assert.equal(viewer.resolve('docs/a.md', '../img/c.png'), 'img/c.png');
