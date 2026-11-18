@@ -165,6 +165,7 @@ function createStore(dir) {
     }
 
     const get = (id) => records.get(id);
+    const record = (id) => records.get(id) || null;
 
     // One version that people can open, or undefined.
     function version(id, n) {
@@ -236,7 +237,7 @@ function createStore(dir) {
     // The bytes of all blobs: the files of the bin count, because they stay for 30 days.
     const totalBytes = () => blobs().reduce((sum, sha) => sum + fs.statSync(blobPath(sha)).size, 0);
 
-    return { key, publish, list, get, version, file, blobPath, idOf, dir, remove, restore, purge, totalBytes };
+    return { key, publish, list, get, record, version, file, blobPath, idOf, dir, remove, restore, purge, totalBytes };
 }
 
 module.exports = { createStore, NAME_RULE };
