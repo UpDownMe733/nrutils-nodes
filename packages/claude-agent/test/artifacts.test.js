@@ -224,6 +224,7 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
     const collect = (key) => ({ id: 'collect-' + key, type: 'function', z: 'tab', outputs: 0, wires: [],
         func: `global.set(${JSON.stringify(key)}, (global.get(${JSON.stringify(key)}) || []).concat([msg]));` });
     const inject = (id, target) => ({ id, type: 'inject', z: 'tab', repeat: '', once: false, wires: [[target]], props: [{ p: 'payload' }], payload: 'go', payloadType: 'str' });
+    // Start the agent node id. The same node makes the versions of one artifact.
     const run = async (id) => {
         const before = (await (await api(`/results/${id}`)).json()).length;
         await api(`/inject/i-${id}`, { method: 'POST' });
@@ -260,8 +261,8 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
         child.stderr.on('data', (d) => { log += d; });
         await waitFor(async () => (await api('/settings')).ok, 30000, 'Node-RED start');
         const flow = [{ id: 'tab', type: 'tab', label: 'test' }, collect('events'),
-            ...['file', 'again', 'changed', 'folder', 'outside', 'link', 'badname'].flatMap((id) => [inject('i-' + id, id), collect(id)]),
-            agent('file', 'publish report.md'), agent('again', 'publish report.md'), agent('changed', 'publish report.md'),
+            ...['file', 'folder', 'outside', 'link', 'badname'].flatMap((id) => [inject('i-' + id, id), collect(id)]),
+            agent('file', 'publish report.md'),
             agent('folder', 'publish site mysite'), agent('outside', `publish ${path.join(userDir, 'secret.txt')}`),
             agent('link', 'publish link.txt'), agent('badname', 'publish report.md Bad_Name'),
             { id: 'http-results', type: 'http in', z: 'tab', url: '/results/:key', method: 'get', wires: [['results']] },
@@ -293,10 +294,10 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
     it('publishes a file, sends the event and the comms topic, and lists it', async () => {
         const msg = await run('file');
         assert.equal(msg.payload, 'publish replied: Published "The report" as report.md, version 1.');
-        const events = await waitFor(async () => (await results('events')).filter((m) => m.agent.kind === 'artifact'), 10000, 'artifact event');
-        assert.equal(events[0].agent.artifact.name, 'report.md');
-        assert.equal(events[0].agent.artifact.version, 1);
-        assert.equal(events[0].agent.artifact.type, 'text/markdown');
+        const events = await waitFor(async () => (await results('events')).filter((m) => m.payload.kind === 'artifact'), 10000, 'artifact event');
+        assert.equal(events[0].payload.artifact.name, 'report.md');
+        assert.equal(events[0].payload.artifact.version, 1);
+        assert.equal(events[0].payload.artifact.type, 'text/markdown');
         await waitFor(async () => comms.length, 5000, 'comms topic');
         assert.equal(comms[0].record.name, 'report.md');
         const list = await (await api('/claude-agent/artifacts')).json();
@@ -306,11 +307,11 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal(record.versions.length, 1);
     });
     it('makes no new version for the same content', async () => {
-        assert.match((await run('again')).payload, /No new version/);
+        assert.match((await run('file')).payload, /No new version/);
     });
     it('makes a new version when the file changes', async () => {
         fs.writeFileSync(path.join(workRoot, 'project', 'report.md'), '# The report\nnew body');
-        assert.match((await run('changed')).payload, /version 2\./);
+        assert.match((await run('file')).payload, /version 2\./);
     });
     it('publishes a folder with the entry index.html', async () => {
         assert.match((await run('folder')).payload, /Published "Site" as mysite, version 1\./);
