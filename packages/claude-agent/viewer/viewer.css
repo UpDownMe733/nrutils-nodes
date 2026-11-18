@@ -153,3 +153,31 @@ a { color: var(--link); }
 .j-str { color: var(--str); }
 .j-num { color: var(--num); }
 .j-bool, .j-null { color: var(--const); }
+
+/* Compare: the old version at the left or on top */
+.compare { display: flex; flex-direction: column; }
+.d-count { align-self: center; font-weight: bold; }
+.d-add { color: var(--str); }
+.d-del { color: var(--error); }
+.diff {
+    display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); align-content: start;
+    font: 13px/1.5 Menlo, Consolas, "DejaVu Sans Mono", monospace; padding: 4px 0;
+}
+.diff.narrow { grid-template-columns: max-content max-content minmax(0, 1fr); }
+.d-num { padding: 0 8px; text-align: right; color: var(--text2); user-select: none; min-width: 3.5em; }
+.d-text { padding: 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.d-right { border-left: 1px solid var(--border); }
+.d-text.del { background: var(--del); }
+.d-text.add { background: var(--add); }
+.d-text.none { background: var(--bg3); }
+.d-more {
+    grid-column: 1 / -1; min-height: 36px; border: 0; border-top: 1px solid var(--border2); border-bottom: 1px solid var(--border2);
+    background: var(--bg2); color: var(--link); font: 13px "Helvetica Neue", Arial, Helvetica, sans-serif; cursor: pointer;
+}
+.d-more:hover, .d-more:focus-visible { background: var(--hover); }
+.d-images { display: flex; flex-wrap: wrap; gap: 16px; padding: 12px; }
+.d-images figure { flex: 1 1 300px; margin: 0; min-width: 0; text-align: center; }
+.d-images img { max-width: 100%; height: auto; background: repeating-conic-gradient(var(--bg3) 0 25%, var(--bg) 0 50%) 0 0 / 16px 16px; }
+.d-facts { border-collapse: collapse; }
+.d-facts th, .d-facts td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+.d-sha { font: 12px Menlo, Consolas, "DejaVu Sans Mono", monospace; overflow-wrap: anywhere; }

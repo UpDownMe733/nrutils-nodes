@@ -334,7 +334,7 @@ function loadViewer() {
     const context = {
         location: { pathname: '/v/T/', hash: '', search: '' },
         document: { documentElement: { dataset: { theme: 'light' } }, addEventListener() {}, createElement: fakeEl, getElementById: fakeEl },
-        matchMedia: () => ({ matches: false }), URLSearchParams, TextDecoder, fetch: async () => { throw new Error('no fetch'); }
+        matchMedia: () => ({ matches: false, onchange: null }), URLSearchParams, TextDecoder, fetch: async () => { throw new Error('no fetch'); }
     };
     context.window = context;
     vm.createContext(context);
@@ -345,6 +345,7 @@ function loadViewer() {
     for (const [, name] of html.matchAll(/src="\/viewer\/renderers\/([a-z-]+\.js)"/g)) {
         vm.runInContext(fs.readFileSync(path.join(VIEWER, 'renderers', name), 'utf8'), context);
     }
+    vm.runInContext(fs.readFileSync(path.join(VIEWER, 'compare.js'), 'utf8'), context);
     return { viewer: context.viewer, registered };
 }
 
@@ -395,5 +396,20 @@ describe('the renderers', () => {
 
     it('makes the URL of a file below the ticket', () => {
         assert.equal(viewer.url('img/a b#.png'), '/v/T/f/img/a%20b%23.png');
+    });
+
+    it('diffs two versions line by line with the line numbers of each side', () => {
+        const ops = (a, b) => JSON.parse(JSON.stringify(viewer.diff(a, b))).map(o => o.op[0] + (o.a || '') + ':' + (o.b || '') + ' ' + o.text);
+        assert.deepEqual(ops(['a', 'b', 'c'], ['a', 'x', 'c', 'd']), ['s1:1 a', 'd2: b', 'a:2 x', 's3:3 c', 'a:4 d']);
+        assert.deepEqual(ops([], ['a']), ['a:1 a']);
+        assert.deepEqual(ops(['a'], []), ['d1: a']);
+        assert.deepEqual(ops(['a', 'b'], ['a', 'b']), ['s1:1 a', 's2:2 b']);
+        assert.deepEqual(ops(['x', 'a', 'b'], ['a', 'b', 'y']), ['d1: x', 's2:1 a', 's3:2 b', 'a:3 y']);
+    });
+
+    it('gives no diff when the changed part is too large for the table', () => {
+        const a = Array.from({ length: 2001 }, (_, i) => 'a' + i), b = Array.from({ length: 2001 }, (_, i) => 'b' + i);
+        assert.equal(viewer.diff(a, b), null);
+        assert.equal(viewer.diff(['h', ...a.slice(0, 1000), 't'], ['h', ...b.slice(0, 1000), 't']).length, 2002);
     });
 });
