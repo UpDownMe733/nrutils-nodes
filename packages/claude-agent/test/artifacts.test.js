@@ -447,10 +447,13 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
         await post('http://bad origin; script-src *');
         const first = await post('http://editor0.test:1880');
         assert.match(await ancestors(first), /http:\/\/editor0\.test:1880/);
-        for (let i = 1; i <= 8; i++) await post(`http://editor${i}.test:1880`);
+        for (let i = 1; i <= 7; i++) await post(`http://editor${i}.test:1880`);
+        await post('http://editor0.test:1880');
+        await post('http://editor8.test:1880');
         const list = await ancestors(first);
         assert.doesNotMatch(list, /bad origin|script-src/);
-        assert.doesNotMatch(list, /editor0\.test/);
+        assert.match(list, /editor0\.test/);
+        assert.doesNotMatch(list, /editor1\.test/);
         assert.match(list, /editor8\.test/);
     });
     it('gives a ticket for a viewer on another origin, and refuses one on the origin of the editor', async () => {
@@ -464,6 +467,14 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal(await post(new URL(base).host), 200);
         assert.equal(await post('view.test'), 409);
         await waitFor(async () => /viewer URL has the origin of the editor/.test(log), 5000, 'error in the log');
+    });
+});
+
+describe('artifact settings', () => {
+    const { agentSettings } = require('../shared');
+    it('passes viewHost through and has no default for it', () => {
+        assert.equal(agentSettings({ settings: { claudeAgent: { artifacts: { viewHost: '10.0.0.5' } } } }).artifacts.viewHost, '10.0.0.5');
+        assert.equal(agentSettings({ settings: { claudeAgent: { artifacts: {} } } }).artifacts.viewHost, undefined);
     });
 });
 

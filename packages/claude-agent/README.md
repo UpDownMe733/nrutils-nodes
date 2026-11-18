@@ -63,6 +63,7 @@ claudeAgent: {
 | `sandboxPattern` | `^[A-Za-z0-9][A-Za-z0-9._-]*$` | A Sandbox name that does not match fails the run. |
 | `agentExec` | none | A program that runs a command with the rights of the agent: `agentExec <sandbox or -> <folder> <command...>`. The `publish` tool needs it when a `launcher` is set. |
 | `artifacts.dir` | `<userDir>/claude-agent/artifacts` | The folder of the artifact store. |
+| `artifacts.viewHost` | `uiHost` of Node-RED | The address that the view server listens on. |
 | `artifacts.maxBytes`, `artifacts.maxFiles` | 100 MB, 2000 | The limits of one publish. |
 
 A launcher for the OS user `worker`:

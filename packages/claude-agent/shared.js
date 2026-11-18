@@ -30,6 +30,7 @@ function artifactSettings(RED, a) {
     return {
         dir: (a && a.dir) || path.join(RED.settings.userDir || os.homedir(), 'claude-agent', 'artifacts'),
         viewPort: a ? a.viewPort ?? 1881 : 0,
+        viewHost: (a && a.viewHost) || undefined,
         viewUrl: (a && a.viewUrl) || '',
         sharePort: (a && a.sharePort) || 0,
         shareBind: (a && a.shareBind) || '127.0.0.1',

@@ -80,7 +80,8 @@ function createRuntime(RED) {
     const editorOrigins = new Set();
     // The editor origins that the viewer may allow as frame parents: a short list of valid origins
     const rememberOrigin = (origin) => {
-        if (typeof origin !== 'string' || !ORIGIN.test(origin) || editorOrigins.has(origin)) return;
+        if (typeof origin !== 'string' || !ORIGIN.test(origin)) return;
+        editorOrigins.delete(origin);
         editorOrigins.add(origin);
         if (editorOrigins.size > MAX_ORIGINS) editorOrigins.delete(editorOrigins.values().next().value);
     };
