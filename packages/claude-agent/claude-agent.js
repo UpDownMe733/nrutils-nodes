@@ -58,7 +58,7 @@ function checkDocuments(documents, images) {
     if (!Array.isArray(documents) || documents.length + images.length > IMAGE_COUNT) throw new Error(`a message takes ${IMAGE_COUNT} files at most`);
     const list = documents.map((d) => {
         const type = d && DOCUMENT_TYPES[d.mediaType];
-        if (!type || typeof d.name !== 'string' || !d.name || typeof d.data !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(d.data)) {
+        if (!type || typeof d.name !== 'string' || !d.name || typeof d.data !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(d.data)) {
             throw new Error('a document must be a PDF or a text file, with a name, as base64');
         }
         if (d.data.length * 0.75 > type.max) throw new Error(`${d.name}: the file is too large`);

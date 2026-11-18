@@ -300,6 +300,7 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         assert.match((await editor('run', 'start', { text: 'x', documents: [{ ...ok, data: 'A'.repeat(1.5e6) }] })).error, /a.txt: the file is too large/);
         assert.match((await editor('run', 'start', { text: 'x', documents: Array(4).fill(ok), images: [picture, picture] })).error, /5 files/);
         assert.match((await editor('run', 'start', { text: 'x', documents: [{ ...ok, mediaType: 'application/pdf', data: 'A'.repeat(2.6e6) }], images: [{ ...picture, data: 'A'.repeat(2e6) }] })).error, /3 MB/);
+        assert.match((await editor('run', 'start', { text: 'x', documents: [{ ...ok, data: '' }] })).error, /PDF or a text file/);
         assert.deepEqual(await editor('run', 'start', { text: '', documents: [ok] }), {});
     });
 
