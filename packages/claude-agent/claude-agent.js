@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const mustache = require('mustache');
 const z = require('zod');
 const { NodeRedNodeBase, nodeRedPopup, nodeRedEditorComms } = require('@nrutils/node-red-utils');
+const artifacts = require('./artifacts');
 const { events, agentSettings, loadSdk, weightedCount, weightedText } = require('./shared');
 
 // The models that msg.model can choose. A different value uses the model of the node.
@@ -38,7 +39,7 @@ const REASONS = {
 };
 
 // Event kinds that the popup chat view shows: the text of the operator and of the agent
-const CHAT_KINDS = new Set(['prompt', 'message', 'answer', 'text', 'question', 'sent']);
+const CHAT_KINDS = new Set(['prompt', 'message', 'answer', 'text', 'question', 'sent', 'artifact']);
 // The pictures of a request of the popup. Returns the list, or throws an error with the reason.
 function checkImages(images) {
     if (images == null) return [];
@@ -127,7 +128,7 @@ const sizeText = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n || 0
 const turnText = (n) => `${n} turn${n === 1 ? '' : 's'}`;
 const tokenText = (n) => `${n >= 1000 ? (n / 1000).toFixed(1) + 'k' : n || 0} tokens`;
 
-module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeRedEditorComms], (RED, node, config) => {
+const registerNode = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeRedEditorComms], (RED, node, config) => {
     const comms = node.nodeRedEditorComms;
     const settings = agentSettings(RED);
     const maxParallel = Math.max(1, Number(config.maxParallel) || 1);
@@ -200,6 +201,8 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         if (extra && extra.to) e.to = extra.to;
         // The popup shows the name and the size of each document. The data stays out of the log.
         if (extra && extra.documents && extra.documents.length) e.documents = extra.documents.map((d) => ({ name: d.name, size: Buffer.from(d.data, 'base64').length }));
+        // The popup shows the file that the agent published
+        if (extra && extra.artifact) e.artifact = extra.artifact;
         // The popup shows the pictures of a message. The events output gets no picture.
         if (extra && extra.images && extra.images.length) e.images = extra.images;
         log.push(e);
@@ -285,6 +288,27 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         for (const { msg } of run.jobs) if (msg.agent) delete msg.agent.resume;
         // The input messages of the run get their output from the new run
         start(run.jobs, { text: 'Continue.' });
+    }
+
+    // The agent gives a file or a folder to the people. The node stores a copy as a new version.
+    function publishTool(sdk, run) {
+        const description = 'Publish a file or a folder as an artifact for the human operator: a document, code, an image, a PDF, a table or an HTML page. ' +
+            'path is a file or a folder, relative to your work folder or absolute. name is the key of the artifact: the same name makes a new version. ' +
+            'title is what people see. entry is the file of a folder that opens first. note says what is new in this version. ' +
+            'The node copies the files now. A later change of the files does not change the published version.';
+        const error = (text) => ({ content: [{ type: 'text', text: 'Error: ' + text }], isError: true });
+        const fields = { path: z.string(), name: z.string().optional(), title: z.string().optional(), entry: z.string().optional(), note: z.string().optional() };
+        return sdk.tool('publish', description, fields, async (args) => {
+            try {
+                const ctx = { nodeId: node.id, address: config.name ? address : '', cwd: run.cwd, sandbox: run.sandbox, run: { runId: run.id, sessionId: run.sessionId } };
+                const r = await artifacts.attach(RED).publish(ctx, args);
+                if (r.unchanged) return { content: [{ type: 'text', text: `No new version: "${r.title}" is the same as ${r.name}, version ${r.version}.` }] };
+                event(run, 'artifact', r.title, { artifact: r.event });
+                return { content: [{ type: 'text', text: `Published "${r.title}" as ${r.name}, version ${r.version}.` }] };
+            } catch (err) {
+                return error(err.message);
+            }
+        });
     }
 
     function sendTool(sdk, run) {
@@ -491,6 +515,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
             if (sandbox && !settings.sandboxPattern.test(sandbox)) throw new Error(`the sandbox name "${sandbox}" is not valid`);
             if (sandbox && !settings.launcher) throw new Error('a sandbox run needs claudeAgent.launcher in settings.js');
             const cwd = workFolder(msg.cwd || config.cwd || settings.workRoot, settings.workRoot, sandbox);
+            Object.assign(run, { cwd, sandbox });
             if (config.outputSchema) run.schema = JSON.parse(config.outputSchema);
             const extraServers = config.mcpServers ? JSON.parse(config.mcpServers) : {};
             const tools = splitList(config.tools);
@@ -513,7 +538,7 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
                     event(run, 'life', 'new session with the record of the last session');
                 }
             }
-            const serverTools = [askTool(sdk, run)];
+            const serverTools = [askTool(sdk, run), publishTool(sdk, run)];
             if (agentMode) serverTools.push(handoffTool(sdk, run));
             if (inbox) serverTools.push(sendTool(sdk, run));
             // These variables would override the cache time of the node.
@@ -744,3 +769,9 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
     // The editor reads the Sandbox rule from this block. The runtime reads the whole block.
     settings: { claudeAgent: { value: {}, exportable: true } }
 });
+
+// The admin API of the artifacts must exist before the first node.
+module.exports = (RED) => {
+    artifacts.attach(RED);
+    registerNode(RED);
+};

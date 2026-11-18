@@ -11,6 +11,7 @@
 // so both nodes use one copy of it and one event emitter.
 
 const os = require('os');
+const path = require('path');
 const { EventEmitter } = require('events');
 
 // The claude-agent nodes emit their events here. The agent-watch nodes listen.
@@ -23,6 +24,23 @@ events.setMaxListeners(0);
 // The default rule for a name in the Sandbox field: a plain name, safe as a host or container name
 const DEFAULT_SANDBOX_PATTERN = '^[A-Za-z0-9][A-Za-z0-9._-]*$';
 
+// The artifacts block of the claudeAgent settings, with the defaults (docs/artifacts.md, section 9).
+// With no block, the view server is off: viewPort is 0.
+function artifactSettings(RED, a) {
+    return {
+        dir: (a && a.dir) || path.join(RED.settings.userDir || os.homedir(), 'claude-agent', 'artifacts'),
+        viewPort: a ? a.viewPort ?? 1881 : 0,
+        viewUrl: (a && a.viewUrl) || '',
+        sharePort: (a && a.sharePort) || 0,
+        shareBind: (a && a.shareBind) || '127.0.0.1',
+        publicUrl: (a && a.publicUrl) || '',
+        htmlNetwork: !a || a.htmlNetwork !== false,
+        shareHosts: (a && a.shareHosts) || [],
+        maxBytes: (a && a.maxBytes) || 100 * 1024 * 1024,
+        maxFiles: (a && a.maxFiles) || 2000
+    };
+}
+
 // The claudeAgent block of the Node-RED settings.js, with the defaults
 function agentSettings(RED) {
     const s = RED.settings.claudeAgent || {};
@@ -32,7 +50,10 @@ function agentSettings(RED) {
         // The Folder of each run must be this folder or a folder below it.
         workRoot: s.workRoot || os.homedir(),
         // The rule for a name in the Sandbox field
-        sandboxPattern: new RegExp(s.sandboxPattern || DEFAULT_SANDBOX_PATTERN)
+        sandboxPattern: new RegExp(s.sandboxPattern || DEFAULT_SANDBOX_PATTERN),
+        // The program that runs a command as the agent user: agentExec <sandbox or -> <folder> <command...>. Empty: none.
+        agentExec: s.agentExec || undefined,
+        artifacts: artifactSettings(RED, s.artifacts)
     };
 }
 
