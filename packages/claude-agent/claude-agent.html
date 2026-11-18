@@ -23,7 +23,7 @@
     // The look of the popup. It uses the theme variables of Node-RED, so it follows the light and the dark theme.
     // The operator bubble has the node colour with dark text: that has contrast in both themes.
     const STYLE = `
-.ca-popup{position:relative;display:flex;flex-direction:column;gap:6px;height:100%;min-height:0;min-width:0;font-size:12px;color:var(--red-ui-primary-text-color);cursor:default;user-select:text}
+.ca-popup{position:relative;display:flex;flex-direction:column;gap:6px;height:100%;min-height:0;min-width:0;font-size:12px;color:var(--red-ui-primary-text-color);cursor:default;user-select:text;outline:none}
 .ca-popup button{user-select:none}
 .ca-name,.ca-summary,.ca-about,.ca-chip,.ca-meta,.ca-empty,.ca-working,.ca-bubble,.ca-inbox,.ca-inbox-text,.ca-log{cursor:text}
 .ca-popup button,.ca-tab{cursor:pointer}
@@ -674,6 +674,8 @@
             }
             addStyle();
             const root = make('div', '', 'ca-popup');
+            // A click in the popup gives the focus to the popup. Without it the keys go to the canvas, and Node-RED cancels Ctrl+C.
+            root.tabIndex = -1;
 
             const identity = element(node, 'div', 'identity', 'ca-identity');
             identity.appendChild(element(node, 'div', 'name', 'ca-name'));
