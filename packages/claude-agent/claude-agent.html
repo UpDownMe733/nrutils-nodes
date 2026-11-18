@@ -1065,17 +1065,15 @@
 .caf-head{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-bottom:6px}
 .caf-top{flex:1 1 100%;display:flex;align-items:center;gap:6px;min-width:0}
 .caf-title{flex:1;min-width:0;font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.caf-head select{flex:1 1 0;min-width:0;width:auto;box-sizing:border-box;height:32px;margin:0}
+.caf-head select{flex:1 1 90px;min-width:0;width:auto;box-sizing:border-box;height:32px;margin:0}
 .caf .red-ui-button .caf-label{display:inline !important}
-.caf.caf-tight .caf-head .red-ui-button .caf-label{display:none !important}
-.caf-head .red-ui-button{box-sizing:border-box;height:32px;min-height:32px;min-width:32px;margin:0}
+.caf-head .red-ui-button{white-space:nowrap;box-sizing:border-box;height:32px;min-height:32px;min-width:32px;margin:0}
 .caf-confirm .red-ui-button{min-height:44px;margin:0}
 .caf-head .caf-back{flex:none}
-.caf-bar{flex:none;display:flex;align-items:center;gap:6px;padding-bottom:6px;white-space:nowrap}
-.caf-bar select{flex:1 1 0;min-width:0;width:auto;box-sizing:border-box;height:32px;margin:0}
-.caf-bar .red-ui-button{flex:none;box-sizing:border-box;height:32px;min-height:32px;min-width:32px;margin:0}
+.caf-bar{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-bottom:6px}
+.caf-bar select{flex:1 1 90px;min-width:0;width:auto;box-sizing:border-box;height:32px;margin:0}
+.caf-bar .red-ui-button{flex:none;white-space:nowrap;box-sizing:border-box;height:32px;min-height:32px;min-width:32px;margin:0}
 @media (pointer:coarse){.caf-head .red-ui-button,.caf-bar .red-ui-button{height:44px;min-height:44px;min-width:44px}}
-.caf.caf-tight .caf-bar .red-ui-button .caf-label{display:none !important}
 .caf-menu{position:absolute;z-index:5;display:flex;flex-direction:column;background:var(--red-ui-primary-background);border:1px solid var(--red-ui-secondary-border-color);border-radius:4px}
 .caf-menu .red-ui-button{min-height:44px;margin:0;text-align:left;border:none}
 .caf-body{flex:1;min-height:0;display:flex;gap:6px;flex-direction:row}
@@ -1362,7 +1360,6 @@
             const wide = root.clientWidth >= WIDE;
             root.classList.toggle('caf-narrow', !wide);
             root.classList.toggle('caf-open', !!cur.id);
-            root.classList.toggle('caf-tight', pane.clientWidth < 380);
             if (cur.id && !state.items.has(cur.id)) close();
         }
 
