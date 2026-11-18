@@ -52,6 +52,8 @@ function fakeElement(tag) {
         addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
         appendChild(c) { e.childNodes.push(c); return c; },
         removeChild(c) { e.childNodes.splice(e.childNodes.indexOf(c), 1); },
+        insertBefore(c, ref) { e.childNodes.splice(ref ? e.childNodes.indexOf(ref) : e.childNodes.length, 0, c); return c; },
+        dispatchEvent(event) { (listeners[event.type] || []).forEach((fn) => fn(event)); return true; },
         focus() { e.focused++; },
         click() { e.clicks++; (listeners.click || []).forEach((fn) => fn({ stopPropagation() {} })); }
     };
@@ -80,8 +82,13 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
         createElement: fakeElement,
         // Only the elements in the document: the popup div, the panel of the sidebar and the head
         querySelectorAll: (sel) => matching({ childNodes: [div, ...(sideTab && sideTab.content.childNodes ? [sideTab.content] : [])] }, sel),
-        getElementById: (id) => [...walk(div), ...walk(head)].find((e) => e.id === id) || null
+        getElementById: (id) => canvas[id] || [...walk(div), ...walk(head)].find((e) => e.id === id) || null,
+        addEventListener: (type, fn, capture) => captured.push({ type, fn, capture })
     };
+    // The canvas: the element of a node and of the context menu by id. The capture handlers of the document.
+    const canvas = {};
+    const captured = [];
+    const popupStates = {};
     const clock = { now: 0, timers: [] };
     class FakeDate extends Date {
         constructor(...args) { super(...(args.length ? args : [clock.now])); }
@@ -98,13 +105,18 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const nodesById = {};
     const selected = [];
     const revealed = [];
+    const shown = [];
+    const hidden = [];
+    const menuOptions = [];
+    const selection = [];
     let sideTab;
     const RED = {
         events: { on: (type, fn) => (handlers[type] = handlers[type] || []).push(fn) },
         nodes: { registerType: (name, d) => { def = d; }, node: (id) => nodesById[id], eachNode: (fn) => Object.values(nodesById).forEach(fn), workspace: (id) => ({ id, label: 'Flow ' + id }) },
         // The sidebar and the canvas: the panel adds its tab here. A selection of the canvas gives the event of Node-RED.
-        sidebar: { addTab: (tab) => { sideTab = tab; } },
-        view: { select: ({ nodes }) => { selected.push(...nodes.map((n) => n.id)); }, reveal: (id) => revealed.push(id) },
+        sidebar: { addTab: (tab) => { sideTab = tab; }, show: (id) => shown.push(id) },
+        contextMenu: { show: (options) => { canvas['red-ui-workspace-context-menu'] = fakeElement('ul'); canvas['red-ui-workspace-context-menu'].appendChild(fakeElement('li')); menuOptions.push(options); }, hide: () => { hidden.push(true); } },
+        view: { selection: () => ({ nodes: selection }), select: ({ nodes }) => { selected.push(...nodes.map((n) => n.id)); }, reveal: (id) => revealed.push(id) },
         notify: (text, type) => notes.push({ text, type }),
         // The rule of RED.validators.number: an empty or absent value is valid only with blankAllowed.
         validators: { number: (blankAllowed) => (v) => (v === '' || v === undefined ? !!blankAllowed : !isNaN(v)) },
@@ -121,8 +133,8 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     }
     const resize = () => observed.forEach((o) => o.fn([{ target: o.target }]));
     const DOMPurify = { sanitize: (html, config) => { sanitized.push(config); return html.replace(/<script.*?<\/script>/g, ''); } };
-    const window = {};
-    vm.runInNewContext(script, { document, RED, DOMPurify, window, $: (e) => e, Date: FakeDate, setInterval, clearInterval, ResizeObserver, ...extra });
+    const window = { popupStates };
+    vm.runInNewContext(script, { document, RED, DOMPurify, window, $: (e) => e, Date: FakeDate, setInterval, clearInterval, ResizeObserver, MouseEvent: class { constructor(type, init) { this.type = type; Object.assign(this, init); } }, ...extra });
     const getDef = () => def;
     const answers = { 'get-log': state, 'new-chat': {} };
     const makeNode = (id, more = {}) => ({
@@ -146,7 +158,7 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const rebuild = () => def.nru_popupInit.call(node);
     const emit = (type, ...args) => (handlers[type] || []).forEach((fn) => fn(...args));
     const addNode = (id, more) => (nodesById[id] = makeNode(id, more));
-    return { window, resize, sanitized, emit, addNode, selected, revealed, sideTab: () => sideTab, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
+    return { menu: (options) => RED.contextMenu.show(options), getNodes: () => nodesById, window, canvas, captured, popupStates, shown, hidden, menuOptions, selection, resize, sanitized, emit, addNode, selected, revealed, sideTab: () => sideTab, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
 }
 
 const key = (text, init) => {
@@ -962,8 +974,6 @@ describe('claude-agent popup first open', () => {
 describe('claude-agent sidebar panel', () => {
     // The panel root of the node in the body of the panel, or undefined
     const panelRoot = (p) => walk(p.sideTab().content).find((e) => e.dataset.key === 'side');
-    const rows = (p) => walk(p.sideTab().content).filter((e) => e.classList.contains('ca-row'));
-    const pin = (p) => p.sideTab().toolbar.childNodes[0];
     const select = (p, ...nodes) => p.emit('view:selection-changed', { nodes });
 
     it('adds a tab that works while the editor is in edit mode', () => {
@@ -972,55 +982,96 @@ describe('claude-agent sidebar panel', () => {
         assert.equal(p.sideTab().enableOnEdit, true);
     });
 
-    it('lists the claude-agent nodes when none is selected, and a click selects the node', () => {
+    it('shows one line of text when no node was clicked', () => {
         const p = setup();
-        p.addNode('n2', { name: 'Two' });
-        p.addNode('n3', { type: 'inject' });
-        p.emit('nodes:add');
         assert.equal(panelRoot(p), undefined);
-        assert.equal(rows(p).length, 2, 'a node of another type has no row');
-        assert.equal(p.sideTab().toolbar.style.display, 'none', 'the list has no toolbar');
-        rows(p)[1].click();
-        assert.deepEqual(p.revealed, ['n2']);
-        assert.deepEqual(p.selected, ['n2']);
+        assert.equal(p.sideTab().content.textContent, 'Click a claude-agent node to show its chat.');
+        assert.equal(p.sideTab().toolbar, undefined, 'the panel has no toolbar');
     });
 
-    it('shows the last text of a node in its row', async () => {
-        const p = setup({}, { events: [event('prompt', 'first'), event('text', 'last answer', { source: 'agent' })], runs: [], session: { cacheTtl: '1h', lastActivity: null } });
-        p.emit('nodes:add');
-        await settle();
-        assert.ok(rows(p)[0].textContent.includes('last answer'));
-    });
-
-    it('follows the selected node and shows the list again when no one node is selected', () => {
+    it('shows the chat of the selected node and keeps it for other selections', () => {
         const p = setup();
         const two = p.addNode('n2');
+        p.addNode('n3', { type: 'inject' });
         select(p, p.node);
         assert.equal(panelRoot(p).dataset.node, 'n1');
-        assert.equal(p.sideTab().toolbar.style.display, '');
         select(p, two);
         assert.equal(panelRoot(p).dataset.node, 'n2');
         select(p, p.node, two);
-        assert.equal(panelRoot(p), undefined, 'two nodes selected: the list');
         select(p);
-        assert.equal(rows(p).length, 2);
+        select(p, { id: 'n3', type: 'inject' });
+        assert.equal(panelRoot(p).dataset.node, 'n2', 'another selection keeps the chat');
     });
 
-    it('keeps the pinned node until the pin is released', () => {
+    it('shows the text again when the node of the chat is removed', () => {
         const p = setup();
-        const two = p.addNode('n2');
         select(p, p.node);
-        pin(p).click();
-        assert.ok(pin(p).classList.contains('ca-on'));
-        select(p, two);
-        assert.equal(panelRoot(p).dataset.node, 'n1');
-        select(p);
-        assert.equal(panelRoot(p).dataset.node, 'n1', 'a click on the empty canvas keeps the chat');
-        pin(p).click();
-        assert.ok(!pin(p).classList.contains('ca-on'));
-        assert.equal(panelRoot(p), undefined, 'the pin is released: the panel follows the empty selection');
-        select(p, two);
-        assert.equal(panelRoot(p).dataset.node, 'n2');
+        delete p.getNodes().n1;
+        p.emit('nodes:remove');
+        assert.equal(panelRoot(p), undefined);
+        assert.ok(p.sideTab().content.textContent.startsWith('Click a claude-agent'));
+    });
+
+    const click = (p, id, extra = {}) => {
+        const event = { type: 'click', button: 0, target: { closest: () => (id ? { id } : null) }, stopped: false, stopPropagation() { this.stopped = true; }, ...extra };
+        p.captured.filter((c) => c.type === 'click' && c.capture).forEach((c) => c.fn(event));
+        return event;
+    };
+
+    it('a left-click on a claude-agent node stops the click of the popup library and shows the panel tab', () => {
+        const p = setup();
+        const event = click(p, 'n1');
+        assert.equal(event.stopped, true);
+        assert.deepEqual(p.shown, ['claude-agent']);
+    });
+
+    it('a click on another node, or on a click of the open call, goes on', () => {
+        const p = setup();
+        p.addNode('n3', { type: 'inject' });
+        assert.equal(click(p, 'n3').stopped, false);
+        assert.equal(click(p, null).stopped, false);
+        assert.equal(click(p, 'n1', { caOpen: true }).stopped, false);
+        assert.deepEqual(p.shown, []);
+    });
+
+    it('a right-click on a claude-agent node adds Open popup as the first item of the menu', () => {
+        const p = setup();
+        p.selection.push(p.node);
+        p.menu({ type: 'workspace', x: 1, y: 2 });
+        const menu = p.canvas['red-ui-workspace-context-menu'];
+        assert.equal(menu.childNodes.length, 2);
+        assert.equal(menu.childNodes[0].textContent, 'Open popup');
+    });
+
+    it('the menu of another selection has no Open popup item', () => {
+        const p = setup();
+        p.menu({ type: 'workspace', x: 1, y: 2 });
+        assert.equal(p.canvas['red-ui-workspace-context-menu'].childNodes.length, 1);
+        p.selection.push(p.node, p.addNode('n2'));
+        p.menu({ type: 'workspace', x: 1, y: 2 });
+        assert.equal(p.canvas['red-ui-workspace-context-menu'].childNodes.length, 1);
+    });
+
+    it('the item closes the menu and clicks the node of the library one time', () => {
+        const p = setup();
+        const rect = fakeElement('rect');
+        const group = fakeElement('g');
+        group.appendChild(rect);
+        group.querySelector = () => rect;
+        p.canvas.n1 = group;
+        const seen = [];
+        rect.addEventListener('mousedown', (e) => seen.push(e.type + ':' + e.caOpen));
+        rect.addEventListener('click', (e) => seen.push(e.type + ':' + e.caOpen));
+        p.selection.push(p.node);
+        p.menu({ type: 'workspace', x: 1, y: 2 });
+        const item = p.canvas['red-ui-workspace-context-menu'].childNodes[0];
+        const prevent = { preventDefault() {} };
+        item.childNodes[0].listeners.click[0](prevent);
+        assert.deepEqual(p.hidden, [true]);
+        assert.deepEqual(seen, ['mousedown:true', 'click:true']);
+        p.popupStates.n1 = 'open';
+        item.childNodes[0].listeners.click[0](prevent);
+        assert.equal(seen.length, 2, 'an open popup stays open');
     });
 
     it('shows a live message one time in the popup and one time in the panel', async () => {
@@ -1047,14 +1098,6 @@ describe('claude-agent sidebar panel', () => {
         assert.equal(popupText.value, 'edited');
     });
 
-    it('a life cycle prompt is not the last message of a row', async () => {
-        const p = setup({}, { events: [event('text', 'answer', { source: 'agent' }), event('prompt', 'keep alive', { source: 'life' })], runs: [], session: { cacheTtl: '1h', lastActivity: null } });
-        p.emit('nodes:add');
-        await settle();
-        assert.ok(rows(p)[0].textContent.includes('answer'));
-        assert.ok(!rows(p)[0].textContent.includes('keep alive'));
-    });
-
     it('the spacer of the panel does not move the popup', () => {
         const p = setup();
         select(p, p.node);
@@ -1063,13 +1106,4 @@ describe('claude-agent sidebar panel', () => {
         assert.ok(walk(p.div).find((e) => e.classList.contains('ca-spacer')).listeners.mousedown);
     });
 
-    it('adds the flow tab to the name of a row when two nodes have the same name', () => {
-        const p = setup({}, undefined, { name: 'Same', z: 'f1' });
-        p.emit('nodes:add');
-        assert.ok(!rows(p)[0].textContent.includes('Flow f1'));
-        p.addNode('n2', { name: 'Same', z: 'f2' });
-        p.emit('nodes:add');
-        assert.ok(rows(p)[0].textContent.includes('Flow f1'));
-        assert.ok(rows(p)[1].textContent.includes('Flow f2'));
-    });
 });

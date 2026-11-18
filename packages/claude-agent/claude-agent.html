@@ -9,7 +9,6 @@
     const views = {};           // view key to the tab: 'chat' (the default), 'agents' or 'timeline'. Survives a rebuild. The key is the node id for the popup and 'side' for the sidebar panel.
     const sessions = {};        // nodeId to the last session of the runtime node: { cacheTtl, lastActivity, model }
     const unread = {};          // view key to the count of agent messages that came while the Agents tab was not shown
-    const lastText = {};        // nodeId to the last chat text: the list of the sidebar panel shows it
     const pasted = {};          // nodeId to the files in the message box that are not sent: pictures { mediaType, data } and documents { name, mediaType, data }. Survives a popup rebuild.
     let chipTimer = null;       // one timer for the chips of all views
     const OPERATOR_KINDS = ['prompt', 'message', 'answer'];
@@ -31,7 +30,6 @@
 .ca-popup button,.ca-tab{cursor:pointer}
 .ca-spacer{cursor:move}
 .ca-identity{flex:none;display:flex;flex-direction:column;min-width:0;padding:0 2px 2px}
-.ca-tabname{font-weight:400;color:var(--red-ui-secondary-text-color)}
 .ca-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600;color:var(--red-ui-primary-text-color)}
 .ca-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--red-ui-secondary-text-color)}
 .ca-about{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--red-ui-secondary-text-color)}
@@ -110,15 +108,7 @@
 .ca-side-body{position:absolute;inset:0;padding:6px;box-sizing:border-box}
 .ca-side .ca-summary,.ca-side .ca-about{display:none}
 .ca-side .ca-spacer{cursor:default}
-.ca-row{display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 6px;border-bottom:1px solid var(--red-ui-secondary-border-color);cursor:pointer}
-.ca-row:hover{background:var(--red-ui-workspace-button-background-hover)}
-.ca-dot{flex:none;width:10px;height:10px;border-radius:50%;border:1px solid var(--red-ui-secondary-text-color)}
-.ca-dot.ca-on{background:var(--red-ui-text-color-link);border-color:var(--red-ui-text-color-link)}
-.ca-row-text{flex:1;min-width:0}
-.ca-side .ca-row .ca-summary{display:block}
-.ca-pin{min-width:32px;height:100%}
-.ca-pin.ca-on{background:var(--red-ui-secondary-background-selected);color:var(--red-ui-text-color-link)}
-.ca-pin:not(.ca-on) i{transform:rotate(45deg)}
+.ca-side-empty{padding:12px;color:var(--red-ui-secondary-text-color)}
 .ca-zoom{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:8px;border-radius:4px;background:rgba(0,0,0,.8);cursor:zoom-out}
 .ca-zoom img{max-width:100%;max-height:100%;object-fit:contain}
 .ca-footer{display:flex;align-items:center;justify-content:flex-end;gap:4px;min-width:0;padding:2px 4px 4px 8px}
@@ -235,7 +225,6 @@
     function showRuns(node, runs) {
         activeRuns[node.id] = runs;
         each(node, fillRuns, runs);
-        refreshList();
     }
 
     function fillRuns(node, root, runs) {
@@ -255,17 +244,11 @@
     // live is true for an event that comes from the runtime now, false for the log that a view loads when it opens.
     // A log goes to the one view that loads it: root. A live event goes to each view of the node.
     // A chat text is a message of the operator or of the agent. A life cycle prompt is not.
-    function chatText(e) {
-        return e.source !== 'life' && (OPERATOR_KINDS.includes(e.kind) || AGENT_KINDS.includes(e.kind));
-    }
-
     function addEvent(node, e, live, root) {
         if (e.kind === 'result') lastEnd[node.id] = e.text;
         else if (e.kind === 'error') lastEnd[node.id] = 'error: ' + e.text;
         else if (e.kind === 'state' && e.text === 'stopped') lastEnd[node.id] = 'stopped';
-        if (chatText(e)) lastText[node.id] = e.text;
         for (const r of root ? [root] : roots(node)) addEventIn(node, r, e, live);
-        refreshList();
     }
 
     function addEventIn(node, root, e, live) {
@@ -641,14 +624,12 @@
     // The runtime has cleared its log: empty the chat and the Timeline
     function clear(node) {
         delete lastEnd[node.id];
-        delete lastText[node.id];
         each(node, (n, root) => {
             showBadge(root, 0);
             for (const name of ['list', 'agents', 'log']) part(root, name).textContent = '';
             part(root, 'empty').style.display = '';
             showRun(n, root);
         });
-        refreshList();
     }
 
     // The message box grows with its text, up to about 6 lines. Then it scrolls.
@@ -843,92 +824,89 @@
         }
     }
 
-    // The sidebar panel: the chat of the selected node, or the list of the claude-agent nodes. The pin keeps the chat of one node.
-    const side = { body: null, pin: null, toolbar: null, selected: null, pinned: null, shown: null, loaded: {} };
+    // The sidebar panel: the chat of the claude-agent node that the operator selected last.
+    const side = { body: null, selected: null, shown: null };
+    const MENU_LABEL = 'Open popup';
+    const EMPTY_TEXT = 'Click a claude-agent node to show its chat.';
 
     function showSide() {
         if (!side.body) return;
-        let node = side.pinned && RED.nodes.node(side.pinned);
-        if (!node) {
-            side.pinned = null;
-            node = side.selected && RED.nodes.node(side.selected);
-        }
-        side.toolbar.style.display = node ? '' : 'none';
-        side.pin.classList.toggle('ca-on', !!side.pinned);
-        side.pin.title = side.pinned ? 'Follow the selected node' : 'Keep this node';
+        const node = side.selected && RED.nodes.node(side.selected);
         if (node && side.shown !== node.id) {
             side.shown = node.id;
             delete views.side;
             delete unread.side;
             buildView(node, side.body, 'side');
-        } else if (!node) {
+        } else if (!node && side.shown !== null) {
             side.shown = null;
-            renderList();
+            side.body.textContent = '';
+            side.body.appendChild(make('div', EMPTY_TEXT, 'ca-side-empty'));
         }
     }
 
-    // Draw the list again when the list is shown
-    function refreshList() {
-        if (side.body && side.shown === null) renderList();
+    // The node of the claude-agent that holds an element of the canvas, or null
+    function agentOf(element) {
+        const group = element && element.closest && element.closest('g.red-ui-flow-node');
+        const node = group && RED.nodes.node(group.id);
+        return node && node.type === 'claude-agent' ? node : null;
     }
 
-    function renderList() {
-        side.body.textContent = '';
-        const list = make('div', '', 'ca-popup ca-side');
-        const agents = [];
-        RED.nodes.eachNode((node) => { if (node.type === 'claude-agent') agents.push(node); });
-        for (const node of agents) {
-            const row = make('div', '', 'ca-row');
-            row.appendChild(make('span', '', 'ca-dot' + ((activeRuns[node.id] || []).length ? ' ca-on' : '')));
-            const text = make('div', '', 'ca-row-text');
-            const name = make('div', node.name || 'claude-agent', 'ca-name');
-            // Nodes with the same name show the flow tab after the name
-            const tab = RED.nodes.workspace && RED.nodes.workspace(node.z);
-            if (tab && agents.some((other) => other !== node && (other.name || 'claude-agent') === (node.name || 'claude-agent'))) {
-                name.appendChild(make('span', ' · ' + (tab.label || tab.id), 'ca-tabname'));
-            }
-            text.appendChild(name);
-            text.appendChild(make('div', lastText[node.id] || '', 'ca-summary'));
-            row.appendChild(text);
-            row.addEventListener('click', () => {
-                if (RED.view.reveal) RED.view.reveal(node.id);
-                RED.view.select({ nodes: [node] });
-            });
-            list.appendChild(row);
-            // A node that the page has not read yet gives its last text and its runs one time.
-            if (!side.loaded[node.id] && node.nodeRedEditorComms) {
-                side.loaded[node.id] = true;
-                node.nodeRedEditorComms.publish('get-log').then((state) => {
-                    activeRuns[node.id] = state.runs;
-                    for (const e of state.events) if (chatText(e)) lastText[node.id] = e.text;
-                    refreshList();
-                }).catch(() => {});
-            }
+    // The popup of the library opens at a click on the node. Open it with the same click, without the block below.
+    function openPopup(node) {
+        if (window.popupStates[node.id] === 'open') return;
+        const rect = document.getElementById(node.id).querySelector('rect');
+        for (const type of ['mousedown', 'click']) {
+            const event = new MouseEvent(type, { clientX: 0, clientY: 0 });
+            event.caOpen = true;
+            rect.dispatchEvent(event);
         }
-        side.body.appendChild(list);
     }
 
     if (RED.sidebar && RED.sidebar.addTab) {
         addStyle();
         side.body = make('div', '', 'ca-side-body');
+        side.body.appendChild(make('div', EMPTY_TEXT, 'ca-side-empty'));
         keepEvents(side.body);
-        side.pin = button('fa-thumb-tack', '', '');
-        side.pin.className = 'red-ui-sidebar-header-button ca-pin';
-        side.pin.addEventListener('click', () => {
-            side.pinned = side.pinned ? null : side.shown;
-            showSide();
-        });
-        const toolbar = make('div', '', 'red-ui-sidebar-header');
-        side.toolbar = toolbar;
-        toolbar.appendChild(side.pin);
-        RED.sidebar.addTab({ id: 'claude-agent', name: 'Claude agent', iconClass: 'fa fa-comments-o', content: $(side.body), toolbar: $(toolbar), enableOnEdit: true });
+        RED.sidebar.addTab({ id: 'claude-agent', name: 'Claude agent', iconClass: 'fa fa-comments-o', content: $(side.body), enableOnEdit: true });
         RED.events.on('view:selection-changed', (selection) => {
             const nodes = (selection && selection.nodes) || [];
-            side.selected = nodes.length === 1 && nodes[0].type === 'claude-agent' ? nodes[0].id : null;
+            if (nodes.length === 1 && nodes[0].type === 'claude-agent') side.selected = nodes[0].id;
             showSide();
         });
         for (const type of ['flows:loaded', 'nodes:add', 'nodes:remove', 'nodes:change']) RED.events.on(type, () => showSide());
         showSide();
+    }
+
+    // A left-click on a claude-agent node shows its chat in the panel. It does not open the popup: the block ends the click before the library sees it.
+    document.addEventListener('click', (event) => {
+        if (event.caOpen || !agentOf(event.target)) return;
+        event.stopPropagation();
+        if (event.button === 0 && RED.sidebar && RED.sidebar.show && side.body) RED.sidebar.show('claude-agent');
+    }, true);
+
+    // A right-click on a claude-agent node adds the first item to the context menu of the canvas.
+    if (RED.contextMenu && RED.contextMenu.show) {
+        const show = RED.contextMenu.show;
+        RED.contextMenu.show = function (options) {
+            const result = show.apply(this, arguments);
+            const selection = options && options.type === 'workspace' && RED.view.selection();
+            const nodes = (selection && selection.nodes) || [];
+            const menu = document.getElementById('red-ui-workspace-context-menu');
+            if (nodes.length === 1 && nodes[0].type === 'claude-agent' && menu) {
+                const link = make('a', '', '');
+                link.href = '#';
+                link.appendChild(make('span', MENU_LABEL, 'red-ui-menu-label'));
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    RED.contextMenu.hide();
+                    openPopup(nodes[0]);
+                });
+                const item = make('li', '', '');
+                item.appendChild(link);
+                menu.insertBefore(item, menu.firstChild);
+            }
+            return result;
+        };
     }
 
     RED.nodes.registerType('claude-agent', {
@@ -1202,8 +1180,8 @@
     <p>Each run has the tool <code>ask_operator(question, options)</code>. The run waits for an answer from output 2, from a control message, or from the popup.</p>
     <p>A run waits for its background tasks, subagents and shell jobs. It ends with the first result that comes when no background task works.</p>
     <p>A failed run goes to a <code>catch</code> node. <code>msg.agent.reason</code> is one of <code>max_turns</code>, <code>max_cost</code>, <code>timeout</code>, <code>schema</code>, <code>sdk_error</code> or <code>node_closed</code>.</p>
-    <p>Click the node to open the popup. The top of the popup shows the name of the node (or claude-agent), its summary (when set) and a line with its model, folder and sandbox. The model is the true model of the selected run, for example <code>opus 5.5</code>. With no run, it is the model of the last run. A model of the node with another family shows after it, for example <code>opus 5.5 (node: sonnet)</code>. The folder and the sandbox are the settings of the node, not the msg.cwd of a run. Drag the empty part of the tab row to move the popup. The two tabs are below it. Chat shows the text of the operator on the right and the text of the agent on the left. Timeline shows all events. The status line shows the state, the turns, the tokens used and the context size of the last model response.</p>
-    <p>The <b>Claude agent</b> tab of the sidebar shows the same chat as the popup. Both work at the same time and share the message box. The panel follows the selected claude-agent node. With no node or more than one node selected, it lists the claude-agent nodes: click a row to select the node. The pin button keeps the chat of one node.</p>
+    <p>Right-click the node and choose <b>Open popup</b>, the first item of the menu. A left-click on the node shows its chat in the sidebar panel and does not open the popup. The top of the popup shows the name of the node (or claude-agent), its summary (when set) and a line with its model, folder and sandbox. The model is the true model of the selected run, for example <code>opus 5.5</code>. With no run, it is the model of the last run. A model of the node with another family shows after it, for example <code>opus 5.5 (node: sonnet)</code>. The folder and the sandbox are the settings of the node, not the msg.cwd of a run. Drag the empty part of the tab row to move the popup. The two tabs are below it. Chat shows the text of the operator on the right and the text of the agent on the left. Timeline shows all events. The status line shows the state, the turns, the tokens used and the context size of the last model response.</p>
+    <p>The <b>Claude agent</b> tab of the sidebar shows the same chat as the popup. Both work at the same time and share the message box. A left-click on a claude-agent node shows its chat in the panel. The panel keeps that chat when you select other nodes.</p>
     <p>The timer chip in the header shows <b>Active</b>, the time since the selected run started, and <b>Cache</b>, the minutes until the prompt cache expires, for example <code>Cache 52m</code>. The cache countdown starts again at each model response. It is an estimate. <code>Cache cold</code> means that the next message reads the full context again at the full price. The chip turns amber at 5 minutes or less.</p>
     <p><b>New chat</b> (the + button) makes the node forget its last session and clears the popup log. The next message from the popup starts a new session. It is not possible while a run is active.</p>
     <p>The message box is at the bottom. Enter sends; Shift+Enter starts a new line. When no run is active, Send starts a run with your text as the task; the run continues the last session of the node. When the agent asks a question, the popup shows it with one button for each option, and Send becomes Answer. Interrupt and Stop show only while a run is active.</p>

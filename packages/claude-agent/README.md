@@ -197,7 +197,7 @@ with one active run.
 
 ## Popup
 
-Click the node to open the popup. The top shows the name of the node (or `claude-agent`), its summary
+Right-click the node and choose **Open popup**, the first item of the menu. A left-click on the node shows its chat in the sidebar panel and does not open the popup. The top shows the name of the node (or `claude-agent`), its summary
 (when set) and a line with its model, folder and sandbox. The model is the true model of the selected run, as
 family and version, for example `opus 5.5`. With no run, it is the model of the last run. With no run since the start,
 it is the model of the node, or `default model`. A model of the node with another family shows after it, for example
@@ -210,9 +210,8 @@ The status line shows the state, the turns, the tokens used and the context size
 
 The **Claude agent** tab of the sidebar shows the same chat as the popup. The popup and the panel work at the same time. They share the message box and show each message one time.
 
-- Select a claude-agent node: the panel shows its chat.
-- Select no node, or more than one: the panel shows a list of the claude-agent nodes with the last message of each. Click a row to select the node.
-- The pin button at the bottom keeps the chat of the node when you select other nodes. Click it again to follow the selection.
+- Left-click a claude-agent node: the panel shows its chat. The panel keeps that chat when you select other nodes.
+- No node clicked yet: the panel shows one line of text.
 
 The timer chip shows:
 
