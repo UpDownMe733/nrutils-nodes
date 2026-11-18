@@ -32,6 +32,7 @@ body {
     font: 14px/1.5 "Helvetica Neue", Arial, Helvetica, sans-serif;
 }
 a { color: var(--link); }
+[hidden] { display: none !important; }
 .secondary { color: var(--text2); }
 .hint { color: var(--text2); padding: 16px; }
 

@@ -297,6 +297,11 @@ describe('the view server', () => {
         assert.equal((await get(port, '/viewer/viewer.css')).headers['content-type'], 'text/css; charset=utf-8');
     });
 
+    it('keeps an element with the hidden attribute out of view', () => {
+        const css = fs.readFileSync(path.join(VIEWER, 'viewer.css'), 'utf8');
+        assert.match(css, /\[hidden\]\s*\{\s*display:\s*none\s*!important/);
+    });
+
     it('loads each renderer file of the folder in the viewer page', () => {
         const html = fs.readFileSync(path.join(VIEWER, 'index.html'), 'utf8');
         for (const name of fs.readdirSync(path.join(VIEWER, 'renderers'))) {
