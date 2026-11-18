@@ -103,7 +103,7 @@ Routes on `RED.httpAdmin`, below `/claude-agent/artifacts`. Read routes need `cl
 | `DELETE /:id` and `DELETE /:id/:n` | Delete the artifact or one version (to the bin for 30 days) |
 | `POST /:id/restore` and `POST /:id/:n/restore` | Undo a delete |
 
-The admin API sends no byte of an artifact. The admin origin holds the token of the editor: an HTML file there, or a `blob:` URL that the editor makes from artifact bytes, would run with that token. Thus the content, the thumbnails and the downloads come only from the view server. The list gives a thumbnail URL with a ticket for each image.
+The admin API sends no byte of an artifact. The admin origin holds the token of the editor: an HTML file there, or a `blob:` URL that the editor makes from artifact bytes, would run with that token. Thus the content, the thumbnails and the downloads come only from the view server. The list has no thumbnail URL. When the row of an image shows on the screen, the editor sends `POST /:id/:n/ticket`, then loads `<view URL>thumb`.
 
 After each publish, delete and undo, the runtime sends the topic `claude-agent/artifacts` with `RED.comms.publish`, with the new record and the new `totalBytes`. The comms of a node are for that node only, so the sidebar list of all agents needs this global topic. The open lists then update with no poll.
 
@@ -166,6 +166,8 @@ The PDF exception: Chrome does not show a PDF in a sandboxed document, so a PDF 
 
 Download: `/v/<ticket>/download` gives the file, or a zip of the folder, with `Content-Disposition: attachment; filename=…`, `Content-Type: application/octet-stream`, `nosniff` and the sandbox CSP.
 
+Thumbnail: `/v/<ticket>/thumb` gives the entry file with the headers of each file response (layers 3 and 5). When the entry file is not an image, or is larger than 1 MB, it gives 404.
+
 Network of HTML artifacts: the CSP of a file allows only the view server, `data:` and `blob:`. Thus a page that a person reviewed cannot change later through remote content, and it cannot track an outside reader.
 - The view server on the LAN also allows `https:` (setting `artifacts.htmlNetwork`, default `true`). An HTML application can then load a library from a CDN in the editor. The agent can already send data anywhere from its shell, so this adds no new path out.
 - The share server allows only the hosts in `artifacts.shareHosts` (default none). The preview of a share link (section 7) shows the share page, so the person sees a page that needs a host that is not on the list.
@@ -206,7 +208,7 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 - A row is 44 px high minimum.
   - Line 1: type icon, title (one line, with an ellipsis).
   - Line 2, in the secondary colour: "Version 3 · 2 min ago". The sidebar list adds the agent name.
-- An image of 1 MB or less shows a 48 px thumbnail in its row. The thumbnail loads from the `/thumb` route of the view server only when the row comes into view.
+- An image of 1 MB or less shows a 48 px thumbnail in its row. The thumbnail loads from the `/thumb` route of the view server (section 6) only when the row shows on the screen.
 - An unseen item has an accent dot at the left. A shared item has the chip "Shared". A deleted item shows "Deleted. Undo" for 10 s, then it goes.
 - Filters, in the sidebar only: a search field (title), then Agent, Type, Time (Today, 7 days, 30 days, All). The search field never gets the focus on its own.
 - The sidebar Files view only (never the popup) has one line below the list: "Files use 1.2 GB". One decimal, the unit B, KB, MB or GB, no label, no limit, no bar.
@@ -298,7 +300,7 @@ Three users gave their needs: an operator who watches many agents, a new user, a
 | # | Part | Size | Needs |
 | --- | --- | --- | --- |
 | 1 | Store, publish tool with the tar reader (local `tar`, or `agentExec` on the host), event `artifact`, global comms topic, admin API list and record | M | `agentExec` on live, because live has a launcher |
-| 2 | View server with tickets and headers, download (file and zip), thumbnail URLs in the list, viewer page with the renderers text, markdown, image, PDF, audio, video, HTML, other | L | a second port that the browser reaches |
+| 2 | View server with tickets and headers, download (file and zip), the thumbnail route, viewer page with the renderers text, markdown, image, PDF, audio, video, HTML, other | L | a second port that the browser reaches |
 | 3 | Editor: the card in the chat, the artifacts of a node, the list of all artifacts, open the viewer | M | section 8 |
 | 4 | Delete, the bin with undo for 30 days, the purge of blobs, the store size line | M | — |
 | 5 | Compare two versions | M | — |
