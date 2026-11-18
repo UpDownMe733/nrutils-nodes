@@ -358,7 +358,7 @@ describe('claude-agent popup pasted pictures', () => {
         assert.equal(calls.filter((c) => c.type === 'start').length, 0);
         readers[0].finish();
         part('send').click();
-        assert.deepEqual(calls.find((c) => c.type === 'start').payload.images, [{ mediaType: 'image/png', data: 'AAAA', size: 10 }]);
+        assert.deepEqual(JSON.parse(JSON.stringify(calls.find((c) => c.type === 'start').payload.images)), [{ mediaType: 'image/png', data: 'AAAA', size: 10 }]);
     });
 
     it('Send as Answer keeps the pictures and says so', async () => {

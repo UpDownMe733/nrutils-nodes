@@ -387,7 +387,8 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         const sent = brokerGot.find((m) => m.topic === inbox('peer'));
         assert.ok(sent, JSON.stringify(brokerGot));
         assert.deepEqual(JSON.parse(sent.payload), { from: 'Team-A/Sender', text: 'hello' });
-        const sentEvent = eventsOf('sender').find((e) => e.kind === 'sent');
+        // The popup events come by the websocket: they can come after the result.
+        const sentEvent = await waitFor(async () => eventsOf('sender').find((e) => e.kind === 'sent'), 5000, 'the sent event');
         assert.ok(sentEvent && sentEvent.to === 'Team-A/peer' && sentEvent.text === 'hello', 'the sent event has the receiver and the full text');
         await waitFor(async () => lifeLines('sender').includes('waiting for Team-A/peer'), 5000, 'the life line waiting for Team-A/peer');
         for (let n = 1; n <= 3; n++) {
@@ -411,7 +412,7 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         await results('reporter', 1);
         const sent = brokerGot.find((m) => m.topic === inbox('peer') && JSON.parse(m.payload).text === 'final');
         assert.ok(sent, 'the report reached the inbox');
-        assert.ok(eventsOf('reporter').some((e) => e.kind === 'sent' && e.text === 'final'));
+        await waitFor(async () => eventsOf('reporter').some((e) => e.kind === 'sent' && e.text === 'final'), 5000, 'the sent event');
         assert.ok(!lifeLines('reporter').includes('waiting for Team-A/peer'), 'no open item');
         await idle('reporter');
         await fire();
