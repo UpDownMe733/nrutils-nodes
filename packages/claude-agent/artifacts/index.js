@@ -43,6 +43,9 @@ function readFiles(settings, { sandbox, dir, base }) {
             failed = err;
             clearTimeout(timer);
             child.kill('SIGKILL');
+            // The child can be sudo (root): SIGKILL does not reach it. A closed pipe stops tar with SIGPIPE.
+            child.stdout.destroy();
+            child.stderr.destroy();
             reject(err);
         };
         child.stderr.on('data', (d) => { if (errText.length < 2000) errText += d; });
