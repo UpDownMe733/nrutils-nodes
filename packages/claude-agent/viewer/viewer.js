@@ -103,9 +103,11 @@
 
         // The note above a file that shows only its first part
         cutNote(file) {
+            // The Download button of the page gives the file when the version has one file, else a zip
             return el('div', { class: 'cut-note' },
                 el('span', { text: 'This shows the first ' + size(TEXT_LIMIT) + ' of ' + size(file.size) + '.' }),
-                el('a', { class: 'button', href: viewer.url(file.path), download: file.path.split('/').pop(), text: 'Download' }));
+                viewer.meta.files.length > 1
+                    ? el('a', { class: 'button', href: viewer.url(file.path), download: file.path.split('/').pop(), text: 'Download this file' }) : '');
         },
 
         file(p) {

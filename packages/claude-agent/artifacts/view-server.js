@@ -15,6 +15,7 @@
 //   /v/<ticket>/meta        the version as JSON: title, time, entry and the file list
 //   /v/<ticket>/f/<path>    one file of the version, found by an exact match of its path in the file list
 //   /v/<ticket>/download    the file, or a zip of all files of the version
+//   /v/<ticket>/thumb       the entry file when it is an image of THUMB_LIMIT or less, else 404
 //   /viewer/<asset>         the scripts and the style of the viewer page (a fixed list)
 //
 // The store (store.js) gives: key, record(id), version(id, n) and blobPath(sha256).
@@ -72,7 +73,7 @@ function dosTime(ms) {
 
 // Writes the zip to the stream out. files: [{ path, read() }]. Gives a promise.
 // A bad or a duplicate name stops the zip before the first byte.
-async function writeZip(out, files, ms) {
+async function writeZip(out, files, ms, drainMs = DRAIN_MS) {
     const seen = new Set();
     for (const f of files) {
         if (zipNameError(f.path, seen)) throw new Error('the zip cannot hold the name ' + JSON.stringify(f.path));
@@ -82,15 +83,18 @@ async function writeZip(out, files, ms) {
     const central = [];
     let offset = 0;
     // Waits for "drain" when the buffer of the stream is full. A closed stream stops the zip.
+    // A client that stops reading gets a closed stream after drainMs: else it keeps the zip lock.
     const write = async (buf) => {
         if (out.destroyed) throw new Error('the stream is closed');
         offset += buf.length;
         if (out.write(buf)) return;
         await new Promise(resolve => {
-            const done = () => { out.off('drain', done); out.off('close', done); resolve(); };
+            const timer = setTimeout(() => out.destroy(), drainMs);
+            const done = () => { clearTimeout(timer); out.off('drain', done); out.off('close', done); resolve(); };
             out.on('drain', done);
             out.on('close', done);
         });
+        if (out.destroyed) throw new Error('the stream is closed');
     };
     for (const f of files) {
         const data = await f.read();
@@ -134,6 +138,10 @@ async function writeZip(out, files, ms) {
 
 // ---- The server
 
+// The longest wait for a zip client that reads no more
+const DRAIN_MS = 60 * 1000;
+// The largest image that /thumb gives: the list of the editor must stay fast
+const THUMB_LIMIT = 1024 * 1024;
 const ASSET_TYPES = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
 // The path of a file in a dependency. The "exports" fields of marked and dompurify block
@@ -336,6 +344,11 @@ function handler(opts) {
         res.setHeader('Content-Security-Policy', fileCsp(opts.htmlNetwork, ancestors));
         if (rest === 'meta') return meta(res, record, version);
         if (rest === 'download') return download(req, res, version);
+        if (rest === 'thumb') {
+            const file = version.files.find(f => f.path === version.entry);
+            if (!file || !/^image\//.test(file.type || '') || file.size > THUMB_LIMIT) return notFound(res);
+            return serveFile(req, res, file, ancestors);
+        }
         if (rest.startsWith('f/')) {
             let want;
             try { want = rest.slice(2).split('/').map(decodeURIComponent).join('/'); } catch { return notFound(res); }

@@ -45,7 +45,7 @@
             details.append(frag);
             const rest = keys.length - made;
             if (rest) {
-                more.textContent = 'Show ' + Math.min(rest, PAGE) + ' more of ' + rest;
+                more.textContent = 'Show ' + Math.min(rest, PAGE) + ' more (' + rest + ' left)';
                 details.append(more);
             }
         };

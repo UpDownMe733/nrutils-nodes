@@ -18,6 +18,7 @@ const ticket = require('../artifacts/ticket.js');
 
 const VIEWER = path.join(__dirname, '..', 'viewer');
 const ID = '3f9c0e1a7b2d4c55';
+const ID_IMG = '3f9c0e1a7b2d4c66';
 
 // A fake store: the blobs in a temporary folder, the records in memory
 function fakeStore(dir) {
@@ -97,6 +98,13 @@ describe('the helpers', () => {
         await assert.rejects(view.writeZip(out, [{ path: 'a', read }, { path: 'a', read }], 0), /cannot hold/);
         await view.writeZip(out, [{ path: 'a/b..c', read }, { path: 'ü .md', read }], 0);
     });
+
+    it('closes the stream of a zip client that reads no more, so the zip lock is free again', async () => {
+        const out = new (require('events'))();
+        Object.assign(out, { destroyed: false, write: () => false, destroy() { this.destroyed = true; this.emit('close'); } });
+        await assert.rejects(view.writeZip(out, [{ path: 'a', read: async () => Buffer.from('x') }], 0, 20), /closed/);
+        assert.equal(out.destroyed, true);
+    });
 });
 
 describe('the view server', () => {
@@ -127,6 +135,10 @@ describe('the view server', () => {
         t1 = ticket.make(store.key, ID, 1);
         t2 = ticket.make(store.key, ID, 2);
         tDel = ticket.make(store.key, ID, 3);
+        const img = Buffer.from('89504e47', 'hex');
+        store.records[ID_IMG] = { id: ID_IMG, name: 'chart', owner: { address: 't/a', nodeId: 'n1' }, versions: [
+            { n: 1, time: Date.now(), title: 'Chart', entry: 'c.png', deleted: null, purged: false, files: [file(store, 'c.png', 'image/png', img)] },
+            { n: 2, time: Date.now(), title: 'Chart', entry: 'c.png', deleted: null, purged: false, files: [file(store, 'c.png', 'image/png', Buffer.alloc(1024 * 1024 + 1))] }] };
         server = http.createServer(view.handler({ store, htmlNetwork: true, uiPort: 1880, editorOrigins: origins }));
         await new Promise(r => server.listen(0, '127.0.0.1', r));
         port = server.address().port;
@@ -279,6 +291,16 @@ describe('the view server', () => {
         assert.deepEqual(files.map(f => f.path), store.records[ID].versions[1].files.map(f => f.path));
         assert.equal(files.find(f => f.path === 'big.txt').data.length, 11000);
         assert.equal(files.find(f => f.path === 'img/a b.png').data.toString('hex'), '89504e47');
+    });
+
+    it('gives a thumbnail only for an entry image of 1 MB or less', async () => {
+        const small = await get(port, '/v/' + ticket.make(store.key, ID_IMG, 1) + '/thumb');
+        assert.equal(small.status, 200);
+        assert.equal(small.headers['content-type'], 'image/png');
+        assert.match(small.headers['content-security-policy'], /^sandbox /);
+        assert.equal(small.body.toString('hex'), '89504e47');
+        assert.equal((await get(port, '/v/' + ticket.make(store.key, ID_IMG, 2) + '/thumb')).status, 404);
+        assert.equal((await get(port, '/v/' + t1 + '/thumb')).status, 404);
     });
 
     it('accepts only GET and HEAD', async () => {
