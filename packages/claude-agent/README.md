@@ -123,7 +123,7 @@ In the agent mode, the node is one agent. It runs one turn at a time and keeps o
 
 1. **Cold start** (no stored session): a new session. If a note exists, the first message is the note,
    with the line `The note of your earlier session:`, and then the message. The node deletes the note.
-   If no note exists but the session file exists, the first message tells the agent to read the record of
+   If no note exists but the session file exists (the last session ended with no close turn), the first message tells the agent to read the record of
    its last session, and then the message.
 2. **Warm start**: the node resumes the stored session with the message.
 3. **During a turn**: each model response starts the timer again and gives the context size
@@ -148,8 +148,8 @@ The note is the file `<userDir>/claude-agent/<node id>.note.md`. The node writes
 It stays after a restart of Node-RED. The session, the timer and the waiting messages do not.
 
 The node keeps the id of the last session in the file `<userDir>/claude-agent/<node id>.session`.
-A deploy, a restart and a close do not delete it. New chat in the popup deletes it.
-A cold start with no note and with this file starts with the text
+A deploy and a restart do not delete it. A close turn and New chat in the popup delete it.
+A cold start with no note and with this file (the last session had no close turn) starts with the text
 `You have no note of your earlier session. The record of that session is the file ~/.claude/projects/*/<id>.jsonl.`
 and more words that tell the agent to read only the text of the user and of the assistant.
 The node does not read the record. The agent reads it.

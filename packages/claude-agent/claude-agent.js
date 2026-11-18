@@ -320,7 +320,11 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
         if (run.ended) return false;
         run.ended = true;
         clearTimeout(run.timer);
-        if (run.life === 'close') dropSession();
+        if (run.life === 'close') {
+            // A close turn ended the session: the next start has the note or nothing, and no record hint
+            fs.rmSync(sessionPath, { force: true });
+            dropSession();
+        }
         settle(run, 'The run has ended. No answer comes.', true);
         if (run.wake) run.wake();
         if (run.query) run.query.close();

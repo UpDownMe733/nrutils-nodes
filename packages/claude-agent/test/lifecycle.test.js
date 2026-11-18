@@ -253,12 +253,12 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         await ended('empty', 2);
         await waitFor(async () => (await held()) === 0, 5000, 'cold');
         assert.equal(fs.existsSync(notePath('empty')), false);
+        assert.equal(fs.existsSync(sessionPath('empty')), false, 'a close deletes the session file');
         await waitFor(async () => lifeLines('empty').includes('no note'), 5000, 'no note');
         await injectNode('i-empty-1');
         const got = JSON.parse((await results('empty', 2))[1].payload);
-        assert.equal(got.prompt, RECORD_PREFIX('fake-session') + 'next', 'no note and a session file');
+        assert.equal(got.prompt, 'next', 'no note and no hint after a close turn');
         assert.equal(got.resume, null);
-        await waitFor(async () => lifeLines('empty').includes('new session with the record of the last session'), 5000, 'new session with the record');
         await idle('empty');
         await fire();
         await ended('empty', 4);
@@ -276,7 +276,7 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         await fire();
         await ended('rec', 2);
         await waitFor(async () => (await held()) === 0, 5000, 'cold');
-        assert.equal(fs.readFileSync(sessionPath('rec'), 'utf8'), 'fake-session', 'a close keeps the file');
+        assert.equal(fs.existsSync(sessionPath('rec')), false, 'a close deletes the file');
         fs.writeFileSync(notePath('rec'), 'my note');
         fs.writeFileSync(sessionPath('rec'), 'older-id');
         await injectNode('i-rec-1');
