@@ -35,14 +35,25 @@ function cleanName(file) {
     return name || 'file';
 }
 
-// The first heading of a markdown or HTML file, else ''.
+// The first heading of a markdown or HTML file, else ''. The code uses plain string search: no pattern can run for a long time.
 function headingOf(file, data) {
     const text = data.subarray(0, 64 * 1024).toString('utf8');
     const type = typeOf(file);
-    let m = null;
-    if (type === 'text/markdown') m = /^#{1,6}[ \t]+(.+?)[ \t#]*$/m.exec(text);
-    else if (type === 'text/html') m = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text) || /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(text);
-    return m ? m[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() : '';
+    const clean = (t) => t.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    if (type === 'text/markdown') {
+        const m = /^#{1,6}[ \t]+(.+)$/m.exec(text);
+        return m ? m[1].replace(/[ \t#]+$/, '').trim() : '';
+    }
+    if (type === 'text/html') {
+        const lower = text.toLowerCase();
+        for (const tag of ['title', 'h1']) {
+            const open = lower.indexOf('<' + tag);
+            const start = open < 0 ? -1 : lower.indexOf('>', open);
+            const end = start < 0 ? -1 : lower.indexOf('</' + tag, start);
+            if (end >= 0) return clean(text.slice(start + 1, end).replace(/<[^>]*>/g, ''));
+        }
+    }
+    return '';
 }
 
 function pickEntry(files, entry) {
@@ -56,8 +67,8 @@ function pickEntry(files, entry) {
 }
 
 function createStore(dir) {
-    fs.mkdirSync(path.join(dir, 'blobs'), { recursive: true });
-    fs.mkdirSync(path.join(dir, 'records'), { recursive: true });
+    // Only the Node-RED user can read the store: the agent users must not read the artifacts of other agents.
+    for (const sub of ['', 'blobs', 'records']) fs.mkdirSync(path.join(dir, sub), { recursive: true, mode: 0o700 });
     const keyFile = path.join(dir, 'key');
     if (!fs.existsSync(keyFile)) writeAtomic(keyFile, crypto.randomBytes(32), 0o600);
     const key = fs.readFileSync(keyFile);
@@ -74,9 +85,9 @@ function createStore(dir) {
     async function writeBlob(sha, data) {
         const file = blobPath(sha);
         if (fs.existsSync(file)) return;
-        await fs.promises.mkdir(path.dirname(file), { recursive: true });
+        await fs.promises.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
         const tmp = `${file}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-        await fs.promises.writeFile(tmp, data);
+        await fs.promises.writeFile(tmp, data, { mode: 0o600 });
         await fs.promises.rename(tmp, file);
     }
 
@@ -99,8 +110,9 @@ function createStore(dir) {
         let record = records.get(id);
         const list = files.map((f) => ({ path: f.path, sha256: f.sha256, size: f.data.length, type: typeOf(f.path) }));
         const last = record && record.versions[record.versions.length - 1];
-        if (last && last.entry === entry && last.title === title && JSON.stringify(last.files) === JSON.stringify(list)) {
-            return { record, version: last, unchanged: true };
+        const open = record && !record.deleted && [...record.versions].reverse().find(active);
+        if (open && open.entry === entry && open.title === title && JSON.stringify(open.files) === JSON.stringify(list)) {
+            return { record, version: open, unchanged: true };
         }
         if (!record) record = { id, name, owner: {}, deleted: null, versions: [] };
         record.owner = { address: input.address, nodeId: input.nodeId };
@@ -208,9 +220,9 @@ function createStore(dir) {
     }
 
     // The bytes of all blobs: the files of the bin count, because they stay for 30 days.
-    const size = () => blobs().reduce((sum, sha) => sum + fs.statSync(blobPath(sha)).size, 0);
+    const totalBytes = () => blobs().reduce((sum, sha) => sum + fs.statSync(blobPath(sha)).size, 0);
 
-    return { key, publish, list, get, version, file, blobPath, idOf, dir, remove, restore, purge, size };
+    return { key, publish, list, get, version, file, blobPath, idOf, dir, remove, restore, purge, totalBytes };
 }
 
 module.exports = { createStore, NAME_RULE };

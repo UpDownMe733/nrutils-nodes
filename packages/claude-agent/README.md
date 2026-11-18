@@ -90,7 +90,7 @@ Each run has the tool `publish({ path, name?, title?, entry?, note? })`. The age
 The node copies the files to the store when the tool runs. A publish of equal content makes no new version.
 The node reads the files with the rights of the agent (`tar` run by `agentExec`, or by Node-RED when there is no `launcher`).
 It stops on a symbolic link, a name outside the folder, and on more bytes or files than the limits.
-Each publish gives the event `artifact` and the comms topic `claude-agent/artifacts`. The admin API `GET /claude-agent/artifacts` gives `{ items, total }`: the artifacts, newest first, and the bytes in the store.
+Each publish gives the event `artifact` and the comms topic `claude-agent/artifacts`. The admin API `GET /claude-agent/artifacts` gives `{ items, totalBytes }`: the artifacts, newest first, and the bytes of all files in the store.
 `DELETE /claude-agent/artifacts/<id>` (the artifact) and `DELETE .../<id>/<n>` (one version) move to the bin. `POST .../<id>/restore` and `POST .../<id>/<n>/restore` undo it.
 After 30 days in the bin, the node clears the version and removes the files that no other version uses. It checks at start and then each hour.
 

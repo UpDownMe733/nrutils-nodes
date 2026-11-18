@@ -88,6 +88,17 @@ describe('tar reader', () => {
         buf[0] ^= 1;
         assert.throws(() => read(buf), /not valid/);
     });
+    it('stops on a name two times, a file below a file, and a control character', () => {
+        assert.throws(() => read(archive(entry('a', { body: 'x' }), entry('a', { body: 'y' }))), /two times/);
+        assert.throws(() => read(archive(entry('a', { body: 'x' }), entry('a/b', { body: 'y' }))), /below the file/);
+        assert.throws(() => read(archive(entry('a/b', { body: 'y' }), entry('a', { body: 'x' }))), /two times/);
+        assert.throws(() => read(archive(entry('a\nb', { body: 'x' }))), /not allowed/);
+        assert.throws(() => read(archive(entry('a\\b', { body: 'x' }))), /not allowed/);
+    });
+    it('counts the bytes of a header that is not a file', () => {
+        const meta = Buffer.concat([entry('pax', { type: 'x', body: 'x'.repeat(600) }), entry('pax', { type: 'x', body: 'x'.repeat(600) })]);
+        assert.throws(() => read(meta, { maxBytes: 1000, maxFiles: 5 }), (e) => e.limit === 'bytes');
+    });
     it('stops on a stream that is not complete', () => assert.throws(() => read(entry('a', { body: 'x' }).subarray(0, 600)), /not complete/));
     it('stops at the limits', () => {
         const two = archive(entry('a', { body: 'x'.repeat(10) }), entry('b', { body: 'x'.repeat(10) }));
@@ -185,11 +196,32 @@ describe('store', () => {
         assert.equal(store.list({ q: 'purge' }).length, 0);
         store.purge(2000 + 31 * day);
         assert.equal(fs.existsSync(shared), false);
-        assert.ok(store.size() > 0);
+        assert.ok(store.totalBytes() > 0);
+    });
+    it('makes a new version when the last version is in the bin', async () => {
+        const first = await store.publish(input([['n.txt', 'one']], { name: 'bin-test' }));
+        store.remove(first.record.id, 1);
+        const again = await store.publish(input([['n.txt', 'one']], { name: 'bin-test' }));
+        assert.equal(again.unchanged, false);
+        assert.equal(again.version.n, 2);
+    });
+    it('finds a title in linear time', async () => {
+        const start = Date.now();
+        const r = await store.publish(input([['x.md', '# ' + '#'.repeat(60000) + 'x']], { name: 'redos-md' }));
+        await store.publish(input([['x.html', '<title'.repeat(9000)]], { name: 'redos-html' }));
+        assert.ok(Date.now() - start < 1000);
+        assert.equal(r.version.title.length > 0, true);
+        const html = await store.publish(input([['y.html', '<HTML><TITLE lang="x">A <b>big</b> page</TITLE>']], { name: 'title-html' }));
+        assert.equal(html.version.title, 'A big page');
+    });
+    it('makes the store folders private', () => {
+        assert.equal(fs.statSync(path.join(dir, 'store')).mode & 0o777, 0o700);
+        const r = store.get(store.idOf('n1', 'report.md'));
+        assert.equal(fs.statSync(store.blobPath(r.versions[0].files[0].sha256)).mode & 0o777, 0o600);
     });
     it('reads the records again at the next start and keeps the key', () => {
         const again = createStore(path.join(dir, 'store'));
-        assert.equal(again.list().length, 2, 'the purged artifact is not in the list');
+        assert.equal(again.list().length, 6, 'the deleted artifact is not in the list');
         assert.ok(again.key.equals(store.key));
         assert.equal(fs.statSync(path.join(dir, 'store', 'key')).mode & 0o777, 0o600);
     });
@@ -266,8 +298,10 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
 
     before(async () => {
         userDir = scratch();
+        // The work root is a symbolic link: the folder of a run is a real path
+        fs.mkdirSync(path.join(userDir, 'real', 'project', 'site'), { recursive: true });
         workRoot = path.join(userDir, 'work');
-        fs.mkdirSync(path.join(workRoot, 'project', 'site'), { recursive: true });
+        fs.symlinkSync(path.join(userDir, 'real'), workRoot);
         fs.writeFileSync(path.join(workRoot, 'project', 'report.md'), '# The report\nbody');
         fs.writeFileSync(path.join(workRoot, 'project', 'site', 'index.html'), '<h1>Site</h1>');
         fs.writeFileSync(path.join(userDir, 'secret.txt'), 'secret');
@@ -287,7 +321,7 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
             uiHost: '127.0.0.1', uiPort: ${port}, flowFile: 'flows.json', credentialSecret: false,
             diagnostics: { enabled: false }, telemetry: { enabled: false },
             claudeAgent: { launcher: ${JSON.stringify(FAKE)}, agentExec: ${JSON.stringify(path.join(userDir, 'exec.sh'))}, workRoot: ${JSON.stringify(workRoot)},
-                artifacts: { viewPort: 0 } }
+                artifacts: { viewPort: 1, viewUrl: 'http://view.test/' } }
         };`);
         child = spawn(process.execPath, [require.resolve('node-red/red.js'), '-u', userDir, '-s', path.join(userDir, 'settings.js')], { stdio: ['ignore', 'pipe', 'pipe'] });
         child.stdout.on('data', (d) => { log += d; });
@@ -333,7 +367,7 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal(events[0].payload.artifact.type, 'text/markdown');
         await waitFor(async () => comms.length, 5000, 'comms topic');
         assert.equal(comms[0].record.name, 'report.md');
-        const { items: list, total } = await (await api('/claude-agent/artifacts')).json();
+        const { items: list, totalBytes: total } = await (await api('/claude-agent/artifacts')).json();
         assert.equal(list.length, 1);
         assert.ok(total > 0);
         assert.equal(list[0].title, 'The report');
@@ -373,10 +407,15 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal((await api(`${url}/1/restore`, { method: 'POST' })).status, 404);
         assert.equal((await (await api('/claude-agent/artifacts')).json()).items.some((i) => i.id === item.id), true);
     });
-    it('gives no view ticket when the viewer is off', async () => {
+    it('gives a view ticket for an open version and a 404 for others', async () => {
         const [item] = (await (await api('/claude-agent/artifacts')).json()).items;
         const res = await api(`/claude-agent/artifacts/${item.id}/1/ticket`, { method: 'POST' });
-        assert.equal(res.status, 409);
+        assert.equal(res.status, 200);
+        const { url, download } = await res.json();
+        const t = /^http:\/\/view\.test\/v\/([^/]+)\/$/.exec(url)[1];
+        assert.equal(download, `http://view.test/v/${t}/download`);
+        const key = fs.readFileSync(path.join(userDir, 'claude-agent', 'artifacts', 'key'));
+        assert.deepEqual(ticket.verify(key, t), { id: item.id, n: 1 });
         assert.equal((await api(`/claude-agent/artifacts/${item.id}/9/ticket`, { method: 'POST' })).status, 404);
         assert.equal((await api('/claude-agent/artifacts/0000000000000000')).status, 404);
     });

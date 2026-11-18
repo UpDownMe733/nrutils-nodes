@@ -9,6 +9,7 @@
 // The artifacts of the runtime: the store, the publish function and the admin API.
 // One runtime object for each Node-RED runtime. See docs/artifacts.md.
 
+const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { agentSettings } = require('../shared');
@@ -17,6 +18,7 @@ const { tarReader } = require('./tar');
 const ticket = require('./ticket');
 
 const MB = 1024 * 1024;
+const TIME_LIMIT_MS = 120 * 1000;
 const runtimes = new WeakMap();     // RED.httpAdmin to runtime
 
 // Read a file or a folder with the rights of the agent. dir: the folder that holds it. base: its name.
@@ -34,9 +36,11 @@ function readFiles(settings, { sandbox, dir, base }) {
         const reader = tarReader({ maxBytes, maxFiles });
         let errText = '';
         let failed = null;
+        const timer = setTimeout(() => stop(new Error('the read of the files takes too long')), TIME_LIMIT_MS);
         const stop = (err) => {
             if (failed) return;
             failed = err;
+            clearTimeout(timer);
             child.kill('SIGKILL');
             reject(err);
         };
@@ -53,6 +57,7 @@ function readFiles(settings, { sandbox, dir, base }) {
         });
         child.on('error', (err) => stop(new Error(`cannot start ${command[0]}: ${err.message}`)));
         child.on('close', (code) => {
+            clearTimeout(timer);
             if (failed) return;
             if (code) return stop(new Error(errText.trim().split('\n')[0] || `tar failed with code ${code}`));
             try {
@@ -75,13 +80,15 @@ function createRuntime(RED) {
     };
 
     // Tell the editors about a record. The comms of a node reach only that node, so this topic is global.
-    const announce = (record) => RED.comms.publish('claude-agent/artifacts', { record });
+    const announce = (record) => RED.comms.publish('claude-agent/artifacts', { record, totalBytes: getStore().totalBytes() });
 
     // The publish tool of a run. ctx: { nodeId, address, cwd, sandbox, run: { runId, sessionId } }.
     // args: { path, name, title, entry, note }. Gives { title, name, version, unchanged, event }, or throws an error with the reason.
     async function publish(ctx, args) {
         const p = ctx.sandbox ? path.posix : path;
-        const root = settings.workRoot.replace(/\/$/, '');
+        let root = settings.workRoot.replace(/\/$/, '');
+        // The run folder is a real path, so the root must be one also
+        if (!ctx.sandbox) try { root = fs.realpathSync(root); } catch { /* the check below fails */ }
         const target = p.resolve(ctx.cwd, String(args.path || ''));
         if (!args.path || (target !== root && !target.startsWith(root + '/'))) throw new Error(`the path "${args.path}" is not in ${settings.workRoot}`);
         if (args.name !== undefined && !NAME_RULE.test(args.name)) throw new Error(`the name "${args.name}" is not valid: use a-z, 0-9, ".", "_" and "-", 64 characters at most`);
@@ -111,7 +118,7 @@ function createRuntime(RED) {
     const base = '/claude-agent/artifacts';
     const missing = (res) => res.status(404).json({ error: 'not found' });
     const write = RED.auth.needsPermission('claude-agent.write');
-    RED.httpAdmin.get(base, read, (req, res) => res.json({ items: getStore().list(req.query), total: getStore().size() }));
+    RED.httpAdmin.get(base, read, (req, res) => res.json({ items: getStore().list(req.query), totalBytes: getStore().totalBytes() }));
     RED.httpAdmin.get(`${base}/:id`, read, (req, res) => {
         const record = getStore().get(req.params.id);
         return record ? res.json(record) : missing(res);

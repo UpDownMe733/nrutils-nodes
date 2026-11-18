@@ -62,7 +62,8 @@ function pax(data) {
 
 // A name in the archive: relative, with no ".." part and no NUL byte. Gives the clean name.
 function cleanName(name) {
-    if (!name || name.includes('\0') || name.startsWith('/')) throw fail(`the name "${name}" is not allowed`);
+    // The names go in URLs, zip entries and headers: no control character and no backslash
+    if (!name || /[\x00-\x1f\x7f\\]/.test(name) || name.startsWith('/')) throw fail(`the name "${name}" is not allowed`);
     const parts = name.split('/').filter((p) => p && p !== '.');
     if (!parts.length || parts.includes('..')) throw fail(`the name "${name}" is not allowed`);
     return parts.join('/');
@@ -84,6 +85,8 @@ function tarReader({ maxBytes, maxFiles }) {
     let count = 0;
     let next = {};              // pax and GNU fields for the next entry
     const files = [];
+    const fileNames = new Set();
+    const folderNames = new Set();
     let folder = false;
 
     function header(h) {
@@ -97,6 +100,8 @@ function tarReader({ maxBytes, maxFiles }) {
         let size = number(h, 124, 12);
         if (type === 'x' || type === 'g' || type === 'L') {
             if (size > META_LIMIT) throw fail('the tar header is not valid');
+            total += size;
+            if (total > maxBytes) throw fail('too large', 'bytes');
             return { type, name, size };
         }
         if (type !== '0' && type !== '5') throw fail(`the entry "${name}" is not a plain file or a folder`);
@@ -109,6 +114,23 @@ function tarReader({ maxBytes, maxFiles }) {
         total += size;
         if (total > maxBytes) throw fail('too large', 'bytes');
         return { type, name, size };
+    }
+
+    // A path must be new, and no file may be the folder of another path. A folder name may come two times.
+    function claim(name, isFolder) {
+        const parts = name.split('/');
+        for (let i = 1; i < parts.length; i++) {
+            const prefix = parts.slice(0, i).join('/');
+            if (fileNames.has(prefix)) throw fail(`the name "${name}" is below the file "${prefix}"`);
+            folderNames.add(prefix);
+        }
+        if (isFolder) {
+            if (fileNames.has(name)) throw fail(`the name "${name}" is two times in the archive`);
+            folderNames.add(name);
+        } else {
+            if (fileNames.has(name) || folderNames.has(name)) throw fail(`the name "${name}" is two times in the archive`);
+            fileNames.add(name);
+        }
     }
 
     function finish() {
@@ -126,6 +148,7 @@ function tarReader({ maxBytes, maxFiles }) {
             next.name = text(data, 0, data.length);
         } else if (entry.type !== 'g') {
             const name = cleanName(entry.name);
+            claim(name, entry.type === '5');
             if (entry.type === '5') folder = true;
             else files.push({ path: name, data });
         }
