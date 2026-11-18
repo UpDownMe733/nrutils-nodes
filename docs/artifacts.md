@@ -228,7 +228,7 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 - **Open:** one click on the row. The editor theme goes in the URL.
 - **Versions:** a list, newest first: "Version 3 · newest · 18 Nov 14:02". One tap opens an older version.
 - **Compare:** "Compare with", with the version before as the default. Side by side on a wide screen, stacked on a narrow screen.
-- **Full screen:** the viewer page opens in a new browser tab. The page has no Close button, because `window.close()` does nothing on a share link.
+- **Full screen:** the viewer page opens in a new browser tab. The viewer page has no Close button. On a share link, `window.close()` does nothing.
 - **Download:** one click, on the download URL of the view server (section 6). The file name is `<title>-v3.<ext>`. A folder downloads as `<title>-v3.zip`.
 - **Share:** a panel in the viewer area. It shows "Anyone with the link can open it." and two choices:
   - "This version (3)" (default) or "Always the newest version". While the second choice is selected, the warning of section 7 shows as one line of text below the choices, in the warning colour of the editor. It is not a dialog, and it does not block "Create link".
