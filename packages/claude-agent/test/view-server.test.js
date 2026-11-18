@@ -407,6 +407,25 @@ describe('the renderers', () => {
         assert.deepEqual(ops(['x', 'a', 'b'], ['a', 'b', 'y']), ['d1: x', 's2:1 a', 's3:2 b', 'a:3 y']);
     });
 
+    it('lays out the diff with a head, the changes, 3 same lines of context and hidden runs', () => {
+        const A = Array.from({ length: 20 }, (_, i) => 'l' + i), B = A.slice();
+        B[10] = 'x';
+        B.push('y', 'z');
+        const ops = viewer.diff(A, B);
+        const show = (narrow) => JSON.parse(JSON.stringify(viewer.diffLayout(ops, narrow))).map(i => i.head ? 'head'
+            : i.more ? 'more ' + i.more[0].a + '-' + i.more[i.more.length - 1].a
+            : i.row.map(o => o ? o.op[0] + (o.a || o.b) : '_').join(' '));
+        assert.deepEqual(show(false), ['head', 'more 1-7', 's8 s8', 's9 s9', 's10 s10', 'd11 a11', 's12 s12', 's13 s13', 's14 s14',
+            'more 15-17', 's18 s18', 's19 s19', 's20 s20', '_ a21', '_ a22']);
+        assert.deepEqual(show(true).slice(4, 7), ['s10', 'd11', 'a11']);
+        assert.equal(show(true).length, 16);
+        assert.deepEqual(JSON.parse(JSON.stringify(viewer.diffLayout(viewer.diff(['a'], ['b']), false))).length, 2);
+    });
+
+    it('gives the base path of the version for the other ticket of a compare', () => {
+        assert.equal(viewer.base, '/v/T/');
+    });
+
     it('gives no diff when the changed part is too large for the table', () => {
         const a = Array.from({ length: 2001 }, (_, i) => 'a' + i), b = Array.from({ length: 2001 }, (_, i) => 'b' + i);
         assert.equal(viewer.diff(a, b), null);
