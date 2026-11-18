@@ -272,7 +272,7 @@ describe('claude-agent in a real Node-RED', { timeout: 60000 }, () => {
         const ok = { mediaType: 'image/png', data: 'iVBORw0KGgo=' };
         assert.match((await editor('run', 'start', { text: 'x', images: [{ mediaType: 'image/svg+xml', data: 'AAAA' }] })).error, /png, jpeg, gif or webp/);
         assert.match((await editor('run', 'start', { text: 'x', images: [{ mediaType: 'image/png', data: 'not base64!' }] })).error, /base64/);
-        assert.match((await editor('run', 'start', { text: 'x', images: [{ mediaType: 'image/png', data: 'A'.repeat(7 * 1024 * 1024) }] })).error, /5 MB/);
+        assert.match((await editor('run', 'start', { text: 'x', images: [{ mediaType: 'image/png', data: 'A'.repeat(4.2e6) }] })).error, /3 MB/);
         assert.match((await editor('run', 'start', { text: 'x', images: Array(6).fill(ok) })).error, /5 pictures/);
         assert.match((await editor('run', 'start', { text: '  ' })).error, /type a message/);
     });

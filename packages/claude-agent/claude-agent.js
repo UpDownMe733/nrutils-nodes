@@ -19,9 +19,10 @@ const { events, agentSettings, loadSdk, weightedCount, weightedText } = require(
 // The models that msg.model can choose. A different value uses the model of the node.
 const MSG_MODELS = new Set(['haiku', 'sonnet', 'opus', 'fable']);
 const LOG_SIZE = 200;
-// The pictures that the popup pastes: the types, the size of one picture (the limit of the API) and the number for one message
+// The pictures that the popup pastes: the types, the size of all pictures of one message and the number of them.
+// The editor sends a message in an HTTP request, and Node-RED refuses a request above 5 MB: 3 MB of pictures are 4 MB of base64.
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
-const IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_BYTES = 3 * 1024 * 1024;
 const IMAGE_COUNT = 5;
 const TEXT_SIZE = 300;
 const INTERRUPTED = ['aborted_streaming', 'aborted_tools'];
@@ -38,13 +39,14 @@ const CHAT_KINDS = new Set(['prompt', 'message', 'answer', 'text', 'question', '
 function checkImages(images) {
     if (images == null) return [];
     if (!Array.isArray(images) || images.length > IMAGE_COUNT) throw new Error(`a message takes ${IMAGE_COUNT} pictures at most`);
-    return images.map((i) => {
+    const list = images.map((i) => {
         if (!i || !IMAGE_TYPES.has(i.mediaType) || typeof i.data !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(i.data)) {
             throw new Error('a picture must be png, jpeg, gif or webp, as base64');
         }
-        if (i.data.length * 0.75 > IMAGE_BYTES) throw new Error('a picture is larger than 5 MB');
         return { mediaType: i.mediaType, data: i.data };
     });
+    if (list.reduce((sum, i) => sum + i.data.length * 0.75, 0) > IMAGE_BYTES) throw new Error('the pictures are larger than 3 MB');
+    return list;
 }
 // The life cycle of the session mode agent
 const CLOSE_PROMPT = 'Write what a new session of you must know to continue. If there is nothing, write nothing. 200 words maximum.';
