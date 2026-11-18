@@ -421,4 +421,41 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal((await api(`/claude-agent/artifacts/${item.id}/9/ticket`, { method: 'POST' })).status, 404);
         assert.equal((await api('/claude-agent/artifacts/0000000000000000')).status, 404);
     });
+    it('gives a ticket for a viewer on another origin, and refuses one on the origin of the editor', async () => {
+        const [item] = (await (await api('/claude-agent/artifacts')).json()).items;
+        const url = `/claude-agent/artifacts/${item.id}/1/ticket`;
+        const post = (host) => new Promise((resolve, reject) => {
+            const req = require('http').request(base + url, { method: 'POST', headers: { host } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode)); });
+            req.on('error', reject);
+            req.end();
+        });
+        assert.equal(await post(new URL(base).host), 200);
+        assert.equal(await post('view.test'), 409);
+        assert.match(log, /viewer URL has the origin of the editor/);
+    });
+});
+
+describe('store publish after delete and purge', () => {
+    let dir, store;
+    const input = (text) => ({ nodeId: 'n1', address: 'team/agent', defaultName: 'Report.md', files: [{ path: 'Report.md', data: Buffer.from(text) }] });
+    before(() => { dir = scratch(); store = createStore(path.join(dir, 'store')); });
+    after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+    it('a publish to a deleted file makes it open again', async () => {
+        const first = await store.publish(input('# One'));
+        store.remove(first.record.id);
+        assert.equal(store.list().length, 0);
+        const second = await store.publish(input('# Two'));
+        assert.equal(second.version.n, 2);
+        assert.equal(store.list().length, 1);
+        assert.equal(store.list()[0].version, 2);
+    });
+    it('a purge during a publish keeps the new blob', async () => {
+        const first = await store.publish(input('# Three'));
+        store.remove(first.record.id, undefined, 1000);
+        const pending = store.publish(input('# Three'));
+        store.purge(1000 + 31 * 86400000);
+        const r = await pending;
+        assert.equal(fs.readFileSync(store.blobPath(r.version.files[0].sha256), 'utf8'), '# Three');
+    });
 });

@@ -134,6 +134,7 @@
     function button(icon, label, title) {
         const b = make('button', '', 'red-ui-button red-ui-button-small');
         b.type = 'button';
+        b.setAttribute('aria-label', label);
         if (icon) b.appendChild(make('i', '', 'fa ' + icon));
         if (label) b.appendChild(make('span', (icon ? ' ' : '') + label));
         if (title) b.title = title;
@@ -1049,7 +1050,7 @@
 .caf-narrow.caf-open .caf-left,.caf-narrow:not(.caf-open) .caf-pane{display:none}
 .caf-row{display:flex;flex-direction:column;justify-content:center;box-sizing:border-box;min-height:44px;padding:4px 8px 4px 14px;position:relative;cursor:pointer;border-bottom:1px solid var(--red-ui-secondary-border-color)}
 .caf-row:hover,.caf-row:focus-visible{background:var(--red-ui-secondary-background);outline:none}
-.caf-row.caf-on{background:var(--red-ui-secondary-background)}
+.caf-row.caf-on{background:var(--red-ui-list-item-background-selected);box-shadow:inset 3px 0 var(--red-ui-text-color-link)}
 .caf-line1{display:flex;align-items:center;gap:6px;min-width:0}
 .caf-line1 span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .caf-line2{font-size:11px;color:var(--red-ui-secondary-text-color);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1057,13 +1058,17 @@
 .caf-chip{flex:none;font-size:10px;padding:0 6px;border-radius:8px;border:1px solid var(--red-ui-secondary-border-color);color:var(--red-ui-secondary-text-color)}
 .caf-gone{flex-direction:row;align-items:center;gap:8px;cursor:default;color:var(--red-ui-secondary-text-color)}
 .caf-filters{flex:none;display:flex;flex-wrap:wrap;gap:4px;padding-bottom:6px}
-.caf-filters input,.caf-filters select{flex:1 1 90px;min-width:0;width:auto;height:28px;margin:0;font-size:12px}
+.caf-filters input,.caf-filters select{flex:1 1 90px;min-width:0;width:auto;box-sizing:border-box;height:28px;margin:0;font-size:12px}
+.caf-filters input{flex:1 1 100%}
 .caf-store{flex:none;padding:8px;font-size:11px;color:var(--red-ui-secondary-text-color)}
 .caf-head{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-bottom:6px}
-.caf-title{flex:1 1 100%;font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.caf-head select{flex:0 1 auto;width:auto;max-width:100%;height:32px;margin:0}
+.caf-top{flex:1 1 100%;display:flex;align-items:center;gap:6px;min-width:0}
+.caf-title{flex:1;min-width:0;font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.caf-head select{flex:1 1 0;min-width:0;width:auto;box-sizing:border-box;height:32px;margin:0}
 .caf .red-ui-button .caf-label{display:inline !important}
-.caf-head .red-ui-button,.caf-confirm .red-ui-button{min-height:44px;margin:0}
+.caf.caf-tight .caf-head .red-ui-button .caf-label{display:none !important}
+.caf-head .red-ui-button{box-sizing:border-box;height:32px;min-height:32px;min-width:32px;margin:0}
+.caf-confirm .red-ui-button{min-height:44px;margin:0}
 .caf-head .caf-back{flex:none}
 .caf-bar{flex:none;display:flex;align-items:center;gap:6px;padding-bottom:6px}
 .caf-menu{position:absolute;z-index:5;display:flex;flex-direction:column;background:var(--red-ui-primary-background);border:1px solid var(--red-ui-secondary-border-color);border-radius:4px}
@@ -1103,13 +1108,13 @@
         document.head.appendChild(style);
     }
 
-    // One decimal, the unit B, KB, MB or GB
+    // The unit B, KB, MB or GB. Bytes have no decimal, the other units have one.
     function sizeText(bytes) {
         const units = ['B', 'KB', 'MB', 'GB'];
         let n = bytes;
         let i = 0;
         while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-        return n.toFixed(1) + ' ' + units[i];
+        return n.toFixed(i ? 1 : 0) + ' ' + units[i];
     }
 
     function ago(time) {
@@ -1257,7 +1262,7 @@
             owners = h('select');
             types = h('select');
             const time = h('select');
-            for (const [v, t] of [['', 'All'], ['today', 'Today'], ['7', '7 days'], ['30', '30 days']]) time.appendChild(Object.assign(h('option', '', t), { value: v }));
+            for (const [v, t] of [['', 'All files'], ['today', 'Today'], ['7', '7 days'], ['30', '30 days']]) time.appendChild(Object.assign(h('option', '', t), { value: v }));
             owners.addEventListener('change', () => { filter.owner = owners.value; render(); });
             types.addEventListener('change', () => { filter.type = types.value; render(); });
             time.addEventListener('change', () => { filter.time = time.value; render(); });
@@ -1270,11 +1275,13 @@
         root.appendChild(left);
         root.appendChild(pane);
 
-        function fillSelect(select, values, first) {
+        const TYPE_NAME = { text: 'Text', image: 'Image', audio: 'Audio', video: 'Video', application: 'Other' };
+
+        function fillSelect(select, values, first, name) {
             const keep = select.value;
             select.textContent = '';
             select.appendChild(Object.assign(h('option', '', first), { value: '' }));
-            for (const v of values) select.appendChild(Object.assign(h('option', '', v), { value: v }));
+            for (const v of values) select.appendChild(Object.assign(h('option', '', name ? name[v] || v : v), { value: v }));
             select.value = values.includes(keep) ? keep : '';
         }
 
@@ -1310,12 +1317,13 @@
             if (opts.all) {
                 const all = visible(opts);
                 fillSelect(owners, [...new Set(all.map((i) => i.owner))], 'Agent');
-                fillSelect(types, [...new Set(all.map((i) => i.type.split('/')[0]).filter(Boolean))], 'Type');
-                store.textContent = 'Files use ' + sizeText(state.total);
+                fillSelect(types, [...new Set(all.map((i) => i.type.split('/')[0]).filter(Boolean))], 'Type', TYPE_NAME);
+                store.textContent = state.loaded ? 'Files use ' + sizeText(state.total) : '';
             }
             const wide = root.clientWidth >= WIDE;
             root.classList.toggle('caf-narrow', !wide);
             root.classList.toggle('caf-open', !!cur.id);
+            root.classList.toggle('caf-tight', pane.clientWidth < 420);
             if (cur.id && !state.items.has(cur.id)) close();
         }
 
@@ -1336,7 +1344,8 @@
                 return close();
             }
             const versions = cur.record.versions.filter((v) => !v.deleted && !v.purged);
-            cur.n = n || versions[versions.length - 1].n;
+            if (!versions.length) return close();
+            cur.n = (versions.find((v) => v.n === n) || versions[versions.length - 1]).n;
             drawPane();
             render();
         }
@@ -1344,7 +1353,8 @@
         async function frames(n) {
             try {
                 const t = await request('POST', API + '/' + cur.id + '/' + n + '/ticket');
-                return t;
+                // A viewer on the origin of the editor could read the editor
+                return new URL(t.url, location.href).origin === location.origin ? null : t;
             } catch (err) {
                 return null;
             }
@@ -1367,11 +1377,13 @@
             const head = h('div', 'caf-head');
             const back = btn('fa-chevron-left', 'Files', 'caf-back');
             back.addEventListener('click', close);
-            if (root.classList.contains('caf-narrow')) head.appendChild(back);
-            head.appendChild(h('div', 'caf-title', v.title));
+            const top = h('div', 'caf-top');
+            if (root.classList.contains('caf-narrow')) top.appendChild(back);
+            top.appendChild(h('div', 'caf-title', v.title));
+            head.appendChild(top);
             const pick = h('select');
             for (const x of versions) {
-                pick.appendChild(Object.assign(h('option', '', 'Version ' + x.n + (x === versions[0] ? ' · newest' : '') + ' · ' + dateText(x.time)), { value: x.n }));
+                pick.appendChild(Object.assign(h('option', '', 'Version ' + x.n + ' · ' + dateText(x.time) + (x === versions[0] ? ' (newest)' : '')), { value: x.n }));
             }
             pick.value = v.n;
             pick.addEventListener('change', () => { cur.n = Number(pick.value); cur.compare = null; drawPane(); });
@@ -1487,7 +1499,7 @@
         line.appendChild(h('span', 'caf-chip', a.version > 1 ? 'Version ' + a.version : 'New file'));
         line.appendChild(h('span', 'caf-chip', new Date(e.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })));
         line.addEventListener('click', () => onOpen(a.id, a.version));
-        line.addEventListener('keydown', (k) => { if (k.key === 'Enter') onOpen(a.id, a.version); });
+        line.addEventListener('keydown', (k) => { if (k.key === 'Enter' || k.key === ' ') { k.preventDefault(); onOpen(a.id, a.version); } });
         return line;
     }
 
@@ -1712,11 +1724,10 @@
     <p>The node keeps the id of the last session in the file <code>&lt;userDir&gt;/claude-agent/&lt;node id&gt;.session</code>. A deploy and a restart do not delete it. A close turn and New chat delete it. A new session with no note, and with this file (the last session had no close turn), starts with a text that tells the agent to read the record of its last session (<code>~/.claude/projects/*/&lt;id&gt;.jsonl</code>). The agent reads it, not the node.</p>
     <p>Keep-alive and close turns send nothing on the outputs. The popup shows them as <i>life cycle</i> lines.</p>
 
-    <h3>Artifacts</h3>
-    <p>Each run has the tool <code>publish({ path, name, title, entry, note })</code>. The agent gives a file or a folder to the people with it. <code>path</code> must be in the work root. The same <code>name</code> from the same node makes a new version. A publish of equal content makes no new version.</p>
-    <p>The node reads the files with the rights of the agent: <code>tar</code> reads them. With a launcher, <code>claudeAgent.agentExec</code> in <code>settings.js</code> runs <code>tar</code>. A symbolic link, a name outside the folder, and more than <code>claudeAgent.artifacts.maxBytes</code> (100 MB) or <code>maxFiles</code> (2000) stop the publish with an error. Each publish gives an event of the kind <code>artifact</code>. A delete moves an artifact or a version to the bin. The node removes its files after 30 days. See the README.</p>
-
     <h3>Files</h3>
+    <p>Each run has the tool <code>publish({ path, name, title, entry, note })</code>. The agent gives a file or a folder to the people with it. <code>path</code> must be in the work root. The same <code>name</code> from the same node makes a new version. A publish of equal content makes no new version.</p>
+    <p>The node reads the files with the rights of the agent: <code>tar</code> reads them. With a launcher, <code>claudeAgent.agentExec</code> in <code>settings.js</code> runs <code>tar</code>. A symbolic link, a name outside the folder, and more than <code>claudeAgent.artifacts.maxBytes</code> (100 MB) or <code>maxFiles</code> (2000) stop the publish with an error. Each publish gives an event of the kind <code>artifact</code>. A delete moves a file or a version to the bin. The node removes its files after 30 days. See the README.</p>
+
     <p>Each publish makes a file. The <b>Files</b> tab of the popup lists the files of the node. The <b>Files</b> tab of the sidebar lists the files of all agents, with a search box and the filters Agent and Type. A click on a file opens the viewer. <b>Full screen</b> and <b>Download</b> act on the shown version. <b>More</b> has <b>Compare</b> and <b>Delete</b>. After <b>Delete</b>, <b>Undo</b> shows for 10 seconds. A new file gives a line in the chat and a badge on the node. See the README.</p>
 
     <h3>MQTT inbox</h3>

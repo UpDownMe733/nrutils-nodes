@@ -96,6 +96,9 @@ function createStore(dir) {
     const blobPath = (sha) => path.join(dir, 'blobs', sha.slice(0, 2), sha.slice(2));
     const save = (record) => writeAtomic(path.join(dir, 'records', record.id + '.json'), JSON.stringify(record, null, 1));
 
+    // The sum of the blob sizes. It is null when a blob was added or removed.
+    let bytes = null;
+
     async function writeBlob(sha, data) {
         const file = blobPath(sha);
         if (fs.existsSync(file)) return;
@@ -103,7 +106,11 @@ function createStore(dir) {
         const tmp = `${file}.${crypto.randomBytes(4).toString('hex')}.tmp`;
         await fs.promises.writeFile(tmp, data, { mode: 0o600 });
         await fs.promises.rename(tmp, file);
+        bytes = null;
     }
+
+    // The blobs of the publishes that run now. The purge keeps them.
+    const inflight = new Map();
 
     // A version that people can open: not deleted and not purged.
     const active = (v) => !v.deleted && !v.purged;
@@ -118,8 +125,20 @@ function createStore(dir) {
         const entry = pickEntry(files, input.entry);
         const entryFile = files.find((f) => f.path === entry);
         const title = String(input.title || headingOf(entry, entryFile.data) || path.posix.basename(entry)).slice(0, 200);
-        for (const f of files) await writeBlob(f.sha256, f.data);
-        // From here on the code does not wait: two publishes of one artifact get two version numbers.
+        for (const f of files) inflight.set(f.sha256, (inflight.get(f.sha256) || 0) + 1);
+        try {
+            for (const f of files) await writeBlob(f.sha256, f.data);
+            return publishRecord(input, name, entry, title, files);
+        } finally {
+            for (const f of files) {
+                if (inflight.get(f.sha256) > 1) inflight.set(f.sha256, inflight.get(f.sha256) - 1);
+                else inflight.delete(f.sha256);
+            }
+        }
+    }
+
+    // The record part of publish. It does not wait: two publishes of one artifact get two version numbers.
+    function publishRecord(input, name, entry, title, files) {
         const id = idOf(input.nodeId, name);
         let record = records.get(id);
         const list = files.map((f) => ({ path: f.path, sha256: f.sha256, size: f.data.length, type: typeOf(f.path) }));
@@ -130,6 +149,7 @@ function createStore(dir) {
         }
         if (!record) record = { id, name, owner: {}, deleted: null, versions: [] };
         record.owner = { address: input.address, nodeId: input.nodeId };
+        record.deleted = null;
         const version = { n: last ? last.n + 1 : 1, time: Date.now(), title, note: input.note || '', entry, files: list, run: input.run || null, deleted: null, purged: false };
         record.versions.push(version);
         records.set(id, record);
@@ -219,9 +239,10 @@ function createStore(dir) {
             }
         }
         if (!changed.length) return changed;
-        const used = new Set();
+        const used = new Set(inflight.keys());
         for (const record of records.values()) for (const v of record.versions) for (const f of v.files) used.add(f.sha256);
         for (const sha of blobs()) if (!used.has(sha)) fs.rmSync(blobPath(sha), { force: true });
+        bytes = null;
         return changed;
     }
 
@@ -235,7 +256,7 @@ function createStore(dir) {
     }
 
     // The bytes of all blobs: the files of the bin count, because they stay for 30 days.
-    const totalBytes = () => blobs().reduce((sum, sha) => sum + fs.statSync(blobPath(sha)).size, 0);
+    const totalBytes = () => (bytes ??= blobs().reduce((sum, sha) => sum + fs.statSync(blobPath(sha)).size, 0));
 
     return { key, publish, list, get, record, version, file, blobPath, idOf, dir, remove, restore, purge, totalBytes };
 }

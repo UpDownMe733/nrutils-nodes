@@ -72,11 +72,21 @@ function readFiles(settings, { sandbox, dir, base }) {
 function createRuntime(RED) {
     const settings = agentSettings(RED);
     let store;
+    let warned = false;
     const getStore = () => (store ??= createStore(settings.artifacts.dir));
     const viewUrl = (req) => {
         const { viewPort, viewUrl: url } = settings.artifacts;
         if (!viewPort) return null;
-        return (url || `${req.protocol}://${req.hostname}:${viewPort}`).replace(/\/$/, '');
+        const out = (url || `${req.protocol}://${req.hostname}:${viewPort}`).replace(/\/$/, '');
+        // A viewer on the origin of the editor can read the editor: turn it off
+        let same = false;
+        try { same = new URL(out).origin === `${req.protocol}://${req.get('host')}`; } catch { /* a bad URL fails below */ }
+        if (same) {
+            if (!warned) RED.log.error('claude-agent: the viewer URL has the origin of the editor. The viewer is off. Use another port or host.');
+            warned = true;
+            return null;
+        }
+        return out;
     };
 
     // Tell the editors about a record. The comms of a node reach only that node, so this topic is global.

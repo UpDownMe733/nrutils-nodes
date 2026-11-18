@@ -22,9 +22,9 @@ function fn(name, ...deps) {
 describe('Files script block', () => {
     it('is in the page', () => assert.ok(block));
 
-    it('sizeText gives one decimal and a unit', () => {
+    it('sizeText gives a unit and one decimal for KB and more', () => {
         const sizeText = fn('sizeText');
-        assert.equal(sizeText(0), '0.0 B');
+        assert.equal(sizeText(0), '0 B');
         assert.equal(sizeText(1536), '1.5 KB');
         assert.equal(sizeText(5 * 1024 * 1024), '5.0 MB');
     });
