@@ -206,6 +206,14 @@ Drag the empty part of the tab row to move the popup. The tabs are below it: **C
 list (with more than one run), the timer chip and **New chat**.
 The status line shows the state, the turns, the tokens used and the context size of the last model response.
 
+## Sidebar panel
+
+The **Claude agent** tab of the sidebar shows the same chat as the popup. The popup and the panel work at the same time. They share the message box and show each message one time.
+
+- Select a claude-agent node: the panel shows its chat.
+- Select no node, or more than one: the panel shows a list of the claude-agent nodes with the last message of each. Click a row to select the node.
+- The pin button at the bottom keeps the chat of the node when you select other nodes. Click it again to follow the selection.
+
 The timer chip shows:
 
 - **Active**: the time since the run started, for example `Active 12m`.

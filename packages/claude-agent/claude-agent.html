@@ -6,12 +6,12 @@
     const NODE_COLOR = '#9fd8d0';
     const activeRuns = {};      // nodeId to the active runs of the runtime node
     const lastEnd = {};         // nodeId to the end of the last run: the result line, "stopped" or the error
-    const views = {};           // nodeId to the popup tab: 'chat' (the default), 'agents' or 'timeline'. Survives a popup rebuild.
+    const views = {};           // view key to the tab: 'chat' (the default), 'agents' or 'timeline'. Survives a rebuild. The key is the node id for the popup and 'side' for the sidebar panel.
     const sessions = {};        // nodeId to the last session of the runtime node: { cacheTtl, lastActivity, model }
-    const unread = {};          // nodeId to the count of agent messages that came while the Agents tab was not shown
-    const popups = {};          // nodeId to the node of each popup that the editor has built
+    const unread = {};          // view key to the count of agent messages that came while the Agents tab was not shown
+    const lastText = {};        // nodeId to the last chat text: the list of the sidebar panel shows it
     const pasted = {};          // nodeId to the files in the message box that are not sent: pictures { mediaType, data } and documents { name, mediaType, data }. Survives a popup rebuild.
-    let chipTimer = null;       // one timer for the chips of all popups
+    let chipTimer = null;       // one timer for the chips of all views
     const OPERATOR_KINDS = ['prompt', 'message', 'answer'];
     const AGENT_KINDS = ['text', 'question'];
     const END_KINDS = ['result', 'error'];
@@ -31,6 +31,7 @@
 .ca-popup button,.ca-tab{cursor:pointer}
 .ca-spacer{cursor:move}
 .ca-identity{flex:none;display:flex;flex-direction:column;min-width:0;padding:0 2px 2px}
+.ca-tabname{font-weight:400;color:var(--red-ui-secondary-text-color)}
 .ca-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600;color:var(--red-ui-primary-text-color)}
 .ca-summary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--red-ui-secondary-text-color)}
 .ca-about{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--red-ui-secondary-text-color)}
@@ -106,6 +107,18 @@
 .ca-docs .ca-doc{height:40px;padding:4px 8px}
 .ca-pics{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;max-width:100%;margin-bottom:2px}
 .ca-pics img{display:block;max-height:120px;max-width:100%;border-radius:8px;border:1px solid var(--red-ui-secondary-border-color);cursor:zoom-in}
+.ca-side-body{position:absolute;inset:0;padding:6px;box-sizing:border-box}
+.ca-side .ca-summary,.ca-side .ca-about{display:none}
+.ca-side .ca-spacer{cursor:default}
+.ca-row{display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 6px;border-bottom:1px solid var(--red-ui-secondary-border-color);cursor:pointer}
+.ca-row:hover{background:var(--red-ui-workspace-button-background-hover)}
+.ca-dot{flex:none;width:10px;height:10px;border-radius:50%;border:1px solid var(--red-ui-secondary-text-color)}
+.ca-dot.ca-on{background:var(--red-ui-text-color-link);border-color:var(--red-ui-text-color-link)}
+.ca-row-text{flex:1;min-width:0}
+.ca-side .ca-row .ca-summary{display:block}
+.ca-pin{min-width:32px;height:100%}
+.ca-pin.ca-on{background:var(--red-ui-secondary-background-selected);color:var(--red-ui-text-color-link)}
+.ca-pin:not(.ca-on) i{transform:rotate(45deg)}
 .ca-zoom{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;padding:8px;border-radius:4px;background:rgba(0,0,0,.8);cursor:zoom-out}
 .ca-zoom img{max-width:100%;max-height:100%;object-fit:contain}
 .ca-footer{display:flex;align-items:center;justify-content:flex-end;gap:4px;min-width:0;padding:2px 4px 4px 8px}
@@ -136,16 +149,26 @@
         return b;
     }
 
-    // A popup element of the node: identity, name, summary, about, log, chat, list, empty, working, ask, run, chip, new, text, send, interrupt or stop
-    function part(node, name) {
-        return document.getElementById('claude-agent-' + name + '-' + node.id);
+    // A node has up to two views at the same time: the popup and the panel of the sidebar. Each view has a root element.
+    function roots(node) {
+        return Array.from(document.querySelectorAll('.ca-popup[data-node="' + node.id + '"]'));
+    }
+
+    // Run fn(node, root, ...args) for each view of the node
+    function each(node, fn, ...args) {
+        for (const root of roots(node)) fn(node, root, ...args);
+    }
+
+    // An element of a view: identity, name, summary, about, log, chat, list, empty, working, ask, run, chip, new, text, send, interrupt or stop
+    function part(root, name) {
+        return root.querySelector('[data-ca="' + name + '"]');
     }
 
     // The model of the selected run as family and version, for example "opus 5.5". An ID of another format shows in full.
     // With no run, it is the model of the last run. With no run since the start, it is the model of the node.
     // A node model of a different family shows after it, for example "opus 5.5 (node: sonnet)".
-    function modelText(node) {
-        const run = selectedRun(node);
+    function modelText(node, root) {
+        const run = selectedRun(node, root);
         const session = sessions[node.id];
         const id = (run && run.model) || (session && session.model);
         if (!id) return node.model || 'default model';
@@ -155,64 +178,68 @@
     }
 
     // Show the name of the node and its settings at the top of the popup. The text is set with textContent only.
-    function showIdentity(node) {
-        const identity = part(node, 'identity');
+    function showIdentity(node, root) {
+        const identity = part(root, 'identity');
         if (!identity) return;
-        const about = [modelText(node), node.cwd || 'work root'];
+        const about = [modelText(node, root), node.cwd || 'work root'];
         if (node.sandbox) about.push('sandbox ' + node.sandbox);
         const summary = String(node.summary || '').trim();
         for (const [name, text] of [['name', node.name || 'claude-agent'], ['summary', summary], ['about', about.join(' · ')]]) {
-            const line = part(node, name);
+            const line = part(root, name);
             // A line with the same text stays as it is, so a selection in it stays
             if (line.textContent !== text) line.textContent = text;
             line.title = text;
         }
-        part(node, 'summary').style.display = summary ? '' : 'none';
+        part(root, 'summary').style.display = summary ? '' : 'none';
     }
 
     const pad = (n) => String(n).padStart(2, '0');
     const clock = (time) => { const d = new Date(time); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
 
-    function selectedRun(node) {
+    function selectedRun(node, root) {
         const runs = activeRuns[node.id] || [];
-        const select = part(node, 'run');
+        const select = part(root, 'run');
         return runs.find((r) => select && r.runId === select.value) || runs[0];
     }
 
     // Show the selected run in the status line, the question block, the working line and the buttons.
-    function showRun(node) {
-        showIdentity(node);
-        const run = selectedRun(node);
+    function showRun(node, root) {
+        showIdentity(node, root);
+        const run = selectedRun(node, root);
         const status = document.getElementById('nru_popup.' + node.id + '.statusText');
-        if (status) {
+        if (status && root.dataset.key === node.id) {
             status.setStatusText(run ? [run.state, run.turns + (run.turns === 1 ? ' turn' : ' turns'), run.tokens, run.context && 'context ' + run.context].filter(Boolean).join(', ')
                 : lastEnd[node.id] || 'no active run');
         }
-        const ask = part(node, 'ask');
+        const ask = part(root, 'ask');
         if (!ask) return;
-        showChip(node);
-        part(node, 'new').disabled = (activeRuns[node.id] || []).length > 0;
+        showChip(node, root);
+        part(root, 'new').disabled = (activeRuns[node.id] || []).length > 0;
         const working = !!(run && (run.state === 'starting' || run.state === 'running'));
-        part(node, 'working').style.display = working ? '' : 'none';
-        for (const name of ['interrupt', 'stop']) part(node, name).style.display = run ? '' : 'none';
+        part(root, 'working').style.display = working ? '' : 'none';
+        for (const name of ['interrupt', 'stop']) part(root, name).style.display = run ? '' : 'none';
         const waiting = !!(run && run.state === 'waiting' && run.question);
         ask.textContent = '';
         ask.style.display = waiting ? '' : 'none';
-        part(node, 'send-label').textContent = ' ' + (waiting ? 'Answer' : 'Send');
-        part(node, 'text').placeholder = waiting ? 'Your answer' : 'Message to the agent';
+        part(root, 'send-label').textContent = ' ' + (waiting ? 'Answer' : 'Send');
+        part(root, 'text').placeholder = waiting ? 'Your answer' : 'Message to the agent';
         if (!waiting) return;
         ask.appendChild(make('div', 'Agent asks: ' + run.question.question));
         for (const option of run.question.options) {
             const b = button('', option);
-            b.addEventListener('click', () => sendControl(node, 'answer', option));
+            b.addEventListener('click', () => sendControl(node, root, 'answer', option));
             ask.appendChild(b);
         }
     }
 
     function showRuns(node, runs) {
         activeRuns[node.id] = runs;
-        const select = part(node, 'run');
-        if (!select) return;
+        each(node, fillRuns, runs);
+        refreshList();
+    }
+
+    function fillRuns(node, root, runs) {
+        const select = part(root, 'run');
         const keep = select.value;
         select.textContent = '';
         for (const run of runs) {
@@ -222,22 +249,33 @@
         }
         if (runs.some((r) => r.runId === keep)) select.value = keep;
         select.style.display = runs.length > 1 ? '' : 'none';
-        showRun(node);
+        showRun(node, root);
     }
 
-    // live is true for an event that comes from the runtime now, false for the log that the popup loads when it opens.
-    function addEvent(node, e, live) {
+    // live is true for an event that comes from the runtime now, false for the log that a view loads when it opens.
+    // A log goes to the one view that loads it: root. A live event goes to each view of the node.
+    // A chat text is a message of the operator or of the agent. A life cycle prompt is not.
+    function chatText(e) {
+        return e.source !== 'life' && (OPERATOR_KINDS.includes(e.kind) || AGENT_KINDS.includes(e.kind));
+    }
+
+    function addEvent(node, e, live, root) {
         if (e.kind === 'result') lastEnd[node.id] = e.text;
         else if (e.kind === 'error') lastEnd[node.id] = 'error: ' + e.text;
         else if (e.kind === 'state' && e.text === 'stopped') lastEnd[node.id] = 'stopped';
-        const log = part(node, 'log');
-        if (!log) return;
+        if (chatText(e)) lastText[node.id] = e.text;
+        for (const r of root ? [root] : roots(node)) addEventIn(node, r, e, live);
+        refreshList();
+    }
+
+    function addEventIn(node, root, e, live) {
+        const log = part(root, 'log');
         const runId = (activeRuns[node.id] || []).length > 1 ? e.runId + ' ' : '';
         log.appendChild(make('div', new Date(e.time).toLocaleTimeString() + ' ' + runId + e.kind + ': ' + e.text));
         while (log.childNodes.length > MAX_ENTRIES) log.removeChild(log.firstChild);
         log.scrollTop = log.scrollHeight;
-        addChat(node, e);
-        addAgents(node, e, live);
+        addChat(node, root, e);
+        addAgents(node, root, e, live);
     }
 
     // Agent text is markdown. The HTML passes DOMPurify twice: renderMarkdown returns the raw text when marked fails.
@@ -308,7 +346,7 @@
     }
 
     // The pictures of an operator message in the paste order. A click opens a picture large over the popup.
-    function pictures(node, images) {
+    function pictures(node, root, images) {
         const row = make('div', '', 'ca-pics');
         for (const image of images) {
             const url = imageUrl(image);
@@ -316,7 +354,7 @@
             const img = make('img');
             img.src = url;
             img.alt = 'Picture';
-            img.addEventListener('click', () => zoom(node, url));
+            img.addEventListener('click', () => zoom(root, url));
             row.appendChild(img);
         }
         return row;
@@ -338,9 +376,7 @@
     }
 
     // One picture large over the popup. A click or Escape closes it.
-    function zoom(node, url) {
-        const root = part(node, 'text') && part(node, 'text').closest('.ca-popup');
-        if (!root) return;
+    function zoom(root, url) {
         const overlay = make('div', '', 'ca-zoom');
         overlay.tabIndex = -1;
         const img = make('img');
@@ -355,8 +391,11 @@
 
     // The row of pasted files above the text of the message box: the pictures, then the documents. Each one has an x that removes it.
     function showPasted(node) {
-        const row = part(node, 'shots');
-        if (!row) return;
+        each(node, showPastedIn);
+    }
+
+    function showPastedIn(node, root) {
+        const row = part(root, 'shots');
         row.textContent = '';
         const files = pasted[node.id] || [];
         row.style.display = files.length ? '' : 'none';
@@ -367,7 +406,7 @@
             remove.addEventListener('click', () => {
                 files.splice(files.indexOf(file), 1);
                 showPasted(node);
-                part(node, 'text').focus();
+                part(root, 'text').focus();
             });
             return remove;
         };
@@ -468,9 +507,8 @@
     }
 
     // The chat tab: operator bubbles on the right, agent bubbles on the left, the end of a run as a pill
-    function addChat(node, e) {
-        const list = part(node, 'list');
-        if (!list) return;
+    function addChat(node, root, e) {
+        const list = part(root, 'list');
         let entry;
         // A keep-alive or close prompt is not text of the operator: the life cycle pill shows it.
         if (e.kind === 'prompt' && e.source === 'life') return;
@@ -480,7 +518,7 @@
             const runId = (activeRuns[node.id] || []).length > 1 && !operator ? ' ' + e.runId : '';
             entry = make('div', '', 'ca-msg ' + (operator ? 'ca-op' : 'ca-agent') + (e.kind === 'question' ? ' ca-question' : ''));
             entry.appendChild(make('div', (operator ? 'You' : 'Agent' + runId) + ' · ' + clock(e.time), 'ca-meta'));
-            if (operator && Array.isArray(e.images) && e.images.length) entry.appendChild(pictures(node, e.images));
+            if (operator && Array.isArray(e.images) && e.images.length) entry.appendChild(pictures(node, root, e.images));
             if (operator && Array.isArray(e.documents) && e.documents.length) {
                 const docs = make('div', '', 'ca-docs');
                 for (const d of e.documents) docs.appendChild(docChip(d.name, d.size));
@@ -497,45 +535,44 @@
         } else return;
         list.appendChild(entry);
         while (list.childNodes.length > MAX_ENTRIES) list.removeChild(list.firstChild);
-        part(node, 'empty').style.display = 'none';
-        const chat = part(node, 'chat');
+        part(root, 'empty').style.display = 'none';
+        const chat = part(root, 'chat');
         chat.scrollTop = chat.scrollHeight;
     }
 
     // The Agents tab: the messages that the agent got from other agents and the messages that it sent, oldest at the top.
     // A live received message that comes while the tab is not shown adds to the badge of the tab. A sent message does not.
-    function addAgents(node, e, live) {
-        const list = part(node, 'agents');
-        if (!list || !((e.kind === 'prompt' && e.source === 'agent') || e.kind === 'sent')) return;
+    function addAgents(node, root, e, live) {
+        const list = part(root, 'agents');
+        if (!((e.kind === 'prompt' && e.source === 'agent') || e.kind === 'sent')) return;
         list.appendChild(inboxCard(e));
         while (list.childNodes.length > MAX_ENTRIES) list.removeChild(list.firstChild);
-        if (views[node.id] === 'agents') list.scrollTop = list.scrollHeight;
-        else if (live && e.kind === 'prompt') showBadge(node, (unread[node.id] || 0) + 1);
+        if (views[root.dataset.key] === 'agents') list.scrollTop = list.scrollHeight;
+        else if (live && e.kind === 'prompt') showBadge(root, (unread[root.dataset.key] || 0) + 1);
     }
 
     // The badge after the label of the Agents tab: hidden at 0, "99+" above 99
-    function showBadge(node, count) {
-        unread[node.id] = count;
-        const badge = part(node, 'badge');
-        if (!badge) return;
+    function showBadge(root, count) {
+        unread[root.dataset.key] = count;
+        const badge = part(root, 'badge');
         badge.textContent = count > 99 ? '99+' : String(count);
         badge.style.display = count ? '' : 'none';
     }
 
-    // Show one tab of the popup
-    function showView(node, view) {
-        views[node.id] = view;
-        const panes = { chat: part(node, 'chat'), agents: part(node, 'agents'), timeline: part(node, 'log') };
+    // Show one tab of a view
+    function showView(root, view) {
+        views[root.dataset.key] = view;
+        const panes = { chat: part(root, 'chat'), agents: part(root, 'agents'), timeline: part(root, 'log') };
         for (const [name, pane] of Object.entries(panes)) {
             pane.style.display = name !== view ? 'none' : name === 'timeline' ? '' : 'flex';
-            part(node, 'tab-' + name).classList.toggle('selected', name === view);
+            part(root, 'tab-' + name).classList.toggle('selected', name === view);
         }
-        if (view === 'agents') showBadge(node, 0);
+        if (view === 'agents') showBadge(root, 0);
         panes[view].scrollTop = panes[view].scrollHeight;
     }
 
-    function sendControl(node, cmd, text, images, documents) {
-        const run = selectedRun(node);
+    function sendControl(node, root, cmd, text, images, documents) {
+        const run = selectedRun(node, root);
         if (!run && cmd !== 'message') return RED.notify('No active run', 'warning');
         const request = run ? node.nodeRedEditorComms.publish('control', { cmd: cmd, runId: run.runId, text: text, images: images, documents: documents })
             : node.nodeRedEditorComms.publish('start', { text: text, images: images, documents: documents });
@@ -572,22 +609,21 @@
         return { text: 'Active ' + active + ' · ' + cache, title: 'Active: the time since the run started.\n' + title, warn: warn };
     }
 
-    function showChip(node) {
-        const chip = part(node, 'chip');
-        if (!chip) return false;
-        const state = chipState(node, selectedRun(node), Date.now());
+    function showChip(node, root) {
+        const chip = part(root, 'chip');
+        const state = chipState(node, selectedRun(node, root), Date.now());
         chip.textContent = state.text;
         chip.title = state.title;
         chip.classList.toggle('ca-warn', state.warn);
-        return true;
     }
 
-    // Update the chips of all popups every 10 s. A popup without a chip leaves the list. The timer stops when the list is empty.
+    // Update the chips of all views every 10 s. The timer stops when no view is in the page.
     function startChipTimer() {
         if (chipTimer) return;
         chipTimer = setInterval(() => {
-            for (const node of Object.values(popups)) if (!showChip(node)) delete popups[node.id];
-            if (!Object.keys(popups).length) {
+            const all = Array.from(document.querySelectorAll('.ca-popup')).filter((root) => root.isConnected && root.caNode);
+            for (const root of all) showChip(root.caNode, root);
+            if (!all.length) {
                 clearInterval(chipTimer);
                 chipTimer = null;
             }
@@ -595,25 +631,24 @@
     }
 
     // New chat: the runtime forgets the last session and clears the popup log
-    function newChat(node) {
+    function newChat(node, root) {
         node.nodeRedEditorComms.publish('new-chat')
             .then((res) => { if (res && res.error) RED.notify(res.error, 'warning'); })
             .catch((err) => RED.notify(err.status === 404 ? 'Deploy the node first' : err.message, 'warning'));
-        const text = part(node, 'text');
-        if (text) text.focus();
+        part(root, 'text').focus();
     }
 
     // The runtime has cleared its log: empty the chat and the Timeline
     function clear(node) {
         delete lastEnd[node.id];
-        showBadge(node, 0);
-        for (const name of ['list', 'agents', 'log']) {
-            const e = part(node, name);
-            if (e) e.textContent = '';
-        }
-        const empty = part(node, 'empty');
-        if (empty) empty.style.display = '';
-        showRun(node);
+        delete lastText[node.id];
+        each(node, (n, root) => {
+            showBadge(root, 0);
+            for (const name of ['list', 'agents', 'log']) part(root, name).textContent = '';
+            part(root, 'empty').style.display = '';
+            showRun(n, root);
+        });
+        refreshList();
     }
 
     // The message box grows with its text, up to about 6 lines. Then it scrolls.
@@ -622,15 +657,15 @@
         if (text.scrollHeight) text.style.height = text.scrollHeight + 'px';
     }
 
-    // Build one popup element with the id claude-agent-<name>-<nodeId>
-    function element(node, tag, name, className, text) {
+    // Build one element of a view. The popup gives it the id claude-agent-<name>-<nodeId> after the build.
+    function element(tag, name, className, text) {
         const e = make(tag, text, className);
-        e.id = 'claude-agent-' + name + '-' + node.id;
+        e.dataset.ca = name;
         return e;
     }
 
-    // An open popup shows the new name and settings when the edit dialog closes
-    if (RED.events) RED.events.on('nodes:change', (n) => { if (n && popups[n.id]) showIdentity(n); });
+    // An open view shows the new name and settings when the edit dialog closes
+    if (RED.events) RED.events.on('nodes:change', (n) => { if (n) each(n, showIdentity); });
 
     // The start of a system prompt as one short line: the first sentence of the first line, without markdown marks.
     // It has at most 120 characters. The editor button uses it. The popup never reads the system prompt.
@@ -650,6 +685,250 @@
         let cut = line.slice(0, limit);
         if (line[limit] !== ' ' && cut.includes(' ')) cut = cut.slice(0, cut.lastIndexOf(' '));
         return cut.trimEnd() + '\u2026';
+    }
+
+    // Keep mouse, key and wheel events in the view. If they reach the node, Node-RED gives the focus to the canvas,
+    // and the text box gets no keys.
+    function keepEvents(div) {
+        if (div.claudeAgentEventsKept) return;
+        div.claudeAgentEventsKept = true;
+        for (const type of ['mousedown', 'mouseup', 'click', 'dblclick', 'touchstart', 'touchend', 'keydown', 'keyup', 'keypress', 'wheel', 'contextmenu']) {
+            div.addEventListener(type, (e) => e.stopPropagation());
+        }
+    }
+
+    // Build the view of a node in div: the popup (key is the node id) or the sidebar panel (key is 'side').
+    // Each view has its own root, tab and run choice. The runtime events go to each view of the node.
+    function buildView(node, div, key) {
+        if (!div) return;
+            div.textContent = '';
+            keepEvents(div);
+            addStyle();
+            const root = make('div', '', 'ca-popup');
+            root.dataset.node = node.id;
+            root.dataset.key = key;
+            root.caNode = node;
+            if (key !== node.id) root.classList.add('ca-side');
+            // A click in the popup gives the focus to the popup. Without it the keys go to the canvas, and Node-RED cancels Ctrl+C.
+            root.tabIndex = -1;
+
+            const identity = element('div', 'identity', 'ca-identity');
+            identity.appendChild(element('div', 'name', 'ca-name'));
+            identity.appendChild(element('div', 'summary', 'ca-summary'));
+            identity.appendChild(element('div', 'about', 'ca-about'));
+
+            const header = make('div', '', 'ca-header');
+            for (const [view, label] of [['chat', 'Chat'], ['agents', 'Agents'], ['timeline', 'Timeline']]) {
+                const tab = element('button', 'tab-' + view, 'ca-tab', label);
+                tab.type = 'button';
+                tab.addEventListener('click', () => showView(root, view));
+                if (view === 'agents') {
+                    const badge = element('span', 'badge', 'ca-badge');
+                    badge.style.display = 'none';
+                    tab.appendChild(badge);
+                }
+                header.appendChild(tab);
+            }
+            // The empty part of the tab row moves the popup: it gives the mouse press to the title bar of the frame
+            const spacer = make('div', '', 'ca-spacer');
+            if (key === node.id) spacer.addEventListener('mousedown', (e) => {
+                const bar = document.getElementById('nru_popup.' + node.id + '.header');
+                if (!bar) return;
+                e.preventDefault();
+                bar.dispatchEvent(new MouseEvent('mousedown', { clientX: e.clientX, clientY: e.clientY, bubbles: true, cancelable: true }));
+            });
+            header.appendChild(spacer);
+            const select = element('select', 'run');
+            select.title = 'The active run that the popup shows';
+            select.style.display = 'none';
+            select.addEventListener('change', () => showRun(node, root));
+            const chip = element('span', 'chip', 'ca-chip');
+            const fresh = button('fa-plus', '', 'New chat: the next message starts a new session. Stop the active run first.');
+            fresh.dataset.ca = 'new';
+            fresh.addEventListener('click', () => newChat(node, root));
+            for (const e of [select, chip, fresh]) header.appendChild(e);
+
+            const log = element('div', 'log', 'ca-log');
+            const agents = element('div', 'agents', 'ca-agents');
+            const chat = element('div', 'chat', 'ca-chat');
+            chat.appendChild(element('div', 'empty', 'ca-empty', 'Ask the agent a question below.'));
+            chat.appendChild(element('div', 'list', 'ca-list'));
+            const working = element('div', 'working', 'ca-working');
+            working.appendChild(make('i', '', 'fa fa-circle-o-notch fa-spin'));
+            working.appendChild(make('span', ' Agent is working…'));
+            working.style.display = 'none';
+            chat.appendChild(working);
+            const ask = element('div', 'ask', 'ca-ask');
+            ask.style.display = 'none';
+
+            const composer = make('div', '', 'ca-composer');
+            const text = element('textarea', 'text');
+            text.rows = 1;
+            text.placeholder = 'Message to the agent';
+            text.addEventListener('input', () => setDraft(node, root, text.value));
+            text.addEventListener('paste', (e) => pasteFiles(node, e));
+            const shots = element('div', 'shots', 'ca-shots');
+            const footer = make('div', '', 'ca-footer');
+            const interrupt = button('fa-pause', 'Interrupt', 'Stop the current turn. The run stays open for a new message.');
+            interrupt.dataset.ca = 'interrupt';
+            const stop = button('fa-stop', 'Stop', 'End the run');
+            stop.dataset.ca = 'stop';
+            const send = button('fa-paper-plane', '', 'Send the message');
+            send.dataset.ca = 'send';
+            send.className += ' primary';
+            send.appendChild(element('span', 'send-label', '', ' Send'));
+            send.addEventListener('click', () => {
+                const run = selectedRun(node, root);
+                // An answer takes no files: they stay in the message box for the next message.
+                const answer = run && run.state === 'waiting';
+                const files = answer ? [] : pasted[node.id] || [];
+                const images = files.filter((f) => !f.name);
+                const documents = files.filter((f) => f.name);
+                sendControl(node, root, answer ? 'answer' : 'message', text.value, images.length ? images : undefined, documents.length ? documents : undefined);
+                setDraft(node, null, '');
+                if (!answer) delete pasted[node.id];
+                showPasted(node);
+            });
+            // Enter sends. Shift+Enter starts a new line. Enter that ends an IME composition does not send.
+            text.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+                    e.preventDefault();
+                    send.click();
+                }
+            });
+            interrupt.addEventListener('click', () => sendControl(node, root, 'interrupt'));
+            stop.addEventListener('click', () => sendControl(node, root, 'stop'));
+            for (const e of [interrupt, stop, send]) footer.appendChild(e);
+            composer.appendChild(shots);
+            composer.appendChild(text);
+            composer.appendChild(footer);
+
+            for (const e of [identity, header, log, agents, chat, ask, composer]) root.appendChild(e);
+            div.appendChild(root);
+            // The popup keeps the ids that the tests and the scripts of the operator use
+            if (key === node.id) for (const e of root.querySelectorAll('[data-ca]')) e.id = 'claude-agent-' + e.dataset.ca + '-' + node.id;
+            // A new view starts with the draft of the other view of the node
+            const other = roots(node).find((r) => r !== root);
+            if (other) setDraft(node, other, part(other, 'text').value, root);
+            showPasted(node);
+            showView(root, views[key] || 'chat');
+            showBadge(root, views[key] === 'agents' ? 0 : unread[key] || 0);
+            showRun(node, root);
+            startChipTimer();
+
+            node.nodeRedEditorComms.publish('get-log').then((state) => {
+                if (state.session) sessions[node.id] = state.session;
+                for (const e of state.events) addEvent(node, e, false, root);
+                showRuns(node, state.runs);
+                // The frame of the popup shows and hides the pane again after the log comes, and each show puts the scroll at the top.
+                // Keep the newest message in view each time the pane gets a size, until the user scrolls it.
+                const pane = part(root, views[key] === 'agents' ? 'agents' : views[key] === 'timeline' ? 'log' : 'chat');
+                if (!pane || typeof ResizeObserver !== 'function') return;
+                const watch = new ResizeObserver(() => {
+                    if (pane.clientHeight) pane.scrollTop = pane.scrollHeight;
+                });
+                const release = () => watch.disconnect();
+                for (const type of ['wheel', 'touchstart', 'mousedown', 'keydown']) pane.addEventListener(type, release, { once: true });
+                watch.observe(pane);
+            }).catch(() => showRuns(node, []));
+        }
+
+    // The draft of the message box is the same in each view of the node. source is the view that the user types in: it keeps its text.
+    // only: set the draft in this view alone.
+    function setDraft(node, source, value, only) {
+        for (const root of only ? [only] : roots(node)) {
+            const text = part(root, 'text');
+            if (root !== source) text.value = value;
+            grow(text);
+        }
+    }
+
+    // The sidebar panel: the chat of the selected node, or the list of the claude-agent nodes. The pin keeps the chat of one node.
+    const side = { body: null, pin: null, toolbar: null, selected: null, pinned: null, shown: null, loaded: {} };
+
+    function showSide() {
+        if (!side.body) return;
+        let node = side.pinned && RED.nodes.node(side.pinned);
+        if (!node) {
+            side.pinned = null;
+            node = side.selected && RED.nodes.node(side.selected);
+        }
+        side.toolbar.style.display = node ? '' : 'none';
+        side.pin.classList.toggle('ca-on', !!side.pinned);
+        side.pin.title = side.pinned ? 'Follow the selected node' : 'Keep this node';
+        if (node && side.shown !== node.id) {
+            side.shown = node.id;
+            delete views.side;
+            delete unread.side;
+            buildView(node, side.body, 'side');
+        } else if (!node) {
+            side.shown = null;
+            renderList();
+        }
+    }
+
+    // Draw the list again when the list is shown
+    function refreshList() {
+        if (side.body && side.shown === null) renderList();
+    }
+
+    function renderList() {
+        side.body.textContent = '';
+        const list = make('div', '', 'ca-popup ca-side');
+        const agents = [];
+        RED.nodes.eachNode((node) => { if (node.type === 'claude-agent') agents.push(node); });
+        for (const node of agents) {
+            const row = make('div', '', 'ca-row');
+            row.appendChild(make('span', '', 'ca-dot' + ((activeRuns[node.id] || []).length ? ' ca-on' : '')));
+            const text = make('div', '', 'ca-row-text');
+            const name = make('div', node.name || 'claude-agent', 'ca-name');
+            // Nodes with the same name show the flow tab after the name
+            const tab = RED.nodes.workspace && RED.nodes.workspace(node.z);
+            if (tab && agents.some((other) => other !== node && (other.name || 'claude-agent') === (node.name || 'claude-agent'))) {
+                name.appendChild(make('span', ' · ' + (tab.label || tab.id), 'ca-tabname'));
+            }
+            text.appendChild(name);
+            text.appendChild(make('div', lastText[node.id] || '', 'ca-summary'));
+            row.appendChild(text);
+            row.addEventListener('click', () => {
+                if (RED.view.reveal) RED.view.reveal(node.id);
+                RED.view.select({ nodes: [node] });
+            });
+            list.appendChild(row);
+            // A node that the page has not read yet gives its last text and its runs one time.
+            if (!side.loaded[node.id] && node.nodeRedEditorComms) {
+                side.loaded[node.id] = true;
+                node.nodeRedEditorComms.publish('get-log').then((state) => {
+                    activeRuns[node.id] = state.runs;
+                    for (const e of state.events) if (chatText(e)) lastText[node.id] = e.text;
+                    refreshList();
+                }).catch(() => {});
+            }
+        }
+        side.body.appendChild(list);
+    }
+
+    if (RED.sidebar && RED.sidebar.addTab) {
+        addStyle();
+        side.body = make('div', '', 'ca-side-body');
+        keepEvents(side.body);
+        side.pin = button('fa-thumb-tack', '', '');
+        side.pin.className = 'red-ui-sidebar-header-button ca-pin';
+        side.pin.addEventListener('click', () => {
+            side.pinned = side.pinned ? null : side.shown;
+            showSide();
+        });
+        const toolbar = make('div', '', 'red-ui-sidebar-header');
+        side.toolbar = toolbar;
+        toolbar.appendChild(side.pin);
+        RED.sidebar.addTab({ id: 'claude-agent', name: 'Claude agent', iconClass: 'fa fa-comments-o', content: $(side.body), toolbar: $(toolbar), enableOnEdit: true });
+        RED.events.on('view:selection-changed', (selection) => {
+            const nodes = (selection && selection.nodes) || [];
+            side.selected = nodes.length === 1 && nodes[0].type === 'claude-agent' ? nodes[0].id : null;
+            showSide();
+        });
+        for (const type of ['flows:loaded', 'nodes:add', 'nodes:remove', 'nodes:change']) RED.events.on(type, () => showSide());
+        showSide();
     }
 
     RED.nodes.registerType('claude-agent', {
@@ -723,145 +1002,12 @@
 
         // Runs each time the editor builds the popup
         nru_popupInit: function () {
-            const node = this;
-            const div = document.getElementById('nru_popup.' + node.id + '.div');
-            if (!div) return;
-            div.textContent = '';
-            // Keep mouse, key and wheel events in the popup. If they reach the node, Node-RED gives the focus to the canvas,
-            // and the text box gets no keys.
-            if (!div.claudeAgentEventsKept) {
-                div.claudeAgentEventsKept = true;
-                for (const type of ['mousedown', 'mouseup', 'click', 'dblclick', 'touchstart', 'touchend', 'keydown', 'keyup', 'keypress', 'wheel', 'contextmenu']) {
-                    div.addEventListener(type, (e) => e.stopPropagation());
-                }
-            }
-            addStyle();
-            const root = make('div', '', 'ca-popup');
-            // A click in the popup gives the focus to the popup. Without it the keys go to the canvas, and Node-RED cancels Ctrl+C.
-            root.tabIndex = -1;
-
-            const identity = element(node, 'div', 'identity', 'ca-identity');
-            identity.appendChild(element(node, 'div', 'name', 'ca-name'));
-            identity.appendChild(element(node, 'div', 'summary', 'ca-summary'));
-            identity.appendChild(element(node, 'div', 'about', 'ca-about'));
-
-            const header = make('div', '', 'ca-header');
-            for (const [view, label] of [['chat', 'Chat'], ['agents', 'Agents'], ['timeline', 'Timeline']]) {
-                const tab = element(node, 'button', 'tab-' + view, 'ca-tab', label);
-                tab.type = 'button';
-                tab.addEventListener('click', () => showView(node, view));
-                if (view === 'agents') {
-                    const badge = element(node, 'span', 'badge', 'ca-badge');
-                    badge.style.display = 'none';
-                    tab.appendChild(badge);
-                }
-                header.appendChild(tab);
-            }
-            // The empty part of the tab row moves the popup: it gives the mouse press to the title bar of the frame
-            const spacer = make('div', '', 'ca-spacer');
-            spacer.addEventListener('mousedown', (e) => {
-                const bar = document.getElementById('nru_popup.' + node.id + '.header');
-                if (!bar) return;
-                e.preventDefault();
-                bar.dispatchEvent(new MouseEvent('mousedown', { clientX: e.clientX, clientY: e.clientY, bubbles: true, cancelable: true }));
-            });
-            header.appendChild(spacer);
-            const select = element(node, 'select', 'run');
-            select.title = 'The active run that the popup shows';
-            select.style.display = 'none';
-            select.addEventListener('change', () => showRun(node));
-            const chip = element(node, 'span', 'chip', 'ca-chip');
-            const fresh = button('fa-plus', '', 'New chat: the next message starts a new session. Stop the active run first.');
-            fresh.id = 'claude-agent-new-' + node.id;
-            fresh.addEventListener('click', () => newChat(node));
-            for (const e of [select, chip, fresh]) header.appendChild(e);
-
-            const log = element(node, 'div', 'log', 'ca-log');
-            const agents = element(node, 'div', 'agents', 'ca-agents');
-            const chat = element(node, 'div', 'chat', 'ca-chat');
-            chat.appendChild(element(node, 'div', 'empty', 'ca-empty', 'Ask the agent a question below.'));
-            chat.appendChild(element(node, 'div', 'list', 'ca-list'));
-            const working = element(node, 'div', 'working', 'ca-working');
-            working.appendChild(make('i', '', 'fa fa-circle-o-notch fa-spin'));
-            working.appendChild(make('span', ' Agent is working…'));
-            working.style.display = 'none';
-            chat.appendChild(working);
-            const ask = element(node, 'div', 'ask', 'ca-ask');
-            ask.style.display = 'none';
-
-            const composer = make('div', '', 'ca-composer');
-            const text = element(node, 'textarea', 'text');
-            text.rows = 1;
-            text.placeholder = 'Message to the agent';
-            text.addEventListener('input', () => grow(text));
-            text.addEventListener('paste', (e) => pasteFiles(node, e));
-            const shots = element(node, 'div', 'shots', 'ca-shots');
-            const footer = make('div', '', 'ca-footer');
-            const interrupt = button('fa-pause', 'Interrupt', 'Stop the current turn. The run stays open for a new message.');
-            interrupt.id = 'claude-agent-interrupt-' + node.id;
-            const stop = button('fa-stop', 'Stop', 'End the run');
-            stop.id = 'claude-agent-stop-' + node.id;
-            const send = button('fa-paper-plane', '', 'Send the message');
-            send.id = 'claude-agent-send-' + node.id;
-            send.className += ' primary';
-            send.appendChild(element(node, 'span', 'send-label', '', ' Send'));
-            send.addEventListener('click', () => {
-                const run = selectedRun(node);
-                // An answer takes no files: they stay in the message box for the next message.
-                const answer = run && run.state === 'waiting';
-                const files = answer ? [] : pasted[node.id] || [];
-                const images = files.filter((f) => !f.name);
-                const documents = files.filter((f) => f.name);
-                sendControl(node, answer ? 'answer' : 'message', text.value, images.length ? images : undefined, documents.length ? documents : undefined);
-                text.value = '';
-                grow(text);
-                if (!answer) delete pasted[node.id];
-                showPasted(node);
-            });
-            // Enter sends. Shift+Enter starts a new line. Enter that ends an IME composition does not send.
-            text.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-                    e.preventDefault();
-                    send.click();
-                }
-            });
-            interrupt.addEventListener('click', () => sendControl(node, 'interrupt'));
-            stop.addEventListener('click', () => sendControl(node, 'stop'));
-            for (const e of [interrupt, stop, send]) footer.appendChild(e);
-            composer.appendChild(shots);
-            composer.appendChild(text);
-            composer.appendChild(footer);
-
-            for (const e of [identity, header, log, agents, chat, ask, composer]) root.appendChild(e);
-            div.appendChild(root);
-            showIdentity(node);
-            showPasted(node);
-            showView(node, views[node.id] || 'chat');
-            showBadge(node, views[node.id] === 'agents' ? 0 : unread[node.id] || 0);
-            showRun(node);
-            popups[node.id] = node;
-            startChipTimer();
-
-            node.nodeRedEditorComms.publish('get-log').then((state) => {
-                if (state.session) sessions[node.id] = state.session;
-                for (const e of state.events) addEvent(node, e, false);
-                showRuns(node, state.runs);
-                // The frame of the popup shows and hides the pane again after the log comes, and each show puts the scroll at the top.
-                // Keep the newest message in view each time the pane gets a size, until the user scrolls it.
-                const pane = part(node, views[node.id] === 'agents' ? 'agents' : views[node.id] === 'timeline' ? 'log' : 'chat');
-                if (!pane || typeof ResizeObserver !== 'function') return;
-                const watch = new ResizeObserver(() => {
-                    if (pane.clientHeight) pane.scrollTop = pane.scrollHeight;
-                });
-                const release = () => watch.disconnect();
-                for (const type of ['wheel', 'touchstart', 'mousedown', 'keydown']) pane.addEventListener(type, release, { once: true });
-                watch.observe(pane);
-            }).catch(() => showRuns(node, []));
+            buildView(this, document.getElementById('nru_popup.' + this.id + '.div'), this.id);
         },
         nodeRedEditorComms_subscriptions: {
             event: function (e) { addEvent(this, e, true); },
             runs: function (runs) { showRuns(this, runs); },
-            session: function (session) { sessions[this.id] = session; showIdentity(this); showChip(this); },
+            session: function (session) { sessions[this.id] = session; each(this, showIdentity); each(this, showChip); },
             cleared: function () { clear(this); }
         }
     });
@@ -1057,6 +1203,7 @@
     <p>A run waits for its background tasks, subagents and shell jobs. It ends with the first result that comes when no background task works.</p>
     <p>A failed run goes to a <code>catch</code> node. <code>msg.agent.reason</code> is one of <code>max_turns</code>, <code>max_cost</code>, <code>timeout</code>, <code>schema</code>, <code>sdk_error</code> or <code>node_closed</code>.</p>
     <p>Click the node to open the popup. The top of the popup shows the name of the node (or claude-agent), its summary (when set) and a line with its model, folder and sandbox. The model is the true model of the selected run, for example <code>opus 5.5</code>. With no run, it is the model of the last run. A model of the node with another family shows after it, for example <code>opus 5.5 (node: sonnet)</code>. The folder and the sandbox are the settings of the node, not the msg.cwd of a run. Drag the empty part of the tab row to move the popup. The two tabs are below it. Chat shows the text of the operator on the right and the text of the agent on the left. Timeline shows all events. The status line shows the state, the turns, the tokens used and the context size of the last model response.</p>
+    <p>The <b>Claude agent</b> tab of the sidebar shows the same chat as the popup. Both work at the same time and share the message box. The panel follows the selected claude-agent node. With no node or more than one node selected, it lists the claude-agent nodes: click a row to select the node. The pin button keeps the chat of one node.</p>
     <p>The timer chip in the header shows <b>Active</b>, the time since the selected run started, and <b>Cache</b>, the minutes until the prompt cache expires, for example <code>Cache 52m</code>. The cache countdown starts again at each model response. It is an estimate. <code>Cache cold</code> means that the next message reads the full context again at the full price. The chip turns amber at 5 minutes or less.</p>
     <p><b>New chat</b> (the + button) makes the node forget its last session and clears the popup log. The next message from the popup starts a new session. It is not possible while a run is active.</p>
     <p>The message box is at the bottom. Enter sends; Shift+Enter starts a new line. When no run is active, Send starts a run with your text as the task; the run continues the last session of the node. When the agent asks a question, the popup shows it with one button for each option, and Send becomes Answer. Interrupt and Stop show only while a run is active.</p>

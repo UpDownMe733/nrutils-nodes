@@ -19,7 +19,7 @@ function fakeElement(tag) {
     const listeners = {};
     const e = {
         tagName: tag.toUpperCase(), style: {}, childNodes: [], value: '', clicks: 0, focused: 0, disabled: false, title: '',
-        scrollTop: 0, scrollHeight: 0, clientHeight: 0, attributes: {}, listeners,
+        scrollTop: 0, scrollHeight: 0, clientHeight: 0, attributes: {}, listeners, dataset: {}, isConnected: true,
         get className() { return [...classes].join(' '); },
         set className(v) { classes.clear(); String(v).split(/\s+/).filter(Boolean).forEach((c) => classes.add(c)); },
         classList: {
@@ -41,7 +41,9 @@ function fakeElement(tag) {
             for (const tagName of ['a']) e.found[tagName] = [...html.matchAll(new RegExp('<' + tagName + '[ >]', 'g'))].map(() => fakeElement(tagName));
         },
         found: {},
-        querySelectorAll: (sel) => e.found[sel] || [],
+        // The selectors of the editor script: [data-ca], [data-ca="name"], and the tags that the fake parser found
+        querySelectorAll: (sel) => (sel.startsWith('[data-ca') ? matching(e, sel) : e.found[sel] || []),
+        querySelector: (sel) => matching(e, sel)[0] || null,
         remove() { e.removed = true; },
         get firstChild() { return e.childNodes[0]; },
         setAttribute(name, value) { e.attributes[name] = String(value); },
@@ -54,6 +56,13 @@ function fakeElement(tag) {
         click() { e.clicks++; (listeners.click || []).forEach((fn) => fn({ stopPropagation() {} })); }
     };
     return e;
+}
+
+// The elements below root that match [data-ca] or [data-ca="name"] ('.ca-popup[data-node="id"]' and '.ca-popup' also match from the document)
+function matching(root, sel) {
+    const found = /^(\.ca-popup)?(?:\[data-(ca|node)(?:="([^"]*)")?\])?$/.exec(sel);
+    return walk(root).slice(1).filter((e) => (!found[1] || e.classList.contains('ca-popup'))
+        && (!found[2] || (e.dataset[found[2]] !== undefined && (found[3] === undefined || e.dataset[found[2]] === found[3]))));
 }
 
 // All elements below root, root first
@@ -69,7 +78,8 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const document = {
         head,
         createElement: fakeElement,
-        // Only the elements in the document: the popup div and the head
+        // Only the elements in the document: the popup div, the panel of the sidebar and the head
+        querySelectorAll: (sel) => matching({ childNodes: [div, ...(sideTab && sideTab.content.childNodes ? [sideTab.content] : [])] }, sel),
         getElementById: (id) => [...walk(div), ...walk(head)].find((e) => e.id === id) || null
     };
     const clock = { now: 0, timers: [] };
@@ -85,9 +95,16 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const calls = [];
     const notes = [];
     const handlers = {};
+    const nodesById = {};
+    const selected = [];
+    const revealed = [];
+    let sideTab;
     const RED = {
         events: { on: (type, fn) => (handlers[type] = handlers[type] || []).push(fn) },
-        nodes: { registerType: (name, d) => { def = d; } },
+        nodes: { registerType: (name, d) => { def = d; }, node: (id) => nodesById[id], eachNode: (fn) => Object.values(nodesById).forEach(fn), workspace: (id) => ({ id, label: 'Flow ' + id }) },
+        // The sidebar and the canvas: the panel adds its tab here. A selection of the canvas gives the event of Node-RED.
+        sidebar: { addTab: (tab) => { sideTab = tab; } },
+        view: { select: ({ nodes }) => { selected.push(...nodes.map((n) => n.id)); }, reveal: (id) => revealed.push(id) },
         notify: (text, type) => notes.push({ text, type }),
         // The rule of RED.validators.number: an empty or absent value is valid only with blankAllowed.
         validators: { number: (blankAllowed) => (v) => (v === '' || v === undefined ? !!blankAllowed : !isNaN(v)) },
@@ -105,19 +122,22 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const resize = () => observed.forEach((o) => o.fn([{ target: o.target }]));
     const DOMPurify = { sanitize: (html, config) => { sanitized.push(config); return html.replace(/<script.*?<\/script>/g, ''); } };
     const window = {};
-    vm.runInNewContext(script, { document, RED, DOMPurify, window, Date: FakeDate, setInterval, clearInterval, ResizeObserver, ...extra });
+    vm.runInNewContext(script, { document, RED, DOMPurify, window, $: (e) => e, Date: FakeDate, setInterval, clearInterval, ResizeObserver, ...extra });
     const getDef = () => def;
     const answers = { 'get-log': state, 'new-chat': {} };
-    const node = {
-        id: 'n1',
-        ...fields,
+    const makeNode = (id, more = {}) => ({
+        id,
+        type: 'claude-agent',
+        ...more,
         nodeRedEditorComms: {
             publish: (type, payload) => {
                 calls.push({ type, payload });
                 return Promise.resolve(type in answers ? answers[type] : {});
             }
         }
-    };
+    });
+    const node = makeNode('n1', fields);
+    nodesById.n1 = node;
     def.nru_popupInit.call(node);
     const text = document.getElementById('claude-agent-text-n1');
     // Give a message from the runtime to the popup, as the comms do
@@ -125,7 +145,8 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const part = (name) => document.getElementById('claude-agent-' + name + '-n1');
     const rebuild = () => def.nru_popupInit.call(node);
     const emit = (type, ...args) => (handlers[type] || []).forEach((fn) => fn(...args));
-    return { window, resize, sanitized, emit, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
+    const addNode = (id, more) => (nodesById[id] = makeNode(id, more));
+    return { window, resize, sanitized, emit, addNode, selected, revealed, sideTab: () => sideTab, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
 }
 
 const key = (text, init) => {
@@ -935,5 +956,120 @@ describe('claude-agent popup first open', () => {
         log.clientHeight = 200;
         p.resize();
         assert.equal(log.scrollTop, 700);
+    });
+});
+
+describe('claude-agent sidebar panel', () => {
+    // The panel root of the node in the body of the panel, or undefined
+    const panelRoot = (p) => walk(p.sideTab().content).find((e) => e.dataset.key === 'side');
+    const rows = (p) => walk(p.sideTab().content).filter((e) => e.classList.contains('ca-row'));
+    const pin = (p) => p.sideTab().toolbar.childNodes[0];
+    const select = (p, ...nodes) => p.emit('view:selection-changed', { nodes });
+
+    it('adds a tab that works while the editor is in edit mode', () => {
+        const p = setup();
+        assert.equal(p.sideTab().id, 'claude-agent');
+        assert.equal(p.sideTab().enableOnEdit, true);
+    });
+
+    it('lists the claude-agent nodes when none is selected, and a click selects the node', () => {
+        const p = setup();
+        p.addNode('n2', { name: 'Two' });
+        p.addNode('n3', { type: 'inject' });
+        p.emit('nodes:add');
+        assert.equal(panelRoot(p), undefined);
+        assert.equal(rows(p).length, 2, 'a node of another type has no row');
+        assert.equal(p.sideTab().toolbar.style.display, 'none', 'the list has no toolbar');
+        rows(p)[1].click();
+        assert.deepEqual(p.revealed, ['n2']);
+        assert.deepEqual(p.selected, ['n2']);
+    });
+
+    it('shows the last text of a node in its row', async () => {
+        const p = setup({}, { events: [event('prompt', 'first'), event('text', 'last answer', { source: 'agent' })], runs: [], session: { cacheTtl: '1h', lastActivity: null } });
+        p.emit('nodes:add');
+        await settle();
+        assert.ok(rows(p)[0].textContent.includes('last answer'));
+    });
+
+    it('follows the selected node and shows the list again when no one node is selected', () => {
+        const p = setup();
+        const two = p.addNode('n2');
+        select(p, p.node);
+        assert.equal(panelRoot(p).dataset.node, 'n1');
+        assert.equal(p.sideTab().toolbar.style.display, '');
+        select(p, two);
+        assert.equal(panelRoot(p).dataset.node, 'n2');
+        select(p, p.node, two);
+        assert.equal(panelRoot(p), undefined, 'two nodes selected: the list');
+        select(p);
+        assert.equal(rows(p).length, 2);
+    });
+
+    it('keeps the pinned node until the pin is released', () => {
+        const p = setup();
+        const two = p.addNode('n2');
+        select(p, p.node);
+        pin(p).click();
+        assert.ok(pin(p).classList.contains('ca-on'));
+        select(p, two);
+        assert.equal(panelRoot(p).dataset.node, 'n1');
+        select(p);
+        assert.equal(panelRoot(p).dataset.node, 'n1', 'a click on the empty canvas keeps the chat');
+        pin(p).click();
+        assert.ok(!pin(p).classList.contains('ca-on'));
+        assert.equal(panelRoot(p), undefined, 'the pin is released: the panel follows the empty selection');
+        select(p, two);
+        assert.equal(panelRoot(p).dataset.node, 'n2');
+    });
+
+    it('shows a live message one time in the popup and one time in the panel', async () => {
+        const p = setup();
+        select(p, p.node);
+        await settle();
+        p.receive('event', event('prompt', 'unique words'));
+        const count = (root) => walk(root).filter((e) => e.classList.contains('ca-bubble') && e.textContent.includes('unique words')).length;
+        const popup = walk(p.div).find((e) => e.dataset.key === 'n1');
+        assert.equal(count(popup), 1);
+        assert.equal(count(panelRoot(p)), 1);
+    });
+
+    it('shares one draft between the popup and the panel', () => {
+        const p = setup();
+        select(p, p.node);
+        const popupText = p.text;
+        const panelText = walk(panelRoot(p)).find((e) => e.dataset.ca === 'text');
+        popupText.value = 'draft';
+        popupText.listeners.input[0]();
+        assert.equal(panelText.value, 'draft');
+        panelText.value = 'edited';
+        panelText.listeners.input[0]();
+        assert.equal(popupText.value, 'edited');
+    });
+
+    it('a life cycle prompt is not the last message of a row', async () => {
+        const p = setup({}, { events: [event('text', 'answer', { source: 'agent' }), event('prompt', 'keep alive', { source: 'life' })], runs: [], session: { cacheTtl: '1h', lastActivity: null } });
+        p.emit('nodes:add');
+        await settle();
+        assert.ok(rows(p)[0].textContent.includes('answer'));
+        assert.ok(!rows(p)[0].textContent.includes('keep alive'));
+    });
+
+    it('the spacer of the panel does not move the popup', () => {
+        const p = setup();
+        select(p, p.node);
+        const spacer = walk(panelRoot(p)).find((e) => e.classList.contains('ca-spacer'));
+        assert.equal(spacer.listeners.mousedown, undefined);
+        assert.ok(walk(p.div).find((e) => e.classList.contains('ca-spacer')).listeners.mousedown);
+    });
+
+    it('adds the flow tab to the name of a row when two nodes have the same name', () => {
+        const p = setup({}, undefined, { name: 'Same', z: 'f1' });
+        p.emit('nodes:add');
+        assert.ok(!rows(p)[0].textContent.includes('Flow f1'));
+        p.addNode('n2', { name: 'Same', z: 'f2' });
+        p.emit('nodes:add');
+        assert.ok(rows(p)[0].textContent.includes('Flow f1'));
+        assert.ok(rows(p)[1].textContent.includes('Flow f2'));
     });
 });
