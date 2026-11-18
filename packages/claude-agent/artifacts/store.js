@@ -16,6 +16,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { typeOf } = require('./types');
 
+const BIN_MS = 30 * 24 * 3600 * 1000;
 const NAME_RULE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 const sha256 = (data) => crypto.createHash('sha256').update(data).digest('hex');
@@ -101,7 +102,7 @@ function createStore(dir) {
         if (last && last.entry === entry && last.title === title && JSON.stringify(last.files) === JSON.stringify(list)) {
             return { record, version: last, unchanged: true };
         }
-        if (!record) record = { id, name, owner: {}, versions: [] };
+        if (!record) record = { id, name, owner: {}, deleted: null, versions: [] };
         record.owner = { address: input.address, nodeId: input.nodeId };
         const version = { n: last ? last.n + 1 : 1, time: Date.now(), title, note: input.note || '', entry, files: list, run: input.run || null, deleted: null, purged: false };
         record.versions.push(version);
@@ -152,7 +153,64 @@ function createStore(dir) {
         return v && v.files.find((f) => f.path === filePath);
     }
 
-    return { key, publish, list, get, version, file, blobPath, idOf, dir };
+    // Delete the artifact (no n) or one version into the bin. Gives the record, or undefined when there is nothing to delete.
+    function remove(id, n, now = Date.now()) {
+        const record = records.get(id);
+        const target = record && (n === undefined ? record : record.versions.find((v) => v.n === Number(n)));
+        if (!target || target.purged || target.deleted) return undefined;
+        target.deleted = now;
+        save(record);
+        return record;
+    }
+
+    // Undo a delete that the purge has not removed. Gives the record, or undefined.
+    function restore(id, n) {
+        const record = records.get(id);
+        const target = record && (n === undefined ? record : record.versions.find((v) => v.n === Number(n)));
+        if (!target || target.purged || !target.deleted) return undefined;
+        target.deleted = null;
+        save(record);
+        return record;
+    }
+
+    // Purge each version that is in the bin for 30 days: clear its file list, then remove each blob that no version uses.
+    // Gives the records that changed.
+    function purge(now = Date.now()) {
+        const changed = [];
+        for (const record of records.values()) {
+            const gone = (record.deleted || 0) && now - record.deleted >= BIN_MS;
+            let touched = false;
+            for (const v of record.versions) {
+                if (v.purged || !(gone || (v.deleted && now - v.deleted >= BIN_MS))) continue;
+                v.purged = true;
+                v.files = [];
+                touched = true;
+            }
+            if (touched) {
+                save(record);
+                changed.push(record);
+            }
+        }
+        if (!changed.length) return changed;
+        const used = new Set();
+        for (const record of records.values()) for (const v of record.versions) for (const f of v.files) used.add(f.sha256);
+        for (const sha of blobs()) if (!used.has(sha)) fs.rmSync(blobPath(sha), { force: true });
+        return changed;
+    }
+
+    // The sha of each blob in the store
+    function blobs() {
+        const out = [];
+        for (const a of fs.readdirSync(path.join(dir, 'blobs'))) {
+            for (const b of fs.readdirSync(path.join(dir, 'blobs', a))) if (!b.endsWith('.tmp')) out.push(a + b);
+        }
+        return out;
+    }
+
+    // The bytes of all blobs: the files of the bin count, because they stay for 30 days.
+    const size = () => blobs().reduce((sum, sha) => sum + fs.statSync(blobPath(sha)).size, 0);
+
+    return { key, publish, list, get, version, file, blobPath, idOf, dir, remove, restore, purge, size };
 }
 
 module.exports = { createStore, NAME_RULE };

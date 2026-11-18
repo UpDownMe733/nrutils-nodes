@@ -154,9 +154,42 @@ describe('store', () => {
         assert.equal(store.list({ type: 'text/markdown' }).length, 1);
         assert.equal(store.list({ owner: 'team/other' }).length, 0);
     });
+    it('deletes a version into the bin and undoes it', () => {
+        const id = store.idOf('n1', 'report.md');
+        store.remove(id, 2, 1000);
+        assert.equal(store.version(id, 2), undefined);
+        assert.equal(store.list({ q: 'report' })[0].version, 1);
+        assert.equal(store.remove(id, 2), undefined, 'a second delete does nothing');
+        assert.ok(store.restore(id, 2));
+        assert.equal(store.version(id, 2).n, 2);
+        assert.equal(store.restore(id, 2), undefined, 'nothing to undo');
+        assert.equal(store.remove('0000000000000000'), undefined);
+    });
+    it('purges after 30 days and removes only blobs that no version uses', async () => {
+        const id = store.idOf('n1', 'purge');
+        const a = await store.publish(input([['a.txt', 'only-in-1'], ['b.txt', 'shared']], { name: 'purge' }));
+        const b = await store.publish(input([['b.txt', 'shared']], { name: 'purge' }));
+        const [onlyIn1, shared] = a.version.files.map((f) => store.blobPath(f.sha256));
+        assert.equal(b.version.n, 2);
+        const day = 24 * 3600 * 1000;
+        store.remove(id, 1, 1000);
+        assert.equal(store.purge(1000 + 29 * day).length, 0);
+        assert.ok(fs.existsSync(onlyIn1));
+        assert.equal(store.purge(1000 + 30 * day).length, 1);
+        assert.equal(fs.existsSync(onlyIn1), false);
+        assert.ok(fs.existsSync(shared));
+        assert.equal(store.restore(id, 1), undefined, 'a purged version stays gone');
+        assert.deepEqual(store.get(id).versions[0].files, []);
+        assert.equal(store.get(id).versions[0].purged, true);
+        store.remove(id, undefined, 2000);
+        assert.equal(store.list({ q: 'purge' }).length, 0);
+        store.purge(2000 + 31 * day);
+        assert.equal(fs.existsSync(shared), false);
+        assert.ok(store.size() > 0);
+    });
     it('reads the records again at the next start and keeps the key', () => {
         const again = createStore(path.join(dir, 'store'));
-        assert.equal(again.list().length, 2);
+        assert.equal(again.list().length, 2, 'the purged artifact is not in the list');
         assert.ok(again.key.equals(store.key));
         assert.equal(fs.statSync(path.join(dir, 'store', 'key')).mode & 0o777, 0o600);
     });
@@ -300,8 +333,9 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
         assert.equal(events[0].payload.artifact.type, 'text/markdown');
         await waitFor(async () => comms.length, 5000, 'comms topic');
         assert.equal(comms[0].record.name, 'report.md');
-        const list = await (await api('/claude-agent/artifacts')).json();
+        const { items: list, total } = await (await api('/claude-agent/artifacts')).json();
         assert.equal(list.length, 1);
+        assert.ok(total > 0);
         assert.equal(list[0].title, 'The report');
         const record = await (await api(`/claude-agent/artifacts/${list[0].id}`)).json();
         assert.equal(record.versions.length, 1);
@@ -325,8 +359,22 @@ describe('publish in a real Node-RED', { timeout: 60000 }, () => {
     it('refuses a name against the rule', async () => {
         assert.match((await run('badname')).payload, /^publish replied: Error: the name "Bad_Name" is not valid/);
     });
+    it('deletes and restores through the admin API, and sends the record', async () => {
+        const [item] = (await (await api('/claude-agent/artifacts')).json()).items;
+        const url = `/claude-agent/artifacts/${item.id}`;
+        const count = comms.length;
+        assert.equal((await api(`${url}/1`, { method: 'DELETE' })).status, 200);
+        assert.equal((await api(`${url}/1`, { method: 'DELETE' })).status, 404);
+        assert.equal((await api(url, { method: 'DELETE' })).status, 200);
+        assert.equal((await (await api('/claude-agent/artifacts')).json()).items.some((i) => i.id === item.id), false);
+        await waitFor(async () => comms.length >= count + 2, 5000, 'comms of the deletes');
+        assert.equal((await api(`${url}/restore`, { method: 'POST' })).status, 200);
+        assert.equal((await api(`${url}/1/restore`, { method: 'POST' })).status, 200);
+        assert.equal((await api(`${url}/1/restore`, { method: 'POST' })).status, 404);
+        assert.equal((await (await api('/claude-agent/artifacts')).json()).items.some((i) => i.id === item.id), true);
+    });
     it('gives no view ticket when the viewer is off', async () => {
-        const [item] = await (await api('/claude-agent/artifacts')).json();
+        const [item] = (await (await api('/claude-agent/artifacts')).json()).items;
         const res = await api(`/claude-agent/artifacts/${item.id}/1/ticket`, { method: 'POST' });
         assert.equal(res.status, 409);
         assert.equal((await api(`/claude-agent/artifacts/${item.id}/9/ticket`, { method: 'POST' })).status, 404);

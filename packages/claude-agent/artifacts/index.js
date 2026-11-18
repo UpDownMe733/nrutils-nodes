@@ -110,7 +110,8 @@ function createRuntime(RED) {
     const read = RED.auth.needsPermission('claude-agent.read');
     const base = '/claude-agent/artifacts';
     const missing = (res) => res.status(404).json({ error: 'not found' });
-    RED.httpAdmin.get(base, read, (req, res) => res.json(getStore().list(req.query)));
+    const write = RED.auth.needsPermission('claude-agent.write');
+    RED.httpAdmin.get(base, read, (req, res) => res.json({ items: getStore().list(req.query), total: getStore().size() }));
     RED.httpAdmin.get(`${base}/:id`, read, (req, res) => {
         const record = getStore().get(req.params.id);
         return record ? res.json(record) : missing(res);
@@ -123,6 +124,24 @@ function createRuntime(RED) {
         const t = ticket.make(s.key, req.params.id, Number(req.params.n));
         return res.json({ url: `${url}/v/${t}/`, download: `${url}/v/${t}/download` });
     });
+
+    // Delete and undo. Each change goes to the editors with the new record.
+    const change = (action) => (req, res) => {
+        const { id, n } = req.params;
+        const record = getStore()[action](id, n);
+        if (!record) return missing(res);
+        announce(record);
+        return res.json(record);
+    };
+    RED.httpAdmin.delete(base + '/:id', write, change('remove'));
+    RED.httpAdmin.delete(`${base}/:id/:n`, write, change('remove'));
+    RED.httpAdmin.post(`${base}/:id/restore`, write, change('restore'));
+    RED.httpAdmin.post(`${base}/:id/:n/restore`, write, change('restore'));
+
+    // The purge of the bin: at start and then each hour
+    const purge = () => getStore().purge().forEach(announce);
+    purge();
+    setInterval(purge, 3600 * 1000).unref();
 
     return { publish, getStore, settings };
 }
