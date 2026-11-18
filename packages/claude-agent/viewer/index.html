@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="{{theme}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>File</title>
+<link rel="stylesheet" href="/viewer/viewer.css">
+<!-- The order of the renderers is the order of the match: the first renderer that matches shows the file. -->
+<script nonce="{{nonce}}" src="/viewer/viewer.js" defer></script>
+<script nonce="{{nonce}}" src="/viewer/lib/marked.js" defer></script>
+<script nonce="{{nonce}}" src="/viewer/lib/purify.js" defer></script>
+<script nonce="{{nonce}}" src="/viewer/renderers/markdown.js" defer></script>
+<script nonce="{{nonce}}" src="/viewer/renderers/image.js" defer></script>
+<script nonce="{{nonce}}" src="/viewer/renderers/pdf.js" defer></script>
+<script nonce="{{nonce}}" src="/viewer/renderers/media.js" defer></script>
+<script nonce="{{nonce}}" src="/viewer/renderers/html.js" defer></script>
+<script nonce="{{nonce}}" src="/viewer/renderers/text.js" defer></script>
+<script nonce="{{nonce}}" src="/viewer/renderers/other.js" defer></script>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-title"><span id="title"></span><span id="version" class="secondary"></span></div>
+  <div class="bar-actions">
+    <a id="download" class="button" href="download" download>Download</a>
+    <button id="close" class="button" type="button" hidden>Close</button>
+  </div>
+</header>
+<div class="layout">
+  <nav id="files" class="files" hidden aria-label="Files"></nav>
+  <main id="content" class="content"></main>
+</div>
+</body>
+</html>
