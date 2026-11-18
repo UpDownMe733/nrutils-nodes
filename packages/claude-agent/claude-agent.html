@@ -18,7 +18,7 @@
     const MAX_ENTRIES = 200;
     const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
     const MAX_IMAGES = 5;
-    const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+    const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
     // The look of the popup. It uses the theme variables of Node-RED, so it follows the light and the dark theme.
     // The operator bubble has the node colour with dark text: that has contrast in both themes.
@@ -366,11 +366,12 @@
         const images = pasted[node.id] = pasted[node.id] || [];
         for (const file of files) {
             if (images.length >= MAX_IMAGES) return RED.notify('A message can have ' + MAX_IMAGES + ' pictures.', 'warning');
-            if (file.size > MAX_IMAGE_BYTES) {
-                RED.notify('A picture can have 5 MB.', 'warning');
+            const used = images.reduce((sum, i) => sum + (i.size || 0), 0);
+            if (used + file.size > MAX_IMAGE_BYTES) {
+                RED.notify('The pictures of a message can have 3 MB.', 'warning');
                 continue;
             }
-            const image = { mediaType: file.type, data: '' };
+            const image = { mediaType: file.type, data: '', size: file.size };
             images.push(image);
             const reader = new FileReader();
             reader.onload = () => {
