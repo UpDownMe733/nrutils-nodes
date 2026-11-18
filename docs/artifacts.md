@@ -191,7 +191,54 @@ Two ways:
 
 ## 8. The editor
 
-<!-- From the popup UX designer, after the user needs. Section 10 has the needs. -->
+The look and the behaviour come from the popup UX designer, from the needs of section 10. The word in the UI is "file", never "artifact".
+
+### Where a new file shows
+
+- **Node:** a badge with the count of unseen new files, in the accent colour. It clears when the user opens the Files list of that node. No popup, no focus change, no sound.
+- **Chat:** one line at the time of the publish: type icon, title, "New file" or "Version 3", time. An image gets a 48 px thumbnail. A click opens that version in Files. The popup has no fixed "newest" header: the chat line is the preview.
+- **Popup:** a 4th tab "Files" with the files of this node, newest first.
+- **Sidebar tab:** a "Files" view with the files of all agents of the tab, with filters.
+
+### The list
+
+- A row is 44 px high minimum.
+  - Line 1: type icon, title (one line, with an ellipsis).
+  - Line 2, in the secondary colour: "Version 3 · 2 min ago". The sidebar list adds the agent name.
+- An unseen item has an accent dot at the left. A shared item has the chip "Shared". A deleted item shows "Deleted. Undo" for 10 s, then it goes.
+- Filters, in the sidebar only: a search field (title), then Agent, Type, Time (Today, 7 days, 30 days, All). The search field never gets the focus on its own.
+
+### The layout
+
+- Width 500 px or more: the list at the left (40 %), the viewer at the right.
+- Less than 500 px: the list only. A tap shows the viewer at full width, with "‹ Files" at the top left.
+- The viewer header: title, "Version 3 (latest) ▾", then the buttons Full screen, Download, Share and More. More holds Compare and Delete.
+  Each button has a visible label and a height of 44 px. No action is on hover only. On a narrow screen the buttons wrap to a second row.
+
+### The actions
+
+- **Open:** one click on the row. The editor theme goes in the URL.
+- **Versions:** a list, newest first: "Version 3 · latest · 18 Nov 14:02". One tap opens an older version.
+- **Compare:** "Compare with", with the version before as the default. Side by side on a wide screen, stacked on a narrow screen.
+- **Full screen:** the viewer page opens in a new browser tab. In editor mode that page has a "Close" button (`window.close`).
+- **Download:** one click, on the download URL of the view server (section 6). The file name is `<title>-v3.<ext>`. A folder downloads as `<title>-v3.zip`.
+- **Share:** a panel in the viewer area. It shows "Anyone with the link can open it." and two choices:
+  - "This version (3)" (default) or "Always the newest version". The second choice shows the warning of section 7 before "Create link".
+  - "Ends in": 1 day, 7 days (default) or 30 days.
+  - "Create link" shows the preview (the share page in the frame), "Copy link", and "Share…" on HTTPS only.
+  - Each open link has one line: "Anyone with the link · Version 3 · ends 25 Nov", with the buttons "Extend" and "Stop sharing". "Stop sharing" works at once, with no confirm.
+  - With no `publicUrl`, the Share button does not show.
+- **Shared links:** the sidebar "Files" view has a filter "Shared". It lists all open links of all agents, with the same line and buttons.
+- **Delete:** a confirm dialog: "Delete <title>? All 3 versions go to the bin for 30 days. 2 shared links stop now." The buttons are "Delete" (red) and "Cancel". Undo brings back the file and its links that have not expired.
+
+### The viewer page (editor and share link)
+
+- Top bar, 48 px: title, then "Version 3 · 18 Nov 2026" or "Newest version · 18 Nov 2026", then Download. A share page has no agent name, no path and no editor link.
+- The content fits the width. The page never scrolls sideways. A table scrolls in its own box.
+- Markdown: a wide screen shows the outline as a left column. A narrow screen shows a "Contents" button that opens the list. A tap jumps to the heading.
+- The page is never blank. When a type cannot show: "This file cannot show here." and Download.
+- A dead link shows one line: "This link does not work."
+- Theme: the editor theme from the URL. A share page follows `prefers-color-scheme`. The viewer page has its own copy of the colour values of the editor CSS variables, because it cannot read the editor.
 
 ## 9. Settings
 
