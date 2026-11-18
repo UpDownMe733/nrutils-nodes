@@ -228,6 +228,16 @@ Drag the empty part of the tab row to move the popup. The tabs are below it: **C
 list (with more than one run), the timer chip and **New chat**.
 The status line shows the state, the turns, the tokens used and the context size of the last model response.
 
+## Files
+
+Each publish of an agent makes a file in the **Files** tab of the popup and in the **Files** tab of the sidebar. The sidebar tab shows the files of all agents. It has a search box and the filters Agent and Type. At the bottom it shows `Files use` and the size of the store. The popup tab shows the files of its node.
+
+- A click on a file opens it in the viewer. On a narrow popup the viewer replaces the list. **Files** at the top goes back.
+- The version list shows the versions. **Full screen** and **Download** act on the shown version. **More** has **Compare** and **Delete**.
+- **Delete** asks once. Then the line `Deleted. Undo` shows for 10 seconds. **Undo** restores the file.
+- A new file gives a line in the chat. A click on the line opens the file. A node with a new file shows a badge with the count, until you open its Files tab.
+- The viewer follows the theme of the editor.
+
 ## Sidebar panel
 
 The **Claude agent** tab of the sidebar shows the same chat as the popup. The popup and the panel work at the same time. They share the message box and show each message one time.
