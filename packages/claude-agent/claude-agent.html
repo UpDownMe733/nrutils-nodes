@@ -408,6 +408,9 @@
         const files = Array.from((e.clipboardData && e.clipboardData.items) || [])
             .filter((item) => item.kind === 'file').map((item) => item.getAsFile()).filter(Boolean);
         if (!files.length) return;
+        // Text with formatting next to a file is a copy from a word processor, a spreadsheet or a web page: the file is a picture of the text.
+        // The text goes to the box as in each text box. A file manager gives a path as text, but no formatting.
+        if (e.clipboardData.types.includes('text/html') && e.clipboardData.getData('text/plain')) return;
         e.preventDefault();
         e.stopPropagation();
         for (const file of files) {
