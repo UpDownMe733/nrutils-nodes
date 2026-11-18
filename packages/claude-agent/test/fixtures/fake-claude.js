@@ -17,7 +17,7 @@
 //   long            gives a model response with a context of 150000 tokens, then calls the PostToolUse hook.
 //                   If the hook asks for the handoff tool, it calls handoff with the note "the handoff note" and
 //                   gives no result. Else the result is "no hint".
-//   send <to> <text> calls the send tool, then gives the result "send replied: " and the text of the tool
+//   send <to> <text> calls the send tool (report <to> <text> sets report true), then gives the result "send replied: " and the text of the tool
 //   Write what...   the close prompt of an agent: the result is the text of close-answer.txt in the folder,
 //                   else "The note of the fake."
 //   Stage           a call of the agent-watch narrator: one line for each stage of the prompt.
@@ -135,9 +135,9 @@ async function answer(prompt) {
     }
     if (word === 'maxturns') return result('', 'error_max_turns');
     if (word === 'big') return result('done');
-    if (word === 'send') {
+    if (word === 'send' || word === 'report') {
         const [, to, ...text] = prompt.split(' ');
-        return result('send replied: ' + await callTool('send', { to, text: text.join(' ') }));
+        return result('send replied: ' + await callTool('send', { to, text: text.join(' '), ...(word === 'report' && { report: true }) }));
     }
     if (word === 'long') {
         const hook = hookIds.length ? await request({ subtype: 'hook_callback', callback_id: hookIds[0], tool_use_id: 'tool-1',

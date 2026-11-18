@@ -230,18 +230,21 @@ module.exports = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, nodeR
 
     function sendTool(sdk, run) {
         const description = 'Send a text to the inbox of another agent. ' +
-            'to is "name" for an agent of your team, or "team/name". An answer comes as a new message to you.';
+            'to is "name" for an agent of your team, or "team/name". An answer comes as a new message to you. ' +
+            'report true: the text is a report that expects no answer. The node then does not wait for one.';
         const error = (text) => ({ content: [{ type: 'text', text: 'Error: ' + text }], isError: true });
-        return sdk.tool('send', description, { to: z.string(), text: z.string() }, async ({ to, text }) => {
+        return sdk.tool('send', description, { to: z.string(), text: z.string(), report: z.boolean().optional() }, async ({ to, text, report }) => {
             const parts = to.split('/');
             if (parts.length > 2) return error('to must be "name" or "team/name".');
             const target = parts.length === 1 ? `${address.split('/')[0]}/${clean(to)}` : parts.map(clean).join('/');
             if (!broker.connected) return error('the node has no connection to the MQTT broker. The message was not sent.');
             await new Promise((resolve, reject) => broker.publish({ topic: inboxTopic(target), payload: { from: address, text }, qos: 1 },
                 (err) => (err ? reject(err) : resolve())));
-            openItems.add(target);
             event(run, 'sent', text, { to: target });
-            event(run, 'life', `waiting for ${target}`);
+            if (!report) {
+                openItems.add(target);
+                event(run, 'life', `waiting for ${target}`);
+            }
             return { content: [{ type: 'text', text: `Sent to ${target}.` }] };
         });
     }

@@ -104,6 +104,7 @@ function makeFlow(workRoot, mqttPort, deadPort) {
         ...agentWithInjects('busy', ['wait']),
         inject('i-busy-stop', '', 'busy', { agent: ['{"cmd":"stop"}', 'json'] }),
         ...agentWithInjects('sender', ['send peer hello', 'send Team+B/peer again'], { broker: 'broker' }),
+        ...agentWithInjects('reporter', ['report peer final'], { broker: 'broker' }),
         ...agentWithInjects('offline', ['send peer hello'], { broker: 'deadbroker' }),
         agent('', [[], [], []], { id: 'noname', broker: 'broker' }),
         // The message mode with an inbox
@@ -403,6 +404,20 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         assert.equal((await list('sender')).length, 1, 'keep-alive and close turns send nothing on the output');
         fs.rmSync(notePath('sender'), { force: true });
         fs.rmSync(sessionPath('sender'), { force: true });
+    });
+
+    it('a send with report true opens no item: the timer end closes with no keep-alive', async () => {
+        await injectNode('i-reporter-0');
+        await results('reporter', 1);
+        const sent = brokerGot.find((m) => m.topic === inbox('peer') && JSON.parse(m.payload).text === 'final');
+        assert.ok(sent, 'the report reached the inbox');
+        assert.ok(eventsOf('reporter').some((e) => e.kind === 'sent' && e.text === 'final'));
+        assert.ok(!lifeLines('reporter').includes('waiting for Team-A/peer'), 'no open item');
+        await idle('reporter');
+        await fire();
+        await ended('reporter', 2);
+        assert.equal(prompts('reporter').at(-1), CLOSE_PROMPT, 'the timer end closes at once');
+        fs.rmSync(notePath('reporter'), { force: true });
     });
 
     it('an answer from the agent clears the open item, and an inbox message starts a turn with a new output msg', async () => {
