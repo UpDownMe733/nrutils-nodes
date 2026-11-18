@@ -199,12 +199,6 @@
         document.getElementById('title').textContent = m.title;
         document.getElementById('title').title = m.title;
         document.getElementById('version').textContent = 'Version ' + m.n + (m.newest ? ' (newest)' : '') + ' · ' + date(m.time);
-        // In a browser tab of its own, the page has a Close button
-        if (window.top === window) {
-            const close = document.getElementById('close');
-            close.hidden = false;
-            close.addEventListener('click', () => window.close());
-        }
         window.addEventListener('hashchange', show);
         await show();
     }
