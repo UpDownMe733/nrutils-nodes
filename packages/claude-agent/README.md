@@ -50,7 +50,9 @@ All entries of this `settings.js` block are optional. Restart Node-RED after a c
 claudeAgent: {
     launcher: '/opt/node-red/claude-launcher',
     workRoot: '/srv/agent-work',
-    sandboxPattern: '^box-[a-z0-9-]+$'
+    sandboxPattern: '^box-[a-z0-9-]+$',
+    agentExec: '/opt/node-red/agent-exec',
+    artifacts: { maxBytes: 104857600, maxFiles: 2000 }
 },
 ```
 
@@ -59,6 +61,9 @@ claudeAgent: {
 | `launcher` | the CLI of the SDK | A program that the SDK starts in place of the CLI. It must start the CLI with the same arguments. |
 | `workRoot` | the home folder of the Node-RED user | Each Folder must be this folder or below it. |
 | `sandboxPattern` | `^[A-Za-z0-9][A-Za-z0-9._-]*$` | A Sandbox name that does not match fails the run. |
+| `agentExec` | none | A program that runs a command with the rights of the agent: `agentExec <sandbox or -> <folder> <command...>`. The `publish` tool needs it when a `launcher` is set. |
+| `artifacts.dir` | `<userDir>/claude-agent/artifacts` | The folder of the artifact store. |
+| `artifacts.maxBytes`, `artifacts.maxFiles` | 100 MB, 2000 | The limits of one publish. |
 
 A launcher for the OS user `worker`:
 
@@ -71,6 +76,21 @@ The sudo rule needs the tag `SETENV`, so that the CLI gets the environment.
 
 **Sandbox:** the launcher gets the Sandbox name in `NODE_RED_CLAUDE_SANDBOX` and the Folder in
 `NODE_RED_CLAUDE_CWD`.
+
+## Artifacts
+
+Each run has the tool `publish({ path, name?, title?, entry?, note? })`. The agent gives a file or a folder to the people with it.
+
+- `path` is relative to the Folder of the run, or absolute. It must be in the work root.
+- `name` is the key of the artifact. The same name from the same node makes a new version. Default: the file or folder name.
+- `title` is what people see. Default: the first heading of a markdown or HTML entry, else the file name.
+- `entry` is the file of a folder that opens first. Default: `index.html`, `README.md`, or the first file.
+- `note` says what is new in the version.
+
+The node copies the files to the store when the tool runs. A publish of equal content makes no new version.
+The node reads the files with the rights of the agent (`tar` run by `agentExec`, or by Node-RED when there is no `launcher`).
+It stops on a symbolic link, a name outside the folder, and on more bytes or files than the limits.
+Each publish gives the event `artifact` and the comms topic `claude-agent/artifacts`. The admin API `GET /claude-agent/artifacts` lists the artifacts.
 
 ## Properties
 
