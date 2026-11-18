@@ -179,8 +179,9 @@ Two ways:
 - **Download**: one file as it is, a folder as a zip (own zip writer, deflate of `zlib`, about 80 lines). This needs no host. The editor links to the download URL of the view server (section 6).
 - **Share link**: `<publicUrl>/s/<share id>/`. The share id is 128 random bits. A record in `shares.json`: `{ id, artifact, version: n | "latest", created, expires, revoked, label }`.
   - A share link never shows more than its one artifact. Its record and its page have no owner, no run and no folder.
-  - The version: the default is the version that the person sees. "Always the latest version" is an explicit choice with this warning: "Each new version that the agent makes goes to the people with the link, with no review." An agent can be under prompt injection, so a fixed version is the safe default.
-  - The time: 1 day, 7 days (default) or 30 days. 30 days is the longest time. "Extend" sets a new end, at most 30 days from that time, and keeps the URL.
+  - The version: the default is the version that the person sees. "Always the newest version" is an explicit choice with this warning: "Each new version that the agent makes goes to the people with the link, with no review." An agent can be under prompt injection, so a fixed version is the safe default.
+  - The time: 1 day, 7 days (default) or 30 days. 30 days is the longest time. "Extend" sets a new end of 1, 7 or 30 days from now, and keeps the URL.
+  - The UI says "newest", never "latest". `latest` is only the value in `shares.json`.
   - The editor has one list of all open share links of all artifacts, with the end date of each and a revoke action.
   - The share server is its own `http.Server` on its own port, with no Express app of Node-RED. It serves only `/s/…`, the download of that share and the viewer page. It has no `/v/` route and no list. A share page shows the title, the version, the date and the content.
   - It binds to `127.0.0.1` by default (setting `artifacts.shareBind`), for a tunnel on the same host. A public host (a reverse proxy or a tunnel) sends that whole port to the internet. The view server and the editor stay on the LAN.
@@ -212,21 +213,23 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 
 - Width 500 px or more: the list at the left (40 %), the viewer at the right.
 - Less than 500 px: the list only. A tap shows the viewer at full width, with "‹ Files" at the top left.
-- The viewer header: title, "Version 3 (latest) ▾", then the buttons Full screen, Download, Share and More. More holds Compare and Delete.
+- The viewer header: title, "Version 3 (newest) ▾", then the buttons Full screen, Download, Share and More. More holds Compare and Delete.
   Each button has a visible label and a height of 44 px. No action is on hover only. On a narrow screen the buttons wrap to a second row.
 
 ### The actions
 
 - **Open:** one click on the row. The editor theme goes in the URL.
-- **Versions:** a list, newest first: "Version 3 · latest · 18 Nov 14:02". One tap opens an older version.
+- **Versions:** a list, newest first: "Version 3 · newest · 18 Nov 14:02". One tap opens an older version.
 - **Compare:** "Compare with", with the version before as the default. Side by side on a wide screen, stacked on a narrow screen.
 - **Full screen:** the viewer page opens in a new browser tab. In editor mode that page has a "Close" button (`window.close`).
 - **Download:** one click, on the download URL of the view server (section 6). The file name is `<title>-v3.<ext>`. A folder downloads as `<title>-v3.zip`.
 - **Share:** a panel in the viewer area. It shows "Anyone with the link can open it." and two choices:
-  - "This version (3)" (default) or "Always the newest version". The second choice shows the warning of section 7 before "Create link".
+  - "This version (3)" (default) or "Always the newest version". While the second choice is selected, the warning of section 7 shows as one line of text below the choices, in the warning colour of the editor. It is not a dialog, and it does not block "Create link".
   - "Ends in": 1 day, 7 days (default) or 30 days.
   - "Create link" shows the preview (the share page in the frame), "Copy link", and "Share…" on HTTPS only.
-  - Each open link has one line: "Anyone with the link · Version 3 · ends 25 Nov", with the buttons "Extend" and "Stop sharing". "Stop sharing" works at once, with no confirm.
+  - Each open link has one line: "Anyone with the link · Version 3 · ends 25 Nov", or "Anyone with the link · Newest version · ends 25 Nov" for a link that follows the newest version. The line has the buttons "Extend" and "Stop sharing".
+  - "Extend" shows the choices 1 day, 7 days and 30 days in the line, counted from now. After the choice, the line shows the new end date. The URL does not change.
+  - "Stop sharing" works at once, with no confirm.
   - With no `publicUrl`, the Share button does not show.
 - **Shared links:** the sidebar "Files" view has a filter "Shared". It lists all open links of all agents, with the same line and buttons.
 - **Delete:** a confirm dialog: "Delete <title>? All 3 versions go to the bin for 30 days. 2 shared links stop now." The buttons are "Delete" (red) and "Cancel". Undo brings back the file and its links that have not expired.
@@ -269,14 +272,14 @@ Three users gave their needs: an operator who watches many agents, a new user, a
 | A new artifact never opens a popup, takes the focus or covers the canvas. A small sign on the node and one line in the chat or panel are enough. | all | section 8 |
 | The chat shows the publish at its time: title, type in words or icon with word, version, time, agent. | new | event `artifact`, section 8 |
 | One list for all agents, newest first, filters for agent, type and time, search by title. Find an old thing in 10 seconds. | watcher | admin API `GET /` with `owner`, `type`, `since`, `q` |
-| One stable title for all versions; a clear "latest". | watcher, small screen | the name is the key; the title of the newest version shows |
+| One stable title for all versions; a clear "newest". | watcher, small screen | the name is the key; the title of the newest version shows |
 | Read with one click, fast, inline. A big file or an HTML page must not make the editor slow. | all | the viewer runs in its own frame and process of the other origin; the list loads no content, only an image thumbnail |
 | Compare a version with the one before. On a small screen: stacked, not side by side. | all | section 5, compare |
 | A wide table scrolls in its own frame with the first column fixed. A long document has an outline. A big image fits and pinch zoom works. | small screen | the renderers of section 5 |
 | An HTML application opens full screen in its own page, with a way back. | small screen | the viewer URL opens in a browser tab of its own |
 | No version is overwritten. Nothing is lost after a restart or an update. | all | append-only versions, plain files in the user directory |
 | Delete asks first, says which share links stop, and has an undo. | all | section 3, delete goes to a bin for 30 days |
-| A share link is never made on its own. It says in words who can open it ("anyone with the link"), fixed version or latest, and the end date. It can be stopped at once. | all | section 7 |
+| A share link is never made on its own. It says in words who can open it ("anyone with the link"), fixed version or newest, and the end date. It can be stopped at once. | all | section 7 |
 | A preview of what the outside person sees, before the link goes out. | watcher | the editor opens the share page itself |
 | The outside person sees only the content, the title, the version and the date: no agent names, prompts, paths or other things. No login. A readable page on a phone. | all | section 7 |
 | HTML of an agent never reaches Node-RED or the cookies. | all | section 6 |
@@ -306,5 +309,5 @@ Sizes: S is less than 150 lines with tests, M 150 to 400, L more than 400.
 
 - An agent can publish HTML that tries to trick a person, for example a fake login form. The opaque origin stops access to data, not a lie on the screen. The viewer shows the owner and the type above each HTML artifact.
 - Chrome shows a PDF only outside a sandbox, so a PDF depends on the PDF viewer of the browser for its safety. The type and first byte checks of section 6 limit it to real PDF files.
-- A share link to "always the latest version" sends each new version out with no review. It is an explicit choice with a warning, and it ends after 30 days at most.
+- A share link to "always the newest version" sends each new version out with no review. It is an explicit choice with a warning, and it ends after 30 days at most.
 - The store grows with no limit, because nothing deletes on its own. The list shows the size of each artifact and the total.
