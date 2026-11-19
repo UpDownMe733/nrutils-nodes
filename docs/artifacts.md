@@ -160,7 +160,7 @@ The editor runs with the admin rights of Node-RED. Content of an agent must neve
    `script-src 'self'` is not enough: it allows each artifact file on the same origin as a script, and a sandbox CSP has no effect on a script that another page loads. With the nonce, only the scripts of the viewer run, and `DOMPurify` removes HTML that tries to add more.
 5. **Strict headers.** Each response has `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Cache-Control: private, no-store`.
 6. **Exact paths.** The view server and the share server find a file only by an exact match of its path in the file list of the version. They never join a path from the URL to a folder.
-7. **Messages.** The editor accepts a `postMessage` only when `event.origin` is the origin of the view server. It accepts only data (for example "loaded"), never a command.
+7. **Messages.** The editor accepts a `postMessage` only when `event.origin` is the origin of the view server. It accepts only data (for example "loaded"), never a command. The viewer page sends "loaded" as soon as its script runs. When the frame of the editor gets no "loaded" in 8 s, the editor hides the frame and shows "The viewer did not load. Check that the view server runs." A later "loaded" shows the frame again. The editor sends no extra request for this check.
 
 The PDF exception: Chrome does not show a PDF in a sandboxed document, so a PDF response has no `sandbox` CSP. The view server serves a file as PDF only when its type is exactly `application/pdf` and its first bytes are `%PDF-`. The response has `nosniff`. Else the file is served as `application/octet-stream` with the sandbox CSP.
 
