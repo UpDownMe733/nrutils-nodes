@@ -112,7 +112,7 @@ describe('Files script block', () => {
         it('has the page, the key, the menu item, the hash rules and no innerHTML from data', () => {
             assert.match(block, /const startHash = location\.hash;/);
             assert.match(block, /RED\.keyboard\.add\('\*', 'ctrl-g shift-f', 'claude-agent:show-files-page'\)/);
-            assert.match(block, /RED\.menu\.addItem\('menu-item-view-menu', \{ id: 'menu-item-claude-agent-files', label: 'Files'/);
+            assert.match(block, /RED\.menu\.addItem\('menu-item-view-menu', \{ id: 'menu-item-claude-agent-files', label: 'Files page'/);
             assert.match(block, /RED\.events\.on\('flows:loaded'[\s\S]*?openPage\(target\)/);
             assert.match(block, /RED\.events\.on\('workspace:change'/);
             assert.match(block, /RED\.nodes\.node\(nodeId\)/);
@@ -124,8 +124,49 @@ describe('Files script block', () => {
             assert.match(block, /#red-ui-notifications\{z-index:1600;[^}]*\}[\s\S]*?\.caf-full\{[^}]*z-index:1500/);
             assert.match(block, /if \(link && RED\.clipboard\.copyText[\s\S]*?The link did not copy\.', 'error'\);\s*copy\.focus\(\);/);
             assert.match(block, /e\.target !== document\.body[\s\S]*?e\.key === 'Escape' && page\.layer\.querySelector\('\.caf-full'\)[\s\S]*?e\.stopPropagation\(\);[\s\S]*?closePage\(\);[\s\S]*?page\.layer\.focus\(\);[\s\S]*?\}, true\);/);
-            assert.match(html, /View &gt; Files<\/b>[\s\S]*?Ctrl\+G Shift\+F[\s\S]*?#files[\s\S]*?Show agent<\/b>[\s\S]*?<b>Close<\/b>[\s\S]*?Escape ends full screen first/);
+            assert.match(html, /View &gt; Files page<\/b>[\s\S]*?Ctrl\+G Shift\+F[\s\S]*?#files[\s\S]*?Show agent<\/b>[\s\S]*?<b>Close<\/b>[\s\S]*?Escape ends full screen first/);
             assert.doesNotMatch(block, /innerHTML/);
+        });
+    });
+
+    describe('the corrections of the user study round 2', () => {
+        const start = block.indexOf('    // Equal sort keys');
+        const code = block.slice(start, block.indexOf('    function request('));
+        const make = (items) => {
+            const context = vm.createContext({ Date, TYPE_NAME: { image: 'Image' }, state: { items: new Map(items.map((i) => [i.id, i])), pending: new Map() } });
+            vm.runInContext(code + '\nthis.visible = visible;', context);
+            return context.visible;
+        };
+        const item = (id, title, time, owner = 'a/b') => ({ id, title, time, owner, type: 'text/markdown', size: 1 });
+
+        it('sorts equal times by title, then by id', () => {
+            const visible = make([item('3', 'B', 5), item('2', 'B', 5), item('1', 'C', 5), item('4', 'A', 5)]);
+            assert.deepEqual([...visible({}, { q: '', sort: 'time' })].map((i) => i.id), ['4', '2', '3', '1']);
+            assert.deepEqual([...visible({}, { q: '', sort: 'size' })].map((i) => i.id), ['4', '2', '3', '1']);
+            assert.deepEqual([...visible({}, { q: '', sort: 'name' })].map((i) => i.id), ['4', '2', '3', '1']);
+        });
+
+        it('filters by each field', () => {
+            const visible = make([item('1', 'One', Date.now(), 'x/y'), item('2', 'Two', 1, 'p/q')]);
+            assert.deepEqual([...visible({}, { q: '', owner: 'p/q', sort: 'time' })].map((i) => i.id), ['2']);
+            assert.deepEqual([...visible({}, { q: '', time: 'today', sort: 'time' })].map((i) => i.id), ['1']);
+            assert.deepEqual([...visible({}, { q: 'tw', sort: 'time' })].map((i) => i.id), ['2']);
+        });
+
+        it('has the owner filter, the cleared filters, the focus, the scroll and the names of the selects', () => {
+            assert.match(block, /for \(const key of Object\.keys\(TEST\)\) if \(!TEST\[key\]\(shown, filter\)\) filter\[key\] = '';\s+if \(link && owners\) filter\.owner = shown\.owner;/);
+            assert.match(block, /page\.view\.open\(target\.id, target\.n, true\)/);
+            assert.match(block, /if \(focus === 'start' && !cur\.link\)/);
+            assert.match(block, /page\.search\.focus\(\);\n    \}/);
+            assert.match(block, /scrollIntoView\(\{ block: 'nearest' \}\)/);
+            assert.match(block, /\[\[owners, 'Agent'\], \[types, 'Type'\], \[time, 'Time'\], \[sort, 'Sort'\]\]/);
+            assert.match(block, /pick\.setAttribute\('aria-label', 'Version'\)/);
+            assert.match(block, /\.caf-head select\{[^}]*min-width:auto/);
+        });
+
+        it('ends full screen before it shows the agent, and shows a text for a viewer that did not connect', () => {
+            assert.match(block, /show\.addEventListener\('click', \(\) => \{ endFull\(\); showAgent\(nodeId\); \}\)/);
+            assert.match(block, /fetch\(t\.url, \{ mode: 'no-cors' \}\)\.catch\([^\n]*The viewer did not answer/);
         });
     });
 
