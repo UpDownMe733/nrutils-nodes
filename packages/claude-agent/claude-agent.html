@@ -1634,10 +1634,12 @@
                 window.removeEventListener('message', onMessage);
                 clearTimeout(timer);
                 if (note) note.remove();
+                f.style.display = '';
             };
             const timer = setTimeout(() => {
                 if (!f.isConnected) return window.removeEventListener('message', onMessage);
-                note = h('div', 'caf-note', 'The viewer did not answer. The view server is not reachable.');
+                note = h('div', 'caf-note', 'The viewer did not load. Check that the view server runs.');
+                f.style.display = 'none';
                 f.after(note);
             }, 8000);
             window.addEventListener('message', onMessage);

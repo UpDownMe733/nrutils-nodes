@@ -173,7 +173,8 @@ describe('Files script block', () => {
         it('ends full screen before it shows the agent and when the popup is removed, and shows a text when the viewer sends no loaded message', () => {
             assert.match(block, /show\.addEventListener\('click', \(\) => \{ endFull\(\); showAgent\(nodeId\); \}\)/);
             assert.match(block, /e\.source !== f\.contentWindow \|\| e\.origin !== origin[^\n]*'loaded'/);
-            assert.match(block, /f\.after\(note\)/);
+            assert.match(block, /f\.style\.display = 'none';\s+f\.after\(note\)/);
+            assert.match(block, /\}, 8000\);/);
             assert.match(block, /gone = new MutationObserver\(\(\) => \{ if \(!home\.isConnected\) setFull\(false\)/);
         });
     });
