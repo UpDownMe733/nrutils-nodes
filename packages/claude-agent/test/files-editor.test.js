@@ -117,6 +117,8 @@ describe('Files script block', () => {
             assert.match(block, /RED\.events\.on\('workspace:change'/);
             assert.match(block, /RED\.nodes\.node\(nodeId\)/);
             assert.match(block, /Agent removed/);
+            assert.match(block, /document\.addEventListener\('focusin'[\s\S]*?page\.layer\.focus\(\)/);
+            assert.match(html, /View &gt; Files<\/b>[\s\S]*?Ctrl\+G Shift\+F[\s\S]*?#files[\s\S]*?Show agent<\/b>[\s\S]*?<b>Close<\/b>[\s\S]*?Escape ends full screen first/);
             assert.doesNotMatch(block, /innerHTML/);
         });
     });
