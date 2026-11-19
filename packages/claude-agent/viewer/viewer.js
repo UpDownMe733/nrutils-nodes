@@ -122,9 +122,19 @@
             return viewer.meta.files.find(f => f.path === p) || null;
         },
 
+        // The hash of a link to a file of this version, and to an anchor in it
+        link(p, anchor) {
+            return '#file=' + encodeURIComponent(p) + (anchor ? '&at=' + encodeURIComponent(anchor) : '');
+        },
+
+        // True for a plain click. A middle click or a click with Ctrl, Shift, Alt or Meta keeps the browser action.
+        plainClick(e) {
+            return e.button === 0 && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey;
+        },
+
         // Opens another file of this version in the viewer. The path goes in the hash: the page has no state.
         open(p, anchor) {
-            const h = '#file=' + encodeURIComponent(p) + (anchor ? '&at=' + encodeURIComponent(anchor) : '');
+            const h = viewer.link(p, anchor);
             if (location.hash === h) show();
             else location.hash = h;
         },

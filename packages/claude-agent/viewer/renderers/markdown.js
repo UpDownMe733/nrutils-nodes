@@ -62,8 +62,9 @@
                 const { path: rel, anchor } = split(href);
                 const p = rel ? viewer.resolve(file.path, rel) : file.path;
                 if (p !== null && viewer.file(p)) {
-                    a.href = '#file=' + encodeURIComponent(p) + (anchor ? '&at=' + encodeURIComponent(anchor) : '');
+                    a.href = viewer.link(p, anchor);
                     a.addEventListener('click', (e) => {
+                        if (!viewer.plainClick(e)) return;
                         e.preventDefault();
                         if (p === file.path) jump(body, anchor);
                         else viewer.open(p, anchor);
@@ -79,12 +80,17 @@
             for (const h of body.querySelectorAll('h1, h2, h3, h4, h5, h6')) {
                 h.id = slug(h.textContent, used);
                 if (!/^H[1-3]$/.test(h.tagName)) continue;
-                const link = viewer.el('a', { href: '#', text: h.textContent });
+                // A real link: the keyboard, a screen reader, a middle click and Copy link work.
+                // The anchor is the id without "h-", the same form as a heading link in the text.
+                const link = viewer.el('a', { href: viewer.link(file.path, h.id.slice(2)), text: h.textContent });
                 link.style.paddingLeft = (Number(h.tagName[1]) - 1) * 12 + 4 + 'px';
                 link.addEventListener('click', (e) => {
+                    if (!viewer.plainClick(e)) return;
                     e.preventDefault();
                     outline.classList.remove('open');
                     h.scrollIntoView();
+                    // The address shows the part. replaceState fires no hashchange, so the file does not load again.
+                    history.replaceState(null, '', link.getAttribute('href'));
                 });
                 outline.append(link);
             }

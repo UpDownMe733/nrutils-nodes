@@ -537,6 +537,19 @@ describe('the renderers', () => {
         assert.equal(viewer.resolve('a.md', '../../etc/passwd'), null);
     });
 
+    it('makes a real link to a file and to a heading, with the file in the hash', () => {
+        assert.equal(viewer.link('docs/a b.md'), '#file=docs%2Fa%20b.md');
+        assert.equal(viewer.link('a.md', 'intro-text'), '#file=a.md&at=intro-text');
+        const src = fs.readFileSync(path.join(VIEWER, 'renderers', 'markdown.js'), 'utf8');
+        assert.doesNotMatch(src, /href: '#'/, 'no Contents link has the href "#"');
+    });
+
+    it('keeps the browser action for a middle click and a click with a modifier key', () => {
+        const click = (o) => viewer.plainClick(Object.assign({ button: 0, ctrlKey: false, shiftKey: false, altKey: false, metaKey: false }, o));
+        assert.equal(click({}), true);
+        for (const o of [{ button: 1 }, { ctrlKey: true }, { shiftKey: true }, { altKey: true }, { metaKey: true }]) assert.equal(click(o), false);
+    });
+
     it('makes the URL of a file below the ticket', () => {
         assert.equal(viewer.url('img/a b#.png'), '/v/T/f/img/a%20b%23.png');
     });
