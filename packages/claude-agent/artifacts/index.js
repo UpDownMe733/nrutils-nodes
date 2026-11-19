@@ -180,11 +180,19 @@ function createRuntime(RED) {
     if (settings.artifacts.viewPort) {
         const tls = typeof RED.settings.https === 'function' ? RED.settings.https() : RED.settings.https;
         Promise.resolve(tls).then((options) => viewServer.start({
-            store: getStore(), port: settings.artifacts.viewPort, bind: settings.artifacts.viewHost || RED.settings.uiHost, settings: settings.artifacts, editorOrigins, tls: options, uiPort: RED.settings.uiPort
+            store: getStore(), port: settings.artifacts.viewPort, bind: settings.artifacts.viewHost || RED.settings.uiHost, settings: settings.artifacts, editorOrigins, tls: options, uiPort: RED.settings.uiPort,
+            adminRoot: adminRoot(RED.settings.httpAdminRoot)
         })).catch((err) => RED.log.error(`claude-agent: the viewer did not start on port ${settings.artifacts.viewPort}: ${err.message}`));
     }
 
     return { publish, getStore, settings };
+}
+
+// The path of the editor with a "/" at the end. httpAdminRoot false turns the editor off: then no path.
+function adminRoot(root) {
+    if (root === false) return undefined;
+    const p = typeof root === 'string' ? root : '/';
+    return ('/' + p + '/').replace(/\/{2,}/g, '/');
 }
 
 // The runtime object of the Node-RED runtime that RED belongs to.
@@ -194,4 +202,4 @@ function attach(RED) {
     return runtime;
 }
 
-module.exports = { attach, readFiles };
+module.exports = { attach, readFiles, adminRoot };

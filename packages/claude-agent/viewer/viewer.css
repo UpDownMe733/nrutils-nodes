@@ -45,6 +45,20 @@ a { color: var(--link); }
 #title { font-weight: bold; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #version { white-space: nowrap; font-size: 13px; }
 .bar-actions { display: flex; gap: 8px; }
+/* The agent line of a view link: 24 px, "By <address> · All files". The top bar is then 72 px. */
+.bar.has-agent { min-height: 72px; row-gap: 0; }
+.bar-agent {
+    flex: 1 0 100%; display: flex; align-items: center; gap: 6px; height: 24px; min-width: 0;
+    font-size: 12px; color: var(--text2); white-space: nowrap;
+}
+#owner { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#editor-link { display: flex; gap: 6px; flex: none; }
+#editor { position: relative; color: var(--link); text-decoration: none; }
+#editor:hover, #editor:focus-visible { text-decoration: underline; }
+/* A 44 px target on touch, larger than the 24 px line */
+@media (pointer: coarse) {
+    #editor::after { content: ""; position: absolute; left: -8px; right: -8px; top: -10px; bottom: -10px; }
+}
 .button {
     display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px;
     padding: 0 14px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg);

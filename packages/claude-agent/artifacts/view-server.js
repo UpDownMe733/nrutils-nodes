@@ -12,7 +12,7 @@
 //
 // Routes (GET and HEAD only):
 //   /v/<ticket>/            the viewer page (a new nonce for each response)
-//   /v/<ticket>/meta        the version as JSON: title, time, entry and the file list
+//   /v/<ticket>/meta        the version as JSON: title, time, entry, the file list, the owner and the editor URL
 //   /v/<ticket>/f/<path>    one file of the version, found by an exact match of its path in the file list
 //   /v/<ticket>/download    the file, or a zip of all files of the version
 //   /v/<ticket>/thumb       the entry file when it is an image of THUMB_LIMIT or less, else 404
@@ -201,8 +201,30 @@ function disposition(name) {
     return 'attachment; filename="' + ascii + '"; filename*=UTF-8\'\'' + encodeURIComponent(name);
 }
 
-// Makes the request handler. opts: { store, htmlNetwork, editorOrigins, uiPort }
+// The keys of meta for each server. The share page shows only the title, the version, the date and the content:
+// no note (it can hold internal facts), no owner and no editor (docs/artifacts.md, sections 7 and 8).
+const META_KEYS = {
+    view: ['id', 'name', 'n', 'newest', 'title', 'time', 'note', 'entry', 'files', 'owner', 'editor'],
+    share: ['name', 'n', 'newest', 'title', 'time', 'entry', 'files']
+};
+
+// The meta object of a version for a server (a key of META_KEYS). extra: { editor } of the view server.
+function metaOf(server, record, version, extra = {}) {
+    const newest = record.versions.filter(v => !v.deleted && !v.purged).pop();
+    const all = {
+        id: record.id, name: record.name, n: version.n, newest: !!newest && newest.n === version.n,
+        title: version.title, time: version.time, note: version.note, entry: version.entry,
+        files: version.files.map(f => ({ path: f.path, size: f.size, type: f.type, sha256: f.sha256 })),
+        owner: record.owner && record.owner.address, editor: extra.editor
+    };
+    const out = {};
+    for (const k of META_KEYS[server]) if (all[k] !== undefined) out[k] = all[k];
+    return out;
+}
+
+// Makes the request handler. opts: { store, htmlNetwork, editorOrigins, uiPort, adminRoot }
 // editorOrigins: an iterable of the origins of the editor, read on each request. uiPort: the editor port for a guess.
+// adminRoot: httpAdminRoot of the editor with a "/" at the end, or none when the editor is off.
 function handler(opts) {
     const { store } = opts;
     let zipping = false;
@@ -253,14 +275,20 @@ function handler(opts) {
         send(res, 200, 'text/html; charset=utf-8', page.replace(/\{\{nonce\}\}/g, nonce).replace('{{theme}}', theme).replace('{{bar}}', bar));
     }
 
-    // The note is for the team and can hold internal facts: the share server must not send it (security-reviewer).
-    function meta(res, record, version) {
-        const newest = record.versions.filter(v => !v.deleted && !v.purged).pop();
-        send(res, 200, 'application/json; charset=utf-8', JSON.stringify({
-            id: record.id, name: record.name, n: version.n, newest: !!newest && newest.n === version.n,
-            title: version.title, time: version.time, note: version.note, entry: version.entry,
-            files: version.files.map(f => ({ path: f.path, size: f.size, type: f.type, sha256: f.sha256 }))
-        }));
+    // The URL of the Files page of the editor on this version: the known editor origin with the hostname of this request.
+    // No match gives no URL: another host gives a link that does not work.
+    function editorUrl(req, record, version) {
+        if (typeof opts.adminRoot !== 'string') return undefined;
+        let host;
+        try { host = new URL('http://' + String(req.headers.host || '')).hostname; } catch { return undefined; }
+        const origin = [...(opts.editorOrigins || [])].reverse().find(o => {
+            try { return typeof o === 'string' && ORIGIN.test(o) && new URL(o).hostname === host; } catch { return false; }
+        });
+        return origin && origin + opts.adminRoot + '#files/' + encodeURIComponent(record.id) + '/' + version.n;
+    }
+
+    function meta(req, res, record, version) {
+        send(res, 200, 'application/json; charset=utf-8', JSON.stringify(metaOf('view', record, version, { editor: editorUrl(req, record, version) })));
     }
 
     // A file as PDF only when its type is application/pdf and its first bytes are "%PDF-" (no sandbox CSP for it)
@@ -374,7 +402,7 @@ function handler(opts) {
         const ancestors = frameAncestors(req);
         if (rest === '') return viewerPage(res, url.searchParams, ancestors);
         res.setHeader('Content-Security-Policy', fileCsp(opts.htmlNetwork, ancestors));
-        if (rest === 'meta') return meta(res, record, version);
+        if (rest === 'meta') return meta(req, res, record, version);
         if (rest === 'download') return download(req, res, version);
         if (rest === 'thumb') {
             const file = version.files.find(f => f.path === version.entry);
@@ -403,9 +431,10 @@ function handler(opts) {
 
 // Starts the view server. settings: the artifacts settings (htmlNetwork). tls: the https options of the editor, or none:
 // a page on HTTPS cannot show a frame on HTTP. uiPort: the editor port for the frame-ancestors guess.
+// adminRoot: the path of the editor, for the editor URL in meta.
 // Gives a promise of { port, close() }. The promise rejects when the port cannot be opened.
-function start({ store, port, bind, settings = {}, editorOrigins, tls, uiPort }) {
-    const handle = handler({ store, htmlNetwork: settings.htmlNetwork !== false, editorOrigins, uiPort });
+function start({ store, port, bind, settings = {}, editorOrigins, tls, uiPort, adminRoot }) {
+    const handle = handler({ store, htmlNetwork: settings.htmlNetwork !== false, editorOrigins, uiPort, adminRoot });
     const server = tls ? https.createServer(tls, handle) : http.createServer(handle);
     return new Promise((resolve, reject) => {
         server.once('error', reject);
@@ -419,4 +448,4 @@ function start({ store, port, bind, settings = {}, editorOrigins, tls, uiPort })
     });
 }
 
-module.exports = { start, handler, writeZip, crc32, downloadName };
+module.exports = { start, handler, metaOf, META_KEYS, writeZip, crc32, downloadName };

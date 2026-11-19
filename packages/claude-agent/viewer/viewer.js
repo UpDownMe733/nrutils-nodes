@@ -235,6 +235,17 @@
         document.getElementById('title').textContent = m.title;
         document.getElementById('title').title = m.title;
         document.getElementById('version').textContent = versionText(m);
+        // The agent line of a view link. The share server sends no owner and no editor, so a share page shows none.
+        if (m.owner) {
+            document.getElementById('owner').textContent = 'By ' + m.owner;
+            document.getElementById('owner').title = m.owner;
+            if (typeof m.editor === 'string' && /^https?:\/\//.test(m.editor)) {
+                document.getElementById('editor').href = m.editor;
+                document.getElementById('editor-link').hidden = false;
+            }
+            document.getElementById('agent').hidden = false;
+            document.querySelector('.bar').classList.add('has-agent');
+        }
         // The note of the version ("what is new"). The share server sends no note, so a share page shows none.
         if (m.note) {
             document.getElementById('note-text').textContent = m.note;

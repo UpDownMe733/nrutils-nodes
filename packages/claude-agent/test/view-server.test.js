@@ -108,6 +108,37 @@ describe('the helpers', () => {
     });
 });
 
+describe('meta of each server', () => {
+    const record = { id: 'abc', name: 'r', owner: { address: 't/a', nodeId: 'n1' }, versions: [] };
+    const version = { n: 1, time: 1, title: 'T', note: 'internal', entry: 'a.md', run: 'x', files: [{ path: 'a.md', size: 1, type: 'text/markdown', sha256: 'f', blob: '/x' }] };
+    record.versions.push(version);
+
+    it('gives the share server only the keys of its allow list: no note, no owner, no editor, no id', () => {
+        const m = view.metaOf('share', record, version, { editor: 'http://e/#files/abc/1' });
+        assert.deepEqual(Object.keys(m).sort(), ['entry', 'files', 'n', 'name', 'newest', 'time', 'title']);
+        assert.deepEqual(Object.keys(m.files[0]).sort(), ['path', 'sha256', 'size', 'type']);
+    });
+
+    it('gives the view server the owner and the editor URL', () => {
+        const m = view.metaOf('view', record, version, { editor: 'http://e/#files/abc/1' });
+        assert.equal(m.owner, 't/a');
+        assert.equal(m.editor, 'http://e/#files/abc/1');
+        assert.equal(m.note, 'internal');
+        assert.equal(m.run, undefined);
+    });
+});
+
+describe('the editor path', () => {
+    const { adminRoot } = require('../artifacts');
+    it('ends with "/" and is none when the editor is off', () => {
+        assert.equal(adminRoot(undefined), '/');
+        assert.equal(adminRoot('/'), '/');
+        assert.equal(adminRoot('/admin'), '/admin/');
+        assert.equal(adminRoot('admin/'), '/admin/');
+        assert.equal(adminRoot(false), undefined);
+    });
+});
+
 describe('the view server', () => {
     let dir, store, server, port, t1, t2, tDel;
     const origins = new Set();
@@ -142,7 +173,7 @@ describe('the view server', () => {
             { n: 2, time: Date.now(), title: 'Chart', entry: 'c.png', deleted: null, purged: false, files: [file(store, 'c.png', 'image/png', Buffer.alloc(1024 * 1024 + 1))] }] };
         store.records[ID_HTML] = { id: ID_HTML, name: 'one', owner: { address: 't/a', nodeId: 'n1' }, versions: [
             { n: 1, time: Date.now(), title: 'One', entry: 'one.html', deleted: null, purged: false, files: [file(store, 'one.html', 'text/html', '<p>one</p>')] }] };
-        server = http.createServer(view.handler({ store, htmlNetwork: true, uiPort: 1880, editorOrigins: origins }));
+        server = http.createServer(view.handler({ store, htmlNetwork: true, uiPort: 1880, editorOrigins: origins, adminRoot: '/admin/' }));
         await new Promise(r => server.listen(0, '127.0.0.1', r));
         port = server.address().port;
     });
@@ -242,21 +273,38 @@ describe('the view server', () => {
         assert.equal(dl.body.toString(), '<p>one</p>');
     });
 
+    it('gives the editor URL in meta only from a known origin with the hostname of the request', async () => {
+        origins.add('http://nr.lan:1880').add('https://other.lan:1880').add('http://[::1]:1880');
+        try {
+            const m = async (host) => JSON.parse((await get(port, '/v/' + t2 + '/meta', { host })).body);
+            assert.equal((await m('nr.lan:1881')).editor, 'http://nr.lan:1880/admin/#files/' + ID + '/2');
+            assert.equal((await m('NR.lan:1881')).editor, 'http://nr.lan:1880/admin/#files/' + ID + '/2');
+            assert.equal((await m('[::1]:1881')).editor, 'http://[::1]:1880/admin/#files/' + ID + '/2');
+            const r = await get(port, '/v/' + t2 + '/meta', { host: 'third.lan:1881' });
+            assert.equal(JSON.parse(r.body).editor, undefined, 'no fallback to another origin');
+            assert.equal(r.headers['cache-control'], 'private, no-store');
+            assert.equal((await m('bad host!')).editor, undefined);
+        } finally {
+            origins.clear();
+        }
+    });
+
     it('redirects /v/<ticket> to /v/<ticket>/ so that relative links work', async () => {
         const r = await get(port, '/v/' + t1 + '?theme=light');
         assert.equal(r.status, 302);
         assert.equal(r.headers.location, '/v/' + t1 + '/?theme=light');
     });
 
-    it('gives the version in meta, with no owner and no run', async () => {
+    it('gives the version in meta, with the owner address and no run', async () => {
         const r = await get(port, '/v/' + t2 + '/meta');
         const m = JSON.parse(r.body);
         assert.equal(m.n, 2);
         assert.equal(m.newest, true, 'version 3 is deleted, so version 2 is the newest');
         assert.equal(m.entry, 'index.html');
         assert.equal(m.files.length, 6);
-        assert.equal(m.owner, undefined);
+        assert.equal(m.owner, 't/a');
         assert.equal(m.run, undefined);
+        assert.equal(m.editor, undefined, 'no known editor origin');
         assert.equal(JSON.parse((await get(port, '/v/' + t1 + '/meta')).body).newest, false);
     });
 
