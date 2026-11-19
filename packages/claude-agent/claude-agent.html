@@ -1089,7 +1089,6 @@
 .caf .caf-filters select{flex:1 1 auto;min-width:fit-content}
 .caf-tabnew{position:relative}
 .caf-tabnew::after{content:'';position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:3px;background:var(--red-ui-text-color-link);pointer-events:none}
-@media (hover:none){.caf .caf-icon .caf-label{display:inline !important}.caf-head .caf-icon{padding:0 8px}}
 .caf-head .caf-icon{padding:0;height:28px;min-height:28px;min-width:28px}
 .caf .caf-icon .caf-label{display:none !important}
 .caf-full .caf-icon .caf-label{display:inline !important}
@@ -1098,6 +1097,7 @@
 .caf-bar{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-bottom:6px}
 .caf-bar select{flex:1 1 90px;min-width:0;width:auto;box-sizing:border-box;height:32px;margin:0}
 .caf-bar .red-ui-button{flex:none;white-space:nowrap;box-sizing:border-box;height:32px;min-height:32px;min-width:32px;margin:0}
+@media (hover:none){.caf .caf-icon .caf-label{display:inline !important}.caf-head .caf-icon{padding:0 8px}}
 @media (pointer:coarse){.caf-head .red-ui-button,.caf-bar .red-ui-button{height:44px;min-height:44px;min-width:44px}.caf .caf-filters input,.caf .caf-filters select{height:44px}.caf-head .caf-icon,.caf-full .caf-head .caf-icon{height:44px;min-height:44px;min-width:44px}}
 .caf-body{flex:1;min-height:0;display:flex;gap:6px;flex-direction:row}
 .caf-body iframe{flex:1;min-width:0;min-height:240px;width:100%;border:1px solid var(--red-ui-secondary-border-color);border-radius:4px;background:#fff}
@@ -1568,7 +1568,7 @@
 
             const body = h('div', 'caf-body');
             pane.appendChild(body);
-            if (focus === 'start' && !pane.classList.contains('caf-full') && body.getBoundingClientRect().height < 120) {
+            if (focus === 'start' && pane.offsetParent && !pane.classList.contains('caf-full') && body.getBoundingClientRect().height < 120) {
                 cur.auto = true;
                 setFull(true);
             }

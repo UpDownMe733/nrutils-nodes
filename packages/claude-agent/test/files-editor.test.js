@@ -64,7 +64,7 @@ describe('Files script block', () => {
         assert.match(html, /\.caf \.caf-filters select\{flex:1 1 auto;min-width:fit-content\}/);
         assert.match(html, /tabButton\.toggleClass\('caf-tabnew', total > 0\)/);
         assert.match(html, /@media \(hover:none\)\{\.caf \.caf-icon \.caf-label\{display:inline !important\}/);
-        assert.match(html, /getBoundingClientRect\(\)\.height < 120/);
+        assert.match(html, /pane\.offsetParent && !pane\.classList\.contains\('caf-full'\) && body\.getBoundingClientRect\(\)\.height < 120/);
     });
 
     it('has the Files shortcuts, the sort, the Escape rule and the copy link text', () => {
