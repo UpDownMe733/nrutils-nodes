@@ -1,6 +1,6 @@
 # Artifacts of the claude-agent node (design)
 
-Status: parts 1 to 5, 7 and 8 of section 11 are built. Part 11 (the Files page) is in review. Parts 6, 9 and 10 are not built.
+Status: parts 1 to 5, 7 and 8 of section 11 are built. Part 11 (the Files page) is in build. Parts 6, 9 and 10 are not built.
 
 An artifact is an output that an agent makes and gives to people: a document, code, an image, a PDF, a table, a diagram, an HTML page or application, or a file of any type.
 The operator reviews artifacts, shares them with people outside, and keeps them for a long time.
@@ -252,10 +252,12 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 - The page is never blank. When a type cannot show: "This file cannot show here." and Download.
 - A dead link shows one line: "This link does not work."
 - Theme: the editor theme from the URL. A share page follows `prefers-color-scheme`. The viewer page has its own copy of the colour values of the editor CSS variables, because it cannot read the editor.
-- A view link (`/v/`, with no `embed`) has a second line in the top bar: the agent address, for example "By nrutils-nodes/lead", and the link "All files". The link opens the Files page of the editor on this file and version (see "The Files page"). A share page has neither.
-  - `meta` of the view server gives `owner` (the address) and `editor` (the URL of the Files page). The share server gives neither.
-  - `editor` is `<origin><httpAdminRoot>#files/<id>/<n>`. The origin is the editor origin that the view server knows (the same list as for `frame-ancestors`, section 6) whose host is the host of the request, else the newest known origin. With no known origin, `meta` has no `editor` and the page shows no link.
-  - The link opens in the same browser tab. The editor asks for the login when the browser has none.
+- A view link (`/v/`, with no `embed`) has a second line in the top bar: "By <address> · All files". The line is 24 px high, in the small font and the secondary colour. "All files" is an accent link with a 44 px target on touch. No icon. The top bar is then 72 px. The link opens the Files page of the editor on this file and version (see "The Files page"). A share page has neither.
+  - `meta` of the view server gives `owner` (the address) and `editor` (the URL of the Files page). The share server gives neither, and no `note` (section 7: a share page shows title, version, date and content).
+  - Each server builds `meta` from its own allow list of keys. A test checks the exact key set of a share `meta`.
+  - `editor` is `<origin><httpAdminRoot>#files/<id>/<n>`. `index.js` gives the view server `RED.settings.httpAdminRoot`, with a trailing "/". The origin is the editor origin that the view server knows (the same list as for `frame-ancestors`, section 6) whose hostname is the hostname of the request. When no known origin has that hostname, `meta` has no `editor` and the page shows no link. There is no "newest origin" fallback: a wrong host gives a link that does not work.
+  - `meta` keeps `Cache-Control: no-store`, because its content changes with the host of the request.
+  - The page writes the address with `textContent`. The link opens in the same browser tab. The editor asks for the login when the browser has none.
 
 ### The Files page
 
@@ -264,16 +266,33 @@ The operator keeps the sidebars off, or holds only a view link. Then no place sh
 - **Open:**
   - the URL `<editor>/#files`, for a bookmark or a browser tab of its own (a second screen);
   - the URL `<editor>/#files/<id>/<n>`, which also opens that version (the "All files" link of a view link);
-  - the key Ctrl+G Shift+F and the item "Files" in the main menu of the editor (action `claude-agent:show-files-page`).
-  - Node-RED reads only `#flow/`, `#node/` and `#group/`, and then sets `#flow/<tab>`. Thus the node reads the hash when its script loads, before the flows load. While the page is open, the hash is `#files` or `#files/<id>/<n>`, so a reload keeps the page. A `hashchange` to `#files…` opens it in an open editor.
+  - the key Ctrl+G Shift+F and the item "Files" in the main menu of the editor (`RED.menu`, action `claude-agent:show-files-page`). The build proves that `RED.keyboard` reads "ctrl-g shift-f". When it does not, the key is Ctrl+G Ctrl+F.
+  - Node-RED reads only `#flow/`, `#node/` and `#group/`, and it sets `#flow/<tab>` while the flows load. Thus the node keeps `location.hash` when its script loads, and opens the page after `flows:loaded`.
+  - While the page is open, the hash is `#files` or `#files/<id>/<n>`, so a reload keeps the page. The node sets the hash again after `flows:loaded` and after each change of the workspace. A `hashchange` to `#files…` opens the page in an open editor.
+- **Strict input:** the id must match `^[0-9a-f]{16}$` and the version must be an integer. The node checks the hash and a pasted ticket with these patterns before it uses a value in an API path or in the page. A value that does not match is ignored.
+- **Build:** the page view is built one time, at the first open, and kept. `build()` adds to the list of views and never removes one.
 - **Layout:** a layer over the whole editor window, the same as `caf-full`. The list at the left, the viewer at the right; less than 500 px wide, the list only. The page never scrolls sideways at 200 % zoom. The canvas does not reload.
-- **Focus:** the search field gets the focus when the page opens. The page is opened on purpose, so this does not break the rule "the search field never gets the focus on its own". Arrows move in the list. Enter opens the file.
-- **Search:** title, name, agent address (it has the tab name) and type name, as in the sidebar. A pasted view link or ticket finds its file: the editor reads the id and the version from the first part of the ticket (section 6), with no request. That version opens.
+- **Header:** a 48 px bar with the primary background and a 1 px bottom border in the secondary border colour. "Files" at the left, 16 px bold. The text button "Close" at the right: 32 px for the mouse, 44 px on touch. No count.
+- **Focus and keys:** the search field gets the focus when the page opens. The page is opened on purpose, so this does not break the rule "the search field never gets the focus on its own". Arrows move in the list. Enter opens the file. The focus stays in the page (a focus trap). The layer stops each keydown, so the keys of the editor do not act.
+- **Escape:** one handler for the page. Escape closes the innermost layer first: the full-screen viewer, then the page. The page keeps "Full screen".
+- **Search:** title, name, agent address (it has the tab name) and type name, as in the sidebar. A pasted view link or ticket finds its file: the editor reads the id and the version from the first part of the ticket (section 6), with no request. That version opens. The node makes no request from the fields of a ticket.
 - **Rows:** the same rows as the sidebar: the agent address is always on line 2. The text for the screen reader starts with the title, then the type in words, the agent, the version, the time, then "newest" or "older version", then "new" when the row is new.
-- **Show agent:** a button in the viewer header of the Files page and of the sidebar: it closes the page, shows the tab of the node, selects the node and opens its popup. When the node no longer exists, the button shows "Agent removed" and does nothing.
-- **Close:** Escape and the button "Close" (top right) show the canvas and set the hash of the active tab. The keys of the editor do not act while the page is open, except Escape.
+- **Show agent:** in the viewer header of the Files page and of the sidebar, on the agent line below the title: "<address> · Show agent". "Show agent" is an accent text button. It closes the page, calls `RED.view.reveal(id)`, and opens the popup of the node the same way as a click on the node (not `RED.editor.edit`, which is the edit dialog). The node finds the node with `RED.nodes.node(id)`, never with the id in a selector. When the node no longer exists, the line shows "Agent removed" in plain secondary text, with no button.
+- **Close:** Escape and "Close" show the canvas and set the hash of the active tab.
+- The viewer is the same iframe with the same sandbox as in the sidebar. There is no second viewer. The node never sets `innerHTML` from file data.
 - The badges, the "new" marks and the actions (versions, compare, download, copy link, delete) are those of the sidebar. The page adds no filter: the users asked for one search box and "newest first", which the sidebar already has.
 - No new route and no new data: the page uses the admin API of section 4 with the login of the editor.
+- **Proof:** pictures from a git worktree in the sandbox with a test Node-RED: the page, a reload on `#files/<id>/<n>`, and the login on that URL with `adminAuth`.
+
+#### Opinions on the Files page (2026-11-19)
+
+| Who | Opinion | What it changed |
+|---|---|---|
+| security-reviewer | OK with conditions | the strict id and version patterns; no request from a ticket; no `innerHTML`; `RED.nodes.node(id)` and no selector; the same viewer iframe; `Cache-Control: no-store` on `meta` |
+| code-reviewer | changes | the page is built one time; one Escape handler, innermost layer first; the focus trap; the hash is set again after `flows:loaded` and a workspace change; the proof of reload and login; the editor link matches the hostname only, with no fallback |
+| claude-agent-dev | OK | the layer stops the keys; the key is free in the package; `RED.menu`; size 150 to 220 lines. Its proposal "read the hash at `flows:loaded`" is not taken: Node-RED can set `#flow/` during the load |
+| artifact-viewer-dev | OK | `index.js` gives `httpAdminRoot`; an allow list of `meta` keys for each server and a test of the share key set; size S (about 40 lines). Its proposal "open in a new tab" is not taken: the Files page opens the same file, so the same tab is correct |
+| popup-ux-designer | design | the page header; "Show agent" on the agent line and "Agent removed"; the 72 px top bar of a view link; the key fallback; "Full screen" stays |
 
 ## 9. Settings
 
