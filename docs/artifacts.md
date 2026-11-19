@@ -220,15 +220,15 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 
 - Width 500 px or more: the list at the left (40 %), the viewer at the right.
 - Less than 500 px: the list only. A tap shows the viewer at full width, with "‹ Files" at the top left.
-- The viewer header: title, "Version 3 (newest) ▾", then the buttons Full screen, Download, Copy link, Share, Compare and Delete. There is no More menu. Delete is at the end, after a gap. The agent address is below the title.
+- The viewer header: title, "Version 3 (newest) ▾", then the buttons Full screen, Download, Copy link, New tab, Share, Compare and Delete. "New tab" has the accessible name "Open in new tab". At 1280 px the header is one line. There is no More menu. Delete is at the end, after a gap. The agent address is below the title.
   Each button has a visible label. Its height is 44 px on a coarse pointer (touch) and 32 px on a fine pointer (mouse). The buttons of the compare bar have the same heights. No action is on hover only. On a narrow screen the buttons wrap to a second row.
 
 ### The actions
 
 - **Open:** one click on the row. The editor theme goes in the URL.
-- **Versions:** a list, newest first: "Version 3 · newest · 18 Nov 14:02". One tap opens an older version.
+- **Versions:** a list, newest first: "Version 3 · 14:02 (newest)". The time has the form of the list rows: the time for today, else the date. One tap opens an older version. Then the row of the file shows "Version 1 of 3".
 - **Compare:** "Compare with", with the version before as the default. Side by side on a wide screen, stacked on a narrow screen.
-- **Full screen:** the pane gets the class `caf-full` and fills the editor window. On the Files page and in the sidebar the pane does not move, so the frame does not reload. The popup is in an SVG `foreignObject`, where a fixed position fills only the popup. Thus in the popup the pane moves to the body, and the frame loads again. When the popup closes, full screen ends and the pane goes away. It keeps the version list, Compare and Copy link. Close and Escape end it. Open in new tab opens the viewer page in a browser tab. The viewer page has no Close button. On a share link, `window.close()` does nothing.
+- **Full screen:** the pane gets the class `caf-full` and fills the editor window. On the Files page and in the sidebar the pane does not move, so the frame does not reload. The popup is in an SVG `foreignObject`, where a fixed position fills only the popup. Thus in the popup the pane moves to the body, and the frame loads again. When the popup closes, full screen ends and the pane goes away. It keeps the version list, Compare and Copy link. Close and Escape end it. New tab opens the viewer page in a browser tab. The viewer page has no Close button. On a share link, `window.close()` does nothing.
 - **Copy link:** at a click only, the editor asks for a new view ticket and copies the view URL with no `embed` and no theme. It says: "Link copied. Anyone with this link can open this version for 12 hours."
 - **Keys:** Ctrl+G F shows the Files tab and Ctrl+G A shows the Claude agent tab.
 - **Download:** one click, on the download URL of the view server (section 6). The file name is `<title>-v3.<ext>`. A folder downloads as `<title>-v3.zip`.
@@ -309,6 +309,20 @@ Users: without-sidebars, power-developer, keyboard-low-vision and team-watcher d
 | Full screen in the popup hides only the header of the popup | power | full screen fills the window there too |
 | "All files" from a version 1 link opens version 1 | watcher | no change: the link is of one version, and the version list marks the newest |
 | The sidebars show again after a reload | without-sidebars | no change: Node-RED keeps this, and the page covers them |
+
+#### User study of the built page, round 3 (2026-11-19)
+
+without-sidebars and power-developer were satisfied. team-watcher was satisfied except for the empty list. keyboard-low-vision was not satisfied. The outside reader waits for the share server (part 6).
+
+| Finding | Users | Correction |
+|---|---|---|
+| A filter gives an empty list with no way out | watcher, power | "No files." and the button "Clear filters" (Search, Agent, Type, Time) |
+| Search has no focus ring after a link open or a reload | keyboard | the outline is on `:focus`, not only on `:focus-visible` |
+| The row shows Version 3 while the viewer shows version 1 | watcher | the row shows "Version 1 of 3" |
+| The viewer header takes two lines at 1280 px | designer | the select does not grow; "New tab"; short times |
+| A filter change is silent for a screen reader | keyboard | the footer count has `aria-live="polite"` |
+| After Show agent the focus is on the canvas | keyboard | the focus goes to the message box of the popup |
+| The Contents links of the viewer are `#` | keyboard | each link is `#file=<path>&at=<heading>` |
 
 ## 9. Settings
 
