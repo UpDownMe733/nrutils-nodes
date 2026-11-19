@@ -214,7 +214,9 @@
         ask.textContent = '';
         ask.style.display = waiting ? '' : 'none';
         part(root, 'send-label').textContent = ' ' + (waiting ? 'Answer' : 'Send');
-        part(root, 'text').placeholder = waiting ? 'Your answer' : 'Message to the agent';
+        const hint = waiting ? 'Your answer' : 'Message to the agent';
+        part(root, 'text').placeholder = hint;
+        part(root, 'text').setAttribute('aria-label', hint);
         if (!waiting) return;
         ask.appendChild(make('div', 'Agent asks: ' + run.question.question));
         for (const option of run.question.options) {
@@ -772,6 +774,7 @@
             const text = element('textarea', 'text');
             text.rows = 1;
             text.placeholder = 'Message to the agent';
+            text.setAttribute('aria-label', 'Message to the agent');
             text.addEventListener('input', () => setDraft(node, root, text.value));
             text.addEventListener('paste', (e) => pasteFiles(node, e));
             const shots = element('div', 'shots', 'ca-shots');
@@ -1395,6 +1398,7 @@
         const q = h('input');
         q.type = 'search';
         q.placeholder = 'Search';
+        q.setAttribute('aria-label', 'Search files');
         q.addEventListener('input', () => {
             const t = ticketRef(q.value);
             if (t && state.items.has(t.id)) {
@@ -1492,7 +1496,7 @@
             line1.appendChild(h('span', '', item.title));
             if (item.shares) line1.appendChild(h('span', 'caf-chip', 'Shared'));
             r.appendChild(line1);
-            const older = item.id === cur.id && cur.n !== item.version;
+            const older = item.id === cur.id && cur.n !== null && cur.n !== item.version;
             const versionText = older ? 'Version ' + cur.n + ' of ' + item.version : 'Version ' + item.version;
             r.appendChild(h('div', 'caf-line2', versionText + ' · ' + stampText(item.time) + ' · ' + sizeText(item.size) + (opts.all ? ' · ' + item.owner : '')));
             const go = () => open(item.id);
@@ -1593,11 +1597,22 @@
             }
         }
 
+        // Each filter that hides the file goes
+        function reveal(shown, link) {
+            if (!shown) return;
+            for (const key of Object.keys(TEST)) if (!TEST[key](shown, filter)) filter[key] = '';
+            if (link && owners) filter.owner = shown.owner;
+            q.value = filter.q;
+        }
+
         // link: the file comes from a hash. The Agent filter shows its owner, and the focus stays where it is.
         async function open(id, n, link) {
             cur.id = id;
+            cur.n = null;
             cur.compare = null;
             cur.link = !!link;
+            // The item of the list shows its filters at once. Without it, the record gives them below.
+            if (state.items.has(id)) { reveal(state.items.get(id), link); render(); }
             try {
                 cur.record = await request('GET', API + '/' + id);
             } catch (err) {
@@ -1607,13 +1622,7 @@
             if (!versions.length) return close();
             cur.n = (versions.find((v) => v.n === n) || versions[versions.length - 1]).n;
             const item = state.items.get(id);
-            // Each filter that hides the file goes
-            const shown = item || itemOf(cur.record);
-            if (shown) {
-                for (const key of Object.keys(TEST)) if (!TEST[key](shown, filter)) filter[key] = '';
-                if (link && owners) filter.owner = shown.owner;
-                q.value = filter.q;
-            }
+            reveal(item || itemOf(cur.record), link);
             cur.scroll = true;
             if (item) {
                 const opened = stored(OPENED_KEY);

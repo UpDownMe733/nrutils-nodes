@@ -155,6 +155,11 @@ describe('Files script block', () => {
 
         it('has the owner filter, the cleared filters, the focus, the scroll and the names of the selects', () => {
             assert.match(block, /for \(const key of Object\.keys\(TEST\)\) if \(!TEST\[key\]\(shown, filter\)\) filter\[key\] = '';\s+if \(link && owners\) filter\.owner = shown\.owner;/);
+            assert.match(block, /cur\.n = null;[\s\S]*?if \(state\.items\.has\(id\)\) \{ reveal\(state\.items\.get\(id\), link\); render\(\); \}\s+try \{\s+cur\.record = await request/);
+            assert.match(block, /const older = item\.id === cur\.id && cur\.n !== null && cur\.n !== item\.version;/);
+            assert.match(block, /q\.setAttribute\('aria-label', 'Search files'\)/);
+            assert.match(html, /text\.setAttribute\('aria-label', 'Message to the agent'\)/);
+            assert.match(html, /part\(root, 'text'\)\.setAttribute\('aria-label', hint\)/);
             assert.match(block, /page\.view\.open\(target\.id, target\.n, true\)/);
             assert.match(block, /if \(focus === 'start' && !cur\.link\)/);
             assert.match(block, /page\.search\.focus\(\);\n    \}/);
