@@ -888,6 +888,7 @@
             rect.dispatchEvent(event);
         }
     }
+    window.caOpenPopup = openPopup;
 
     // A right-click selects the node, but it must not change the chat of the panel.
     // The flag stays until the next left press or key.
@@ -1046,6 +1047,9 @@
     const TYPE_NAME = { text: 'Text', image: 'Image', audio: 'Audio', video: 'Video', font: 'Font', model: 'Model', application: 'File' };
     const state = { items: new Map(), total: 0, loaded: false, pending: new Map() };
     const views = new Set();
+    const ID = /^[0-9a-f]{16}$/;
+    // The hash of the editor when this script loads, before Node-RED sets #flow/
+    const startHash = location.hash;
 
     const STYLE = `
 .caf{display:flex;flex:1;min-width:0;min-height:0;gap:8px;font-size:12px;color:var(--red-ui-primary-text-color);position:relative}
@@ -1082,6 +1086,15 @@
 .caf-head .caf-gap{margin-left:auto}
 .caf-address{flex:1 1 100%;padding:0 2px}
 .caf-pane .caf-closefull{display:none}
+.caf-page{position:fixed;inset:0;z-index:1400;display:flex;flex-direction:column;background:var(--red-ui-primary-background);color:var(--red-ui-primary-text-color);outline:none}
+.caf-pagehead{flex:0 0 48px;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:var(--red-ui-primary-background);border-bottom:1px solid var(--red-ui-secondary-border-color)}
+.caf-pagetitle{font-size:16px;font-weight:bold}
+.caf-pageclose{height:32px}
+.caf-pagebody{flex:1;min-height:0;display:flex;padding:8px;box-sizing:border-box}
+.caf-showagent{background:none;border:0;padding:0;font:inherit;color:var(--red-ui-text-color-link);cursor:pointer}
+.caf-showagent:hover{text-decoration:underline}
+.caf-showagent:focus-visible{outline:2px solid var(--red-ui-form-input-focus-color);outline-offset:1px}
+@media (pointer:coarse){.caf-pageclose,.caf-showagent{min-height:44px;min-width:44px}}
 .caf-full{position:fixed;inset:0;z-index:1500;box-sizing:border-box;padding:8px;background:var(--red-ui-primary-background)}
 .caf-full .caf-fullbtn{display:none}
 .caf-full .caf-closefull{display:inline-block}
@@ -1329,8 +1342,31 @@
         return $.ajax({ method, url, dataType: 'json' });
     }
 
-    // opts: { nodeId } for the files of one node, { all: true } for the sidebar.
-    // Gives { root, render, open(id, n) }.
+    // The id and the version of a file, or null. The id has 16 hex digits and the version is an integer.
+    function ref(id, n) {
+        return ID.test(id) && /^\d{1,6}$/.test(n) ? { id, n: Number(n) } : null;
+    }
+
+    // '#files' gives {}. '#files/<id>/<n>' gives { id, n }. Other text gives null. A bad id or version is dropped.
+    function parseHash(hash) {
+        const m = /^#files(?:\/([^/]+)\/([^/]+))?$/.exec(hash);
+        return m && (ref(m[1], m[2]) || {});
+    }
+
+    // The id and the version in a view link or a ticket, or null. The editor decodes the first part and makes no request.
+    function ticketRef(text) {
+        const m = /(?:\/v\/|^)([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+(?:[/?#]|$)/.exec(text.trim());
+        if (!m) return null;
+        try {
+            const part = atob(m[1].replace(/-/g, '+').replace(/_/g, '/')).split('|');
+            return ref(part[0], part[1]);
+        } catch (err) {
+            return null;
+        }
+    }
+
+    // opts: { nodeId } for the files of one node, { all: true } for the sidebar and the page.
+    // opts.onChange runs when the open file changes. Gives { root, render, open(id, n), current() }.
     function build(opts) {
         addStyle();
         const root = h('div', 'caf');
@@ -1339,14 +1375,22 @@
         const pane = h('div', 'caf-pane');
         const filter = { q: '', owner: '', type: '', time: '', sort: 'time' };
         const cur = { id: null, n: null, compare: null, record: null, auto: false };
-        const view = { root, render, open };
+        const view = { root, render, open, current: () => (cur.id ? { id: cur.id, n: cur.n } : null) };
         let owners = null;
         let types = null;
         const bar = h('div', 'caf-filters');
         const q = h('input');
         q.type = 'search';
         q.placeholder = 'Search';
-        q.addEventListener('input', () => { filter.q = q.value; render(); });
+        q.addEventListener('input', () => {
+            const t = ticketRef(q.value);
+            if (t && state.items.has(t.id)) {
+                q.value = '';
+                open(t.id, t.n);
+            }
+            filter.q = q.value;
+            render();
+        });
         bar.appendChild(q);
         left.appendChild(bar);
 
@@ -1432,7 +1476,12 @@
             r.appendChild(h('div', 'caf-line2', 'Version ' + item.version + ' · ' + stampText(item.time) + ' · ' + sizeText(item.size) + (opts.all ? ' · ' + item.owner : '')));
             const go = () => open(item.id);
             r.addEventListener('click', go);
-            r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+            r.setAttribute('aria-label', [item.title, TYPE_NAME[item.type.split('/')[0]], item.owner, 'Version ' + item.version, stampText(item.time), 'newest', isNew(item) && 'new'].filter(Boolean).join(', '));
+            r.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+                const next = e.key === 'ArrowDown' ? r.nextElementSibling : e.key === 'ArrowUp' ? r.previousElementSibling : null;
+                if (next && next.tabIndex === 0) { e.preventDefault(); next.focus(); }
+            });
             return r;
         }
 
@@ -1455,7 +1504,7 @@
             const wide = root.clientWidth >= WIDE;
             root.classList.toggle('caf-narrow', !wide);
             root.classList.toggle('caf-open', !!cur.id);
-            if (cur.id && !state.items.has(cur.id)) close();
+            if (cur.id && state.loaded && !state.items.has(cur.id)) close();
         }
 
         function close() {
@@ -1464,6 +1513,7 @@
             cur.record = null;
             pane.textContent = '';
             root.classList.remove('caf-open');
+            if (opts.onChange) opts.onChange();
         }
 
         // The pane of the open file fills the editor window. It stays in its place, so the frame does not reload.
@@ -1534,6 +1584,7 @@
         async function drawPane(focus) {
             const record = cur.record;
             const id = cur.id;
+            if (opts.onChange) opts.onChange();
             const versions = record.versions.filter((v) => !v.deleted && !v.purged).reverse();
             const item = state.items.get(id) || { title: record.name, version: cur.n, versions: versions.length };
             const v = versions.find((x) => x.n === cur.n) || versions[0];
@@ -1551,7 +1602,7 @@
             top.appendChild(h('div', 'caf-title', v.title));
             head.appendChild(top);
             const address = item.owner || (record.owner && record.owner.address);
-            if (address) top.after(h('div', 'caf-line2 caf-address', address));
+            if (address) top.after(agentLine(address, item.nodeId || (record.owner && record.owner.nodeId)));
             const pick = h('select');
             for (const x of versions) {
                 pick.appendChild(Object.assign(h('option', '', 'Version ' + x.n + ' · ' + dateText(x.time) + (x === versions[0] ? ' (newest)' : '')), { value: x.n }));
@@ -1664,6 +1715,107 @@
         return view;
     }
 
+    // The agent line of the viewer header: the address and "Show agent", or "Agent removed"
+    function agentLine(address, nodeId) {
+        const line = h('div', 'caf-line2 caf-address');
+        line.appendChild(h('span', '', address + ' · '));
+        if (nodeId && RED.nodes.node(nodeId)) {
+            const show = h('button', 'caf-showagent', 'Show agent');
+            show.type = 'button';
+            show.addEventListener('click', () => showAgent(nodeId));
+            line.appendChild(show);
+        } else {
+            line.appendChild(h('span', '', 'Agent removed'));
+        }
+        return line;
+    }
+
+    // Closes the page, shows the node on the canvas and opens its popup as a click does
+    function showAgent(nodeId) {
+        const node = RED.nodes.node(nodeId);
+        if (!node) return;
+        closePage();
+        RED.view.reveal(node.id);
+        setTimeout(() => window.caOpenPopup && window.caOpenPopup(node));
+    }
+
+    // The Files page: the view of the sidebar in a layer over the editor. It is built at the first open and kept.
+    const page = { layer: null, view: null, search: null };
+
+    function pageOpen() {
+        return !!page.layer && page.layer.style.display !== 'none';
+    }
+
+    // The hash shows the page, so a reload keeps it. replaceState makes no hashchange.
+    function setHash() {
+        if (!pageOpen()) return;
+        const c = page.view.current();
+        history.replaceState(null, '', '#files' + (c ? '/' + c.id + '/' + c.n : ''));
+    }
+
+    function tabHash() {
+        const tab = RED.workspaces.active();
+        history.replaceState(null, '', tab ? '#flow/' + tab : location.pathname + location.search);
+    }
+
+    function focusable(layer) {
+        return [...layer.querySelectorAll('a[href],button,input,select,iframe,[tabindex]')].filter((e) => e.tabIndex >= 0 && !e.disabled && e.getClientRects().length);
+    }
+
+    function buildPage() {
+        addStyle();
+        const layer = h('div', 'caf-page');
+        layer.tabIndex = -1;
+        layer.setAttribute('role', 'dialog');
+        layer.setAttribute('aria-label', 'Files');
+        const head = h('div', 'caf-pagehead');
+        head.appendChild(h('span', 'caf-pagetitle', 'Files'));
+        const close = h('button', 'red-ui-button caf-pageclose', 'Close');
+        close.type = 'button';
+        close.addEventListener('click', closePage);
+        head.appendChild(close);
+        layer.appendChild(head);
+        const body = h('div', 'caf-pagebody');
+        page.view = build({ all: true, onChange: setHash });
+        body.appendChild(page.view.root);
+        layer.appendChild(body);
+        page.search = page.view.root.querySelector('input');
+        // One handler for the page. The full-screen viewer ends first: its handler stops Escape before it gets here.
+        layer.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Escape') return closePage();
+            if (e.key !== 'Tab') return;
+            const items = focusable(layer);
+            const at = items.indexOf(document.activeElement);
+            const first = items[0];
+            const last = items[items.length - 1];
+            if (e.shiftKey ? at <= 0 : at === items.length - 1) {
+                e.preventDefault();
+                (e.shiftKey ? last : first).focus();
+            }
+        });
+        for (const type of ['keyup', 'keypress']) layer.addEventListener(type, (e) => e.stopPropagation());
+        document.body.appendChild(layer);
+        page.layer = layer;
+    }
+
+    // target: { id, n } of a file to open, or {} for the list
+    function openPage(target) {
+        if (!page.layer) buildPage();
+        page.layer.style.display = '';
+        if (target && target.id) page.view.open(target.id, target.n);
+        else if (!pageOpen() || !page.view.current()) page.view.render();
+        setHash();
+        if (!page.layer.contains(document.activeElement)) page.search.focus();
+    }
+
+    function closePage() {
+        if (!pageOpen()) return;
+        page.layer.style.display = 'none';
+        tabHash();
+        if (RED.view && RED.view.focus) RED.view.focus();
+    }
+
     // The chat line of a new file: icon, title, "New file" or "Version 3", time. A click opens it in Files.
     function chatLine(e, onOpen) {
         const a = e.artifact;
@@ -1681,7 +1833,7 @@
 
     let filesBody = null;
     let tabOptions = null;
-    window.caFiles = { build, chatLine, seenNode, addStyle };
+    window.caFiles = { build, chatLine, seenNode, addStyle, openPage, closePage };
 
     if (window.RED && RED.comms) {
         RED.comms.subscribe(API, (topic, msg) => onRecord(msg));
@@ -1690,6 +1842,21 @@
         for (const type of ['flows:loaded', 'nodes:remove']) RED.events.on(type, () => setTimeout(prune, 0));
         RED.actions.add('claude-agent:show-files-tab', () => { RED.sidebar.show('claude-agent-files'); setTimeout(() => filesBody?.querySelector('input, select, button, [tabindex="0"]')?.focus()); }, { label: 'Show the Files tab' });
         RED.keyboard.add('*', 'ctrl-g f', 'claude-agent:show-files-tab');
+        RED.actions.add('claude-agent:show-files-page', () => openPage(), { label: 'Show the Files page' });
+        RED.keyboard.add('*', 'ctrl-g shift-f', 'claude-agent:show-files-page');
+        RED.menu.addItem('menu-item-view-menu', { id: 'menu-item-claude-agent-files', label: 'Files', onselect: 'claude-agent:show-files-page', group: 'sidebar-tabs' });
+        // Node-RED sets #flow/ at each load and workspace change. The page sets its hash again after that.
+        let start = parseHash(startHash);
+        RED.events.on('flows:loaded', () => {
+            const target = start;
+            start = null;
+            setTimeout(() => { if (target) openPage(target); else setHash(); }, 0);
+        });
+        RED.events.on('workspace:change', () => setTimeout(() => { setHash(); if (pageOpen() && !page.layer.contains(document.activeElement)) page.layer.focus(); }, 0));
+        window.addEventListener('hashchange', () => {
+            const target = parseHash(location.hash);
+            if (target) openPage(target);
+        });
         if (RED.sidebar && RED.sidebar.addTab) {
             addStyle();
             const body = h('div');
