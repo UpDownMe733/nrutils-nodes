@@ -79,6 +79,54 @@ describe('Files script block', () => {
         assert.doesNotMatch(block, /caf-menu|'More'/);
     });
 
+    describe('the Files page', () => {
+        const source = (n) => new RegExp('^    function ' + n + '\\([^)]*\\) \\{[\\s\\S]*?^    \\}$', 'm').exec(block)[0];
+        const context = vm.createContext({ ID: /^[0-9a-f]{16}$/, Number, atob, String });
+        vm.runInContext(['ref', 'parseHash', 'ticketRef'].map(source).join('\n'), context);
+        const id = '0123456789abcdef';
+        const ticket = (payload) => Buffer.from(payload).toString('base64url') + '.' + 'c2ln';
+
+        it('reads #files and #files/<id>/<n>', () => {
+            assert.deepEqual({ ...context.parseHash('#files') }, {});
+            assert.deepEqual({ ...context.parseHash('#files/' + id + '/3') }, { id, n: 3 });
+            assert.equal(context.parseHash('#flow/abc'), null);
+            assert.equal(context.parseHash(''), null);
+        });
+
+        it('drops a bad id or version', () => {
+            for (const hash of ['#files/ABCDEF0123456789/3', '#files/' + id + '/x', '#files/' + id + '/1.5', '#files/../../3', '#files/' + id + '/3/4', '#files/' + id + '/9999999']) {
+                assert.ok(!context.parseHash(hash) || !context.parseHash(hash).id, hash);
+            }
+        });
+
+        it('reads the id and the version from a view link or a ticket', () => {
+            const t = ticket(id + '|4|99999');
+            assert.deepEqual({ ...context.ticketRef(t) }, { id, n: 4 });
+            assert.deepEqual({ ...context.ticketRef('http://host:1881/v/' + t + '/?theme=dark') }, { id, n: 4 });
+            assert.equal(context.ticketRef(ticket('../etc|4|9')), null);
+            assert.equal(context.ticketRef(ticket(id + '|x|9')), null);
+            assert.equal(context.ticketRef('report.md'), null);
+            assert.equal(context.ticketRef('hello'), null);
+        });
+
+        it('has the page, the key, the menu item, the hash rules and no innerHTML from data', () => {
+            assert.match(block, /const startHash = location\.hash;/);
+            assert.match(block, /RED\.keyboard\.add\('\*', 'ctrl-g shift-f', 'claude-agent:show-files-page'\)/);
+            assert.match(block, /RED\.menu\.addItem\('menu-item-view-menu', \{ id: 'menu-item-claude-agent-files', label: 'Files'/);
+            assert.match(block, /RED\.events\.on\('flows:loaded'[\s\S]*?openPage\(target\)/);
+            assert.match(block, /RED\.events\.on\('workspace:change'/);
+            assert.match(block, /RED\.nodes\.node\(nodeId\)/);
+            assert.match(block, /Agent removed/);
+            assert.match(block, /getElementById\('red-ui-editor'\)[\s\S]*?editor\.inert = on/);
+            assert.doesNotMatch(block, /addEventListener\('focusin'/);
+            assert.match(block, /#red-ui-notifications\{z-index:1600\}[\s\S]*?\.caf-full\{[^}]*z-index:1500/);
+            assert.match(block, /if \(link && RED\.clipboard\.copyText[\s\S]*?The link did not copy\.', 'error'\);\s*copy\.focus\(\);/);
+            assert.match(block, /e\.target !== document\.body[\s\S]*?e\.key === 'Escape' && page\.layer\.querySelector\('\.caf-full'\)[\s\S]*?e\.stopPropagation\(\);[\s\S]*?closePage\(\);[\s\S]*?page\.layer\.focus\(\);[\s\S]*?\}, true\);/);
+            assert.match(html, /View &gt; Files<\/b>[\s\S]*?Ctrl\+G Shift\+F[\s\S]*?#files[\s\S]*?Show agent<\/b>[\s\S]*?<b>Close<\/b>[\s\S]*?Escape ends full screen first/);
+            assert.doesNotMatch(block, /innerHTML/);
+        });
+    });
+
     it('itemOf shows the newest open version and hides a deleted file', () => {
         const itemOf = fn('itemOf');
         const record = (extra) => ({
@@ -104,5 +152,9 @@ describe('Files script block', () => {
         for (const group of ['text', 'image', 'audio', 'video', 'font', 'model', 'application']) assert.match(names, new RegExp('\\b' + group + ':'));
         assert.match(block, /if \(\/\^image\\\/\/\.test\(item\.type\)\) watch\(icon, item\)/);
         assert.match(block, /t\.url \+ 'thumb'/);
+    });
+
+    it('Show agent opens the popup after the popup library has added it to the new tab', () => {
+        assert.match(html, /RED\.view\.reveal\(node\.id\);[^]*?getElementById\('nru_popup\.' \+ node\.id \+ '\.group'\)\) window\.caOpenPopup\(node\);[^]*?requestAnimationFrame\(wait\)/);
     });
 });

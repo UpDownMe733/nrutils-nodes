@@ -240,6 +240,16 @@ Each publish of an agent makes a file in the **Files** tab of the popup and in t
 - A new file gives a line in the chat. A click on the line opens the file. A new file has a dot in the list. A node with new files shows a badge with the count, until you open its Files tab. The Files tab button has a dot while any file is new. The editor keeps this in the browser.
 - The viewer follows the theme of the editor.
 
+### Files page
+
+The **Files** page shows the same list and viewer as the sidebar tab, at the size of the editor window. Use it with the sidebar closed, or on a second screen.
+
+- Open it with the URL `<editor>/#files`, or with `<editor>/#files/<id>/<n>` to open version `<n>` of a file. A reload keeps the page.
+- Open it with Ctrl+G Shift+F, or with the item **Files** in the main menu of the editor.
+- **Close** or Escape closes the page. Escape first ends **Full screen**. The keys of the editor do not act while the page is open.
+- Paste a view link or a ticket in the search box to open its file.
+- In the viewer, the agent line shows the agent address and **Show agent**. **Show agent** closes the page, shows the node on the canvas and opens its popup. A node that does not exist shows `Agent removed`.
+
 ## Sidebar panel
 
 The **Claude agent** tab of the sidebar shows the same chat as the popup. The popup and the panel work at the same time. They share the message box and show each message one time.
