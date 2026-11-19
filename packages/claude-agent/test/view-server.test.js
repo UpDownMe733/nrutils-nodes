@@ -486,7 +486,7 @@ describe('the loaded message', () => {
 });
 
 describe('the renderers', () => {
-    const { viewer, registered, context } = loadViewer();
+    const { viewer, registered } = loadViewer();
     const pick = (type, extra) => registered.find(r => r.match(Object.assign({ path: 'x', type }, extra))).name;
 
     it('picks the renderer for each type', () => {
@@ -543,7 +543,8 @@ describe('the renderers', () => {
     });
 
     it('gives each Contents link the hash of its file and its heading', async () => {
-        // A fake DOM: the article holds 3 headings, the renderer makes the outline from them
+        // A separate viewer with its own fake DOM: the article holds 3 headings, the renderer makes the outline from them
+        const { viewer, registered, context } = loadViewer();
         const made = [];
         const node = (tag) => {
             const n = { tagName: tag.toUpperCase(), attrs: {}, children: [], style: {}, classList: { remove() {}, toggle() {} },
