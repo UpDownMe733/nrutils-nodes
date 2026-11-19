@@ -1390,7 +1390,7 @@
         const pane = h('div', 'caf-pane');
         const filter = { q: '', owner: '', type: '', time: '', sort: 'time' };
         const cur = { id: null, n: null, compare: null, record: null, auto: false, link: false, scroll: false };
-        const view = { root, render, open, end: () => setFull(false), current: () => (cur.id ? { id: cur.id, n: cur.n } : null) };
+        const view = { root, render, open, end: () => setFull(false), current: () => (cur.id && cur.n !== null ? { id: cur.id, n: cur.n } : null) };
         let owners = null;
         let types = null;
         let time = null;
