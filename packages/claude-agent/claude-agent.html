@@ -1053,7 +1053,7 @@
 .caf-row.caf-on{background:var(--red-ui-list-item-background-selected);box-shadow:inset 3px 0 var(--red-ui-text-color-link)}
 .caf-line1{display:flex;align-items:center;gap:6px;min-width:0}
 .caf-thumb{flex:none;width:48px;height:48px;object-fit:contain}
-.caf-line1 span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.caf-line1 span:not(.caf-chip){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .caf-line2{font-size:11px;color:var(--red-ui-secondary-text-color);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .caf-dot{position:absolute;left:4px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:3px;background:var(--red-ui-text-color-link)}
 .caf-chip{flex:none;font-size:10px;padding:0 6px;border-radius:8px;border:1px solid var(--red-ui-secondary-border-color);color:var(--red-ui-secondary-text-color)}
@@ -1082,9 +1082,9 @@
 .caf-note{margin:auto;padding:12px;text-align:center;color:var(--red-ui-secondary-text-color)}
 .caf-confirm{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;text-align:center;background:var(--red-ui-primary-background)}
 .caf-confirm div{display:flex;gap:8px}
-.caf-danger{background:var(--red-ui-text-color-error) !important;border-color:var(--red-ui-text-color-error) !important;color:#fff !important}
+.caf-danger{--red-ui-workspace-button-color:#fff;--red-ui-workspace-button-color-hover:#fff;--red-ui-workspace-button-color-focus:#fff;--red-ui-workspace-button-color-active:#fff;--red-ui-workspace-button-background:#c62828;--red-ui-workspace-button-background-hover:#b71c1c;--red-ui-workspace-button-background-active:#a31515;--red-ui-form-input-border-color:#c62828}
 .caf-line{display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 8px;margin:2px 0;border-radius:6px;border:1px solid var(--red-ui-secondary-border-color);background:var(--red-ui-tertiary-background);cursor:pointer}
-.caf-line span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.caf-line span:not(.caf-chip){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .caf-nodebadge circle{fill:var(--red-ui-text-color-link)}
 .caf-nodebadge text{fill:var(--red-ui-primary-background);font-size:10px;font-weight:600;text-anchor:middle;pointer-events:none}
 `;
