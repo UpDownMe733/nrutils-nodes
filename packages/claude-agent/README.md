@@ -235,17 +235,18 @@ Each publish of an agent makes a file in the **Files** tab of the popup and in t
 
 - A file with an image of 1 MB or less shows a thumbnail of 48 px in the list. Other files show the icon of their type.
 - A click on a file opens it in the viewer. On a narrow popup the viewer replaces the list. **Files** at the top goes back.
-- The version list shows the versions. **Full screen**, **Download**, **Copy link**, **Compare** and **Delete** act on the shown version. **Full screen** fills the editor window. **Close full screen** and Escape end it (Escape works when the focus is not in the file). On a touch screen the buttons show their names. A file opens in full screen when the sidebar is too small for a preview of 120 px; **Close full screen** then goes back to the list. Ctrl+G F and Ctrl+G A move the focus into the tab. **Copy link** makes a new link at each click. Anyone with the link can open that version for 12 hours.
+- The version list shows the versions. **Full screen**, **Download**, **Copy link**, **New tab**, **Compare** and **Delete** act on the shown version. **New tab** opens the viewer page in a browser tab. **Full screen** fills the editor window. **Close full screen** and Escape end it (Escape works when the focus is not in the file). On a touch screen the buttons show their names. A file opens in full screen when the sidebar is too small for a preview of 120 px; **Close full screen** then goes back to the list. Ctrl+G F and Ctrl+G A move the focus into the tab. **Copy link** makes a new link at each click. Anyone with the link can open that version for 12 hours.
 - **Delete** asks once. Then the line `Deleted. Undo` shows for 10 seconds. **Undo** restores the file.
 - A new file gives a line in the chat. A click on the line opens the file. A new file has a dot in the list. A node with new files shows a badge with the count, until you open its Files tab. The Files tab button has a dot while any file is new. The editor keeps this in the browser.
 - The viewer follows the theme of the editor.
+- The viewer page of an older version says `A newer version exists` in its top bar. This is also true for a view link and a share page.
 
 ### Files page
 
 The **Files** page shows the same list and viewer as the sidebar tab, at the size of the editor window. Use it with the sidebar closed, or on a second screen.
 
 - Open it with the URL `<editor>/#files`, or with `<editor>/#files/<id>/<n>` to open version `<n>` of a file. A reload keeps the page.
-- Open it with Ctrl+G Shift+F, or with the item **Files** in the main menu of the editor.
+- Open it with Ctrl+G Shift+F, or with **View > Files page** in the main menu of the editor.
 - **Close** or Escape closes the page. Escape first ends **Full screen**. The keys of the editor do not act while the page is open.
 - Paste a view link or a ticket in the search box to open its file.
 - In the viewer, the agent line shows the agent address and **Show agent**. **Show agent** closes the page, shows the node on the canvas and opens its popup and puts the focus in its message box. A node that does not exist shows `Agent removed`.

@@ -335,6 +335,10 @@ power-developer was satisfied. The round 3 corrections are proven in a browser. 
 | Search and the chat box have only a placeholder as their name | keyboard | `aria-label` "Search files" and a label on the chat box |
 | The viewer of an older version does not say that newer versions exist | without-sidebars, watcher | " · A newer version exists" in the top bar |
 
+#### User study of the built page, round 5 (2026-11-19)
+
+The list GET had a delay of 3 s. team-watcher, keyboard-low-vision and without-sidebars were satisfied. power-developer was satisfied in round 4. No correction is left. The outside reader waits for the share server (part 6). Wishes that are not taken: a link to the newest version in the viewer, because a view link can go outside; a "Loading" text in the empty list.
+
 ## 9. Settings
 
 `settings.js`, in the block `claudeAgent`:
