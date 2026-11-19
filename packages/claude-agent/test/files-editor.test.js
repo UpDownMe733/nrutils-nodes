@@ -119,6 +119,7 @@ describe('Files script block', () => {
             assert.match(block, /Agent removed/);
             assert.match(block, /getElementById\('red-ui-editor'\)[\s\S]*?editor\.inert = on/);
             assert.doesNotMatch(block, /addEventListener\('focusin'/);
+            assert.match(block, /getElementById\('red-ui-notifications'\)[\s\S]*?document\.body\.appendChild\(notes\)[\s\S]*?notesHome\.appendChild\(notes\)/);
             assert.match(block, /#red-ui-notifications\{z-index:1600\}[\s\S]*?\.caf-full\{[^}]*z-index:1500/);
             assert.match(block, /if \(link && RED\.clipboard\.copyText[\s\S]*?The link did not copy\.', 'error'\);\s*copy\.focus\(\);/);
             assert.match(block, /e\.target !== document\.body[\s\S]*?e\.key === 'Escape' && page\.layer\.querySelector\('\.caf-full'\)[\s\S]*?e\.stopPropagation\(\);[\s\S]*?closePage\(\);[\s\S]*?page\.layer\.focus\(\);[\s\S]*?\}, true\);/);
