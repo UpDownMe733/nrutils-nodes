@@ -19,6 +19,7 @@ const ticket = require('../artifacts/ticket.js');
 const VIEWER = path.join(__dirname, '..', 'viewer');
 const ID = '3f9c0e1a7b2d4c55';
 const ID_IMG = '3f9c0e1a7b2d4c66';
+const ID_HTML = '3f9c0e1a7b2d4c77';
 
 // A fake store: the blobs in a temporary folder, the records in memory
 function fakeStore(dir) {
@@ -139,6 +140,8 @@ describe('the view server', () => {
         store.records[ID_IMG] = { id: ID_IMG, name: 'chart', owner: { address: 't/a', nodeId: 'n1' }, versions: [
             { n: 1, time: Date.now(), title: 'Chart', entry: 'c.png', deleted: null, purged: false, files: [file(store, 'c.png', 'image/png', img)] },
             { n: 2, time: Date.now(), title: 'Chart', entry: 'c.png', deleted: null, purged: false, files: [file(store, 'c.png', 'image/png', Buffer.alloc(1024 * 1024 + 1))] }] };
+        store.records[ID_HTML] = { id: ID_HTML, name: 'one', owner: { address: 't/a', nodeId: 'n1' }, versions: [
+            { n: 1, time: Date.now(), title: 'One', entry: 'one.html', deleted: null, purged: false, files: [file(store, 'one.html', 'text/html', '<p>one</p>')] }] };
         server = http.createServer(view.handler({ store, htmlNetwork: true, uiPort: 1880, editorOrigins: origins }));
         await new Promise(r => server.listen(0, '127.0.0.1', r));
         port = server.address().port;
@@ -181,7 +184,7 @@ describe('the view server', () => {
         assert.equal(await bar(''), undefined);
         assert.equal(await bar('?embed=0'), undefined);
         const html = (await get(port, '/v/' + t1 + '/')).body.toString();
-        for (const id of ['title', 'version', 'download']) assert.ok(html.includes('id="' + id + '"'), id);
+        for (const id of ['title', 'version', 'download', 'note', 'files-toggle']) assert.ok(html.includes('id="' + id + '"'), id);
     });
 
     it('has no Close button, because window.close() does nothing on a share link', () => {
@@ -206,14 +209,37 @@ describe('the view server', () => {
         }
     });
 
-    it('sends a dead link page for a bad, an expired or a deleted ticket', async () => {
+    it('sends one themed dead link page for a bad, an expired or a deleted ticket', async () => {
+        const dead = await get(port, '/v/nonsense/');
         const expired = ticket.make(store.key, ID, 1, 1000, Date.now() - 2000);
         for (const t of ['nonsense', expired, tDel, ticket.make(store.key, ID, 9), ticket.make(store.key, 'ffffffffffffffff', 1)]) {
             const r = await get(port, '/v/' + t + '/');
             assert.equal(r.status, 404);
-            assert.match(r.body.toString(), /This link does not work\./);
+            assert.equal(r.body.toString(), dead.body.toString(), 'one page for each case');
             assert.equal((await get(port, '/v/' + t + '/meta')).status, 404);
         }
+        assert.match(dead.body.toString(), /<title>Link not valid<\/title>.*<h1>Link not valid<\/h1><p>This link does not work\. It may have expired\. Ask the sender for a new link\.<\/p>/);
+        assert.match(dead.body.toString(), /prefers-color-scheme: dark/);
+        assert.match(dead.headers['content-security-policy'], /^default-src 'none'; style-src 'unsafe-inline'/);
+        const dark = (await get(port, '/v/nonsense/?theme=dark')).body.toString();
+        assert.match(dark, /--bg:#1b1b23/);
+        assert.doesNotMatch(dark, /prefers-color-scheme|#ffffff/);
+    });
+
+    it('adds the path script only to an HTML page that loads in a frame', async () => {
+        const plain = await get(port, '/v/' + t2 + '/f/index.html');
+        const framed = await get(port, '/v/' + t2 + '/f/index.html', { 'sec-fetch-dest': 'iframe' });
+        assert.equal(plain.body.toString(), '<h1>Hi</h1><script>1</script>');
+        assert.equal(framed.body.toString(), "<h1>Hi</h1><script>1</script>\n<script>parent.postMessage({ type: 'claude-agent:at', path: location.pathname }, '*')</script>\n");
+        assert.equal(Number(framed.headers['content-length']), framed.body.length);
+        assert.match(framed.headers['content-security-policy'], /^sandbox allow-scripts /);
+        const head = await get(port, '/v/' + t2 + '/f/index.html', { 'sec-fetch-dest': 'iframe' }, 'HEAD');
+        assert.equal(head.headers['content-length'], framed.headers['content-length']);
+        const part = await get(port, '/v/' + t2 + '/f/index.html', { 'sec-fetch-dest': 'iframe', range: 'bytes=0-3' });
+        assert.equal(part.body.toString(), '<h1>');
+        assert.equal((await get(port, '/v/' + t2 + '/f/big.txt', { 'sec-fetch-dest': 'iframe' })).body.length, 11000);
+        const dl = await get(port, '/v/' + ticket.make(store.key, ID_HTML, 1) + '/download', { 'sec-fetch-dest': 'iframe' });
+        assert.equal(dl.body.toString(), '<p>one</p>');
     });
 
     it('redirects /v/<ticket> to /v/<ticket>/ so that relative links work', async () => {

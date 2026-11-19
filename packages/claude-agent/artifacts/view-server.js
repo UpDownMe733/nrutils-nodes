@@ -169,8 +169,25 @@ function assetList() {
     return list;
 }
 
-const DEAD = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">' +
-    '<title>File</title></head><body style="font-family:sans-serif;padding:16px">This link does not work.</body></html>';
+// The dead link page: one page and status 404 for a forged, an expired or a deleted link, so that it does not tell
+// which case it is. The colours are those of viewer.css. The theme comes from the URL, else from the browser.
+const DEAD_TEXT = 'This link does not work. It may have expired. Ask the sender for a new link.';
+function deadPage(theme) {
+    const light = '--bg:#ffffff;--text:#202020;--text2:#646464;color-scheme:light';
+    const dark = '--bg:#1b1b23;--text:#f0f0f0;--text2:#aaaaaa;color-scheme:dark';
+    const css = ':root{' + (theme === 'dark' ? dark : light) + '}' +
+        (theme ? '' : '@media (prefers-color-scheme: dark){:root{' + dark + '}}') +
+        'body{margin:0;padding:24px 16px;background:var(--bg);color:var(--text);' +
+        'font:14px/1.5 "Helvetica Neue",Arial,Helvetica,sans-serif}' +
+        'h1{font-size:18px;margin:0 0 8px}p{margin:0;color:var(--text2)}';
+    return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
+        '<title>Link not valid</title><style>' + css + '</style></head><body><h1>Link not valid</h1><p>' + DEAD_TEXT + '</p></body></html>';
+}
+
+// The script at the end of an HTML file in the frame of the viewer page. It tells the page the path of each page
+// of a site, so that the file list marks the open file also after a link inside the site. It runs in the opaque
+// origin of the file, and gives only the path. The viewer page accepts only a path of the file list.
+const AT_SCRIPT = Buffer.from("\n<script>parent.postMessage({ type: 'claude-agent:at', path: location.pathname }, '*')</script>\n");
 
 // The file name of a download: "<title>-v3.<ext>". Characters that a file system does not accept become "_".
 function downloadName(version, ext) {
@@ -197,8 +214,13 @@ function handler(opts) {
         res.end(res.req.method === 'HEAD' ? undefined : body);
     }
 
+    // html: the theme query of a request for the viewer page, which gets the dead link page
     function notFound(res, html) {
-        if (html) send(res, 404, 'text/html; charset=utf-8', DEAD);
+        if (html) {
+            const theme = html.get('theme');
+            res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'");
+            send(res, 404, 'text/html; charset=utf-8', deadPage(/^(light|dark)$/.test(theme || '') ? theme : ''));
+        }
         else send(res, 404, 'text/plain; charset=utf-8', 'Not found');
     }
 
@@ -231,6 +253,7 @@ function handler(opts) {
         send(res, 200, 'text/html; charset=utf-8', page.replace(/\{\{nonce\}\}/g, nonce).replace('{{theme}}', theme).replace('{{bar}}', bar));
     }
 
+    // The note is for the team and can hold internal facts: the share server must not send it (security-reviewer).
     function meta(res, record, version) {
         const newest = record.versions.filter(v => !v.deleted && !v.purged).pop();
         send(res, 200, 'application/json; charset=utf-8', JSON.stringify({
@@ -265,6 +288,13 @@ function handler(opts) {
             if (/^text\//.test(type)) type += '; charset=utf-8';
         }
         res.setHeader('Content-Type', type);
+        // A page of a site in the frame of the viewer page (a navigation, not a fetch of the text) gets AT_SCRIPT
+        if (file.type === 'text/html' && req.headers['sec-fetch-dest'] === 'iframe' && !req.headers.range) {
+            res.setHeader('Content-Length', stat.size + AT_SCRIPT.length);
+            if (req.method === 'HEAD') return res.end();
+            const rs = fs.createReadStream(blob).on('error', () => res.destroy()).on('end', () => res.end(AT_SCRIPT));
+            return rs.pipe(res, { end: false });
+        }
         res.setHeader('Accept-Ranges', 'bytes');
         let start = 0, end = stat.size - 1;
         // A request for more than one range gets the full file: a multipart response is not necessary for a viewer.
@@ -334,7 +364,7 @@ function handler(opts) {
         const m = /^\/v\/([^/]+)(\/(.*))?$/.exec(p);
         if (!m) return notFound(res);
         const found = lookup(m[1]);
-        if (!found) return notFound(res, !m[3]);
+        if (!found) return notFound(res, !m[3] && url.searchParams);
         const { record, version } = found;
         const rest = m[3];
         if (rest === undefined) {
