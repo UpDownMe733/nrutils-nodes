@@ -468,7 +468,7 @@ function loadViewer(parent) {
         vm.runInContext(fs.readFileSync(path.join(VIEWER, 'renderers', name), 'utf8'), context);
     }
     vm.runInContext(fs.readFileSync(path.join(VIEWER, 'compare.js'), 'utf8'), context);
-    return { viewer: context.viewer, registered };
+    return { viewer: context.viewer, registered, context };
 }
 
 describe('the loaded message', () => {
@@ -486,7 +486,7 @@ describe('the loaded message', () => {
 });
 
 describe('the renderers', () => {
-    const { viewer, registered } = loadViewer();
+    const { viewer, registered, context } = loadViewer();
     const pick = (type, extra) => registered.find(r => r.match(Object.assign({ path: 'x', type }, extra))).name;
 
     it('picks the renderer for each type', () => {
@@ -540,8 +540,29 @@ describe('the renderers', () => {
     it('makes a real link to a file and to a heading, with the file in the hash', () => {
         assert.equal(viewer.link('docs/a b.md'), '#file=docs%2Fa%20b.md');
         assert.equal(viewer.link('a.md', 'intro-text'), '#file=a.md&at=intro-text');
-        const src = fs.readFileSync(path.join(VIEWER, 'renderers', 'markdown.js'), 'utf8');
-        assert.doesNotMatch(src, /href: '#'/, 'no Contents link has the href "#"');
+    });
+
+    it('gives each Contents link the hash of its file and its heading', async () => {
+        // A fake DOM: the article holds 3 headings, the renderer makes the outline from them
+        const made = [];
+        const node = (tag) => {
+            const n = { tagName: tag.toUpperCase(), attrs: {}, children: [], style: {}, classList: { remove() {}, toggle() {} },
+                setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k]; },
+                addEventListener() {}, append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
+                querySelectorAll: (q) => tag === 'article' && /^h1/.test(q) ? heads : [], querySelector: () => null };
+            made.push(n);
+            return n;
+        };
+        const heads = [['H1', 'Report'], ['H2', 'Intro text'], ['H2', 'Intro text']].map(([tagName, textContent]) => ({ tagName, textContent }));
+        Object.assign(context, { marked: { parse: () => '' }, DOMPurify: { sanitize: () => '' }, CSS: { escape: (x) => x } });
+        context.document.createElement = node;
+        viewer.meta = { files: [{ path: 'docs/a b.md', type: 'text/markdown' }] };
+        const md = registered.find(r => r.name === 'markdown');
+        await md.render(node('div'), viewer.meta.files[0], { text: async () => '', url: viewer.url });
+        const nav = made.find(n => n.tagName === 'NAV');
+        assert.deepEqual(nav.children.map(a => a.getAttribute('href')), [
+            '#file=docs%2Fa%20b.md&at=report', '#file=docs%2Fa%20b.md&at=intro-text', '#file=docs%2Fa%20b.md&at=intro-text-2']);
+        assert.deepEqual(heads.map(h => h.id), ['h-report', 'h-intro-text', 'h-intro-text-2']);
     });
 
     it('keeps the browser action for a middle click and a click with a modifier key', () => {

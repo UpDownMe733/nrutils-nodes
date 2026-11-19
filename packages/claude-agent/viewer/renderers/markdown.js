@@ -66,8 +66,10 @@
                     a.addEventListener('click', (e) => {
                         if (!viewer.plainClick(e)) return;
                         e.preventDefault();
-                        if (p === file.path) jump(body, anchor);
-                        else viewer.open(p, anchor);
+                        if (p !== file.path) return viewer.open(p, anchor);
+                        jump(body, anchor);
+                        // The same address as a Contents link. replaceState fires no hashchange.
+                        history.replaceState(null, '', a.getAttribute('href'));
                     });
                 } else {
                     a.removeAttribute('href');
