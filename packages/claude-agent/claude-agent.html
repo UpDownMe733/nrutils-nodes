@@ -1647,6 +1647,7 @@
                 if (!link) return RED.notify('The link did not copy.', 'error');
                 if (RED.clipboard.copyText(link.url)) RED.notify('Link copied. Anyone with this link can open this version for 12 hours.');
                 else RED.notify('The link did not copy.', 'error');
+                copy.focus();
             });
             compare.addEventListener('click', () => startCompare(versions, v, body, head));
             del.addEventListener('click', () => confirmDelete(item, record));
