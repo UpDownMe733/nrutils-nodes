@@ -235,7 +235,7 @@ Each publish of an agent makes a file in the **Files** tab of the popup and in t
 
 - A file with an image of 1 MB or less shows a thumbnail of 48 px in the list. Other files show the icon of their type.
 - A click on a file opens it in the viewer. On a narrow popup the viewer replaces the list. **Files** at the top goes back.
-- The version list shows the versions. **Full screen**, **Download**, **Copy link**, **Compare** and **Delete** act on the shown version. **Full screen** fills the editor window. **Close** and Escape end it. **Copy link** makes a new link at each click. Anyone with the link can open that version for 12 hours.
+- The version list shows the versions. **Full screen**, **Download**, **Copy link**, **Compare** and **Delete** act on the shown version. **Full screen** fills the editor window. **Close** and Escape end it (Escape works when the focus is not in the file). **Copy link** makes a new link at each click. Anyone with the link can open that version for 12 hours.
 - **Delete** asks once. Then the line `Deleted. Undo` shows for 10 seconds. **Undo** restores the file.
 - A new file gives a line in the chat. A click on the line opens the file. A new file has a dot in the list. A node with new files shows a badge with the count, until you open its Files tab. The editor keeps this in the browser.
 - The viewer follows the theme of the editor.
