@@ -4,6 +4,9 @@
 'use strict';
 
 (function () {
+    // Tell the editor that the view server answered, before the meta request and the render.
+    // Thus a dead link page, a render error and a slow render also send it. Only data, no command.
+    if (window.parent !== window) window.parent.postMessage({ type: 'loaded' }, '*');
     const renderers = [];
     const base = location.pathname.replace(/[^/]*$/, '');   // /v/<ticket>/
     const TEXT_PROBE = 8192;
@@ -214,8 +217,6 @@
             content.replaceChildren(box);
             await viewer.renderInto(box, file, { anchor: h.get('at') });
         }
-        // Tell the editor that the page loaded. Only data, no command.
-        if (window.parent !== window) window.parent.postMessage({ type: 'loaded' }, '*');
     }
 
     async function main() {
