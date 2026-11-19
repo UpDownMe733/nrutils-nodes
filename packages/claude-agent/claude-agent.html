@@ -1809,7 +1809,16 @@
     // The editor under the page gets no focus, also with Tab from the viewer frame. A dialog or the clipboard field is outside the editor.
     function editorInert(on) {
         const editor = document.getElementById('red-ui-editor');
-        if (editor) editor.inert = on;
+        if (!editor) return;
+        editor.inert = on;
+        // The notices have buttons: they stay outside the inert editor while the page is open.
+        const notes = document.getElementById('red-ui-notifications');
+        if (!notes) return;
+        if (on) {
+            if (notes.parentNode !== document.body) page.notesHome = notes.parentNode;
+            document.body.appendChild(notes);
+        }
+        else if (page.notesHome) page.notesHome.appendChild(notes);
     }
 
     // target: { id, n } of a file to open, or {} for the list
