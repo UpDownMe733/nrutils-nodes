@@ -1067,8 +1067,8 @@
 .caf-chip{flex:none;font-size:10px;padding:0 6px;border-radius:8px;border:1px solid var(--red-ui-secondary-border-color);color:var(--red-ui-secondary-text-color)}
 .caf-gone{flex-direction:row;align-items:center;gap:8px;cursor:default;color:var(--red-ui-secondary-text-color)}
 .caf-filters{flex:none;display:flex;flex-wrap:wrap;gap:4px;padding-bottom:6px}
-.caf-filters input,.caf-filters select{flex:1 1 90px;min-width:0;width:auto;box-sizing:border-box;height:28px;margin:0;font-size:12px}
-.caf-filters input{flex:1 1 100%}
+.caf .caf-filters input,.caf .caf-filters select{flex:1 1 60px;min-width:0;width:auto;box-sizing:border-box;height:28px;margin:0;font-size:12px}
+.caf .caf-filters input{flex:1 1 100%}
 .caf-store{flex:none;padding:8px;font-size:11px;color:var(--red-ui-secondary-text-color)}
 .caf-head{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-bottom:6px}
 .caf-top{flex:1 1 100%;display:flex;align-items:center;gap:6px;min-width:0}
@@ -1081,14 +1081,19 @@
 .caf-head .caf-back{flex:none}
 .caf-head .caf-gap{margin-left:auto}
 .caf-address{flex:1 1 100%;padding:0 2px}
-.caf-closefull{display:none}
+.caf-pane .caf-closefull{display:none}
 .caf-full{position:fixed;inset:0;z-index:1500;box-sizing:border-box;padding:8px;background:var(--red-ui-primary-background)}
 .caf-full .caf-fullbtn{display:none}
 .caf-full .caf-closefull{display:inline-block}
+.caf-head .caf-icon{padding:0;height:28px;min-height:28px;min-width:28px}
+.caf .caf-icon .caf-label{display:none !important}
+.caf-full .caf-icon .caf-label{display:inline !important}
+.caf-full .caf-head .caf-icon{padding:0 8px;height:32px;min-height:32px}
+.caf-head{gap:4px}
 .caf-bar{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-bottom:6px}
 .caf-bar select{flex:1 1 90px;min-width:0;width:auto;box-sizing:border-box;height:32px;margin:0}
 .caf-bar .red-ui-button{flex:none;white-space:nowrap;box-sizing:border-box;height:32px;min-height:32px;min-width:32px;margin:0}
-@media (pointer:coarse){.caf-head .red-ui-button,.caf-bar .red-ui-button{height:44px;min-height:44px;min-width:44px}.caf-filters input,.caf-filters select{height:44px}}
+@media (pointer:coarse){.caf-head .red-ui-button,.caf-bar .red-ui-button{height:44px;min-height:44px;min-width:44px}.caf .caf-filters input,.caf .caf-filters select{height:44px}.caf-head .caf-icon{height:44px;min-height:44px;min-width:44px}}
 .caf-body{flex:1;min-height:0;display:flex;gap:6px;flex-direction:row}
 .caf-body iframe{flex:1;min-width:0;min-height:240px;width:100%;border:1px solid var(--red-ui-secondary-border-color);border-radius:4px;background:#fff}
 .caf-note{margin:auto;padding:12px;text-align:center;color:var(--red-ui-secondary-text-color)}
@@ -1114,6 +1119,7 @@
         b.setAttribute('aria-label', label);
         if (icon) b.appendChild(h('i', 'fa ' + icon));
         b.appendChild(h('span', 'caf-label', (icon ? ' ' : '') + label));
+        if (className && className.includes('caf-icon')) b.title = label;
         return b;
     }
 
@@ -1486,6 +1492,7 @@
                 keep(OPENED_KEY, opened);
                 badges();
             }
+            root.classList.add('caf-open');
             drawPane('start');
             render();
         }
@@ -1537,13 +1544,13 @@
             pick.value = v.n;
             pick.addEventListener('change', () => { cur.n = Number(pick.value); cur.compare = null; drawPane('pick'); });
             head.appendChild(pick);
-            const full = btn('fa-expand', 'Full screen', 'caf-fullbtn');
-            const closeFull = btn('fa-compress', 'Close full screen', 'caf-closefull');
-            const down = btn('fa-download', 'Download');
-            const copy = btn('fa-link', 'Copy link');
-            const tab = btn('fa-external-link', 'Open in new tab', 'red-ui-button-small');
-            const compare = btn('fa-columns', 'Compare');
-            const del = btn('fa-trash-o', 'Delete', 'caf-gap');
+            const full = btn('fa-expand', 'Full screen', 'caf-fullbtn caf-icon');
+            const closeFull = btn('fa-compress', 'Close full screen', 'caf-closefull caf-icon');
+            const down = btn('fa-download', 'Download', 'caf-icon');
+            const copy = btn('fa-link', 'Copy link', 'caf-icon');
+            const tab = btn('fa-external-link', 'Open in new tab', 'caf-icon');
+            const compare = btn('fa-columns', 'Compare', 'caf-icon');
+            const del = btn('fa-trash-o', 'Delete', 'caf-gap caf-icon');
             for (const e of [full, closeFull, down, copy, tab, compare, del]) head.appendChild(e);
             pane.appendChild(head);
             if (focus === 'start') (narrow ? back : pick).focus();
