@@ -440,7 +440,7 @@ describe('start', () => {
 
 // ---- The renderers, in a small fake DOM
 
-function loadViewer() {
+function loadViewer(parent) {
     const registered = [];
     const fakeEl = () => ({ dataset: {}, addEventListener() {}, setAttribute() {}, append() {}, replaceChildren() {} });
     const context = {
@@ -449,6 +449,7 @@ function loadViewer() {
         matchMedia: () => ({ matches: false, onchange: null }), URLSearchParams, TextDecoder, fetch: async () => { throw new Error('no fetch'); }
     };
     context.window = context;
+    context.parent = parent || context;
     vm.createContext(context);
     const html = fs.readFileSync(path.join(VIEWER, 'index.html'), 'utf8');
     vm.runInContext(fs.readFileSync(path.join(VIEWER, 'viewer.js'), 'utf8'), context);
@@ -460,6 +461,20 @@ function loadViewer() {
     vm.runInContext(fs.readFileSync(path.join(VIEWER, 'compare.js'), 'utf8'), context);
     return { viewer: context.viewer, registered };
 }
+
+describe('the loaded message', () => {
+    it('goes to the editor as soon as the script runs, before the meta request and the render', () => {
+        const sent = [];
+        // The fake document never fires DOMContentLoaded, so main() does not run
+        loadViewer({ postMessage: (data, origin) => sent.push([data, origin]) });
+        assert.deepEqual(JSON.parse(JSON.stringify(sent)), [[{ type: 'loaded' }, '*']]);
+    });
+
+    it('is sent one time only, not again on a hash change', () => {
+        const src = fs.readFileSync(path.join(VIEWER, 'viewer.js'), 'utf8');
+        assert.equal(src.match(/postMessage\(/g).length, 1);
+    });
+});
 
 describe('the renderers', () => {
     const { viewer, registered } = loadViewer();
