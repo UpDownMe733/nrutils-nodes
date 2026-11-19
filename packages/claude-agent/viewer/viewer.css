@@ -67,10 +67,31 @@ a { color: var(--link); }
 .files a[aria-current="true"] { background: var(--bg3); font-weight: bold; }
 .content { flex: 1; min-width: 0; overflow: auto; display: flex; flex-direction: column; }
 .content > .box { flex: 1; min-height: 0; }
-@media (max-width: 499px) {
+.files-toggle { display: none; }
+@media (max-width: 599px) {
     .layout { flex-direction: column; }
-    .files { flex: none; max-height: 30vh; border-right: none; border-bottom: 1px solid var(--border); }
+    .files { display: none; flex: none; max-height: 50vh; border-right: none; border-bottom: 1px solid var(--border); }
+    .files.open { display: block; }
+    .files-toggle {
+        display: flex; align-items: center; gap: 8px; flex: none; min-height: 44px; padding: 0 12px;
+        border: 0; border-bottom: 1px solid var(--border); background: var(--bg2); color: var(--text);
+        font: inherit; text-align: left; cursor: pointer;
+    }
+    .files-toggle:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
+    .files-current { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; }
+    .files-toggle[aria-expanded="true"] > :last-child { transform: rotate(180deg); }
 }
+
+/* The note of the version, under the top bar */
+.note {
+    flex: none; max-height: 25vh; overflow: auto; padding: 8px 12px; border-bottom: 1px solid var(--border);
+    background: var(--bg); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* The dead link page */
+.dead { padding: 24px 16px; }
+.dead h1 { font-size: 18px; margin: 0 0 8px; }
+.dead p { margin: 0; color: var(--text2); }
 
 /* Text and code */
 .text { margin: 0; padding: 8px 0; font: 13px/1.5 Menlo, Consolas, "DejaVu Sans Mono", monospace; counter-reset: line; }

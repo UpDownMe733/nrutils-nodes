@@ -161,15 +161,43 @@
         return new URLSearchParams(location.hash.slice(1));
     }
 
+    // Under 600 px the file list is closed. A button with the name of the open file opens it.
+    const narrow = matchMedia('(max-width: 599px)');
+
+    function setListOpen(open) {
+        document.getElementById('files').classList.toggle('open', open);
+        document.getElementById('files-toggle').setAttribute('aria-expanded', String(open));
+    }
+
     function fileList(current) {
         const nav = document.getElementById('files');
+        const toggle = document.getElementById('files-toggle');
         if (viewer.meta.files.length < 2) return;
         nav.hidden = false;
+        toggle.hidden = false;
+        toggle.replaceChildren(el('span', { class: 'secondary', text: 'Files' }),
+            el('span', { class: 'files-current', text: current || '' }), el('span', { 'aria-hidden': 'true', text: '▾' }));
         nav.replaceChildren(...viewer.meta.files.map(f => {
             const a = el('a', { href: '#file=' + encodeURIComponent(f.path), title: f.path, text: f.path });
             if (f.path === current) a.setAttribute('aria-current', 'true');
             return a;
         }));
+    }
+
+    // A page of a site in the frame tells its path (AT_SCRIPT of the view server). The mark and the hash follow it.
+    // Only the frame of the open HTML file counts, and only a path of the file list.
+    function onFrameMessage(e) {
+        const frame = document.querySelector('#content > .box > iframe.frame');
+        const d = e.data;
+        if (!frame || e.source !== frame.contentWindow || !d || d.type !== 'claude-agent:at' || typeof d.path !== 'string') return;
+        const prefix = base + 'f/';
+        if (!d.path.startsWith(prefix)) return;
+        let p;
+        try { p = d.path.slice(prefix.length).split('/').map(decodeURIComponent).join('/'); } catch (err) { return; }
+        if (!viewer.file(p)) return;
+        // replaceState fires no hashchange, so the frame does not load again
+        history.replaceState(null, '', '#file=' + encodeURIComponent(p));
+        fileList(p);
     }
 
     async function show() {
@@ -196,7 +224,10 @@
             if (!r.ok) throw new Error('HTTP ' + r.status);
             viewer.meta = await r.json();
         } catch (e) {
-            document.body.replaceChildren(el('div', { class: 'hint', text: 'This link does not work.' }));
+            // The same text as the dead link page of the view server
+            document.title = 'Link not valid';
+            document.body.replaceChildren(el('div', { class: 'dead' }, el('h1', { text: 'Link not valid' }),
+                el('p', { text: 'This link does not work. It may have expired. Ask the sender for a new link.' })));
             return;
         }
         const m = viewer.meta;
@@ -204,6 +235,18 @@
         document.getElementById('title').textContent = m.title;
         document.getElementById('title').title = m.title;
         document.getElementById('version').textContent = versionText(m);
+        // The note of the version ("what is new"). The share server sends no note, so a share page shows none.
+        if (m.note) {
+            document.getElementById('note-text').textContent = m.note;
+            document.getElementById('note').hidden = false;
+        }
+        document.getElementById('files-toggle').addEventListener('click', () =>
+            setListOpen(document.getElementById('files-toggle').getAttribute('aria-expanded') !== 'true'));
+        // On a narrow screen, a choice in the list closes the list
+        document.getElementById('files').addEventListener('click', (e) => {
+            if (narrow.matches && e.target.closest('a')) setListOpen(false);
+        });
+        window.addEventListener('message', onFrameMessage);
         window.addEventListener('hashchange', show);
         await show();
     }
