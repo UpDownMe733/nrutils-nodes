@@ -246,6 +246,7 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 ### The viewer page (editor and share link)
 
 - Top bar, 48 px: title, then "Version 3 · 18 Nov 2026" or "Newest version · 18 Nov 2026", then Download. A share page has no agent name, no path and no editor link.
+  When `meta.newest` is false, the version text ends with " · A newer version exists". The view server and the share server both send `newest`. On a view link, "All files" opens the Files page, where the version list marks the newest.
   The frame of the editor adds `embed=1` to the URL. Then the page hides its top bar, because the viewer header of the editor has the same items.
 - The content fits the width. The page never scrolls sideways. A table scrolls in its own box.
 - Markdown: a wide screen shows the outline as a left column. A narrow screen shows a "Contents" button that opens the list. A tap jumps to the heading.
@@ -323,6 +324,16 @@ without-sidebars and power-developer were satisfied. team-watcher was satisfied 
 | A filter change is silent for a screen reader | keyboard | the footer count has `aria-live="polite"` |
 | After Show agent the focus is on the canvas | keyboard | the focus goes to the message box of the popup |
 | The Contents links of the viewer are `#` | keyboard | each link is `#file=<path>&at=<heading>` |
+
+#### User study of the built page, round 4 (2026-11-19)
+
+power-developer was satisfied. The round 3 corrections are proven in a browser. Three points were left:
+
+| Finding | Users | Correction |
+|---|---|---|
+| After "All files", the list has no filter for about 3 s, and the row says "Version null of 3" | watcher | the hash open sets the Agent filter from the item at once; no "of" text before a version is open |
+| Search and the chat box have only a placeholder as their name | keyboard | `aria-label` "Search files" and a label on the chat box |
+| The viewer of an older version does not say that newer versions exist | without-sidebars, watcher | " · A newer version exists" in the top bar |
 
 ## 9. Settings
 
