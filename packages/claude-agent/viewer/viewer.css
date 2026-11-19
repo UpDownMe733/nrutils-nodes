@@ -57,7 +57,7 @@ a { color: var(--link); }
 #editor:hover, #editor:focus-visible { text-decoration: underline; }
 /* A 44 px target on touch, larger than the 24 px line */
 @media (pointer: coarse) {
-    #editor::after { content: ""; position: absolute; left: -8px; right: -8px; top: -10px; bottom: -10px; }
+    #editor::after { content: ""; position: absolute; left: -8px; right: -8px; top: 50%; height: 44px; transform: translateY(-50%); }
 }
 .button {
     display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px;
