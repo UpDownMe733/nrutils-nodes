@@ -110,7 +110,11 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const menuOptions = [];
     const selection = [];
     let sideTab;
+    const actions = {};
+    const keys = {};
     const RED = {
+        actions: { add: (name, fn) => { actions[name] = fn; } },
+        keyboard: { add: (scope, key, action) => { keys[action] = key; } },
         events: { on: (type, fn) => (handlers[type] = handlers[type] || []).push(fn) },
         nodes: { registerType: (name, d) => { def = d; }, node: (id) => nodesById[id], eachNode: (fn) => Object.values(nodesById).forEach(fn), workspace: (id) => ({ id, label: 'Flow ' + id }) },
         // The sidebar and the canvas: the panel adds its tab here. A selection of the canvas gives the event of Node-RED.
@@ -158,7 +162,7 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const rebuild = () => def.nru_popupInit.call(node);
     const emit = (type, ...args) => (handlers[type] || []).forEach((fn) => fn(...args));
     const addNode = (id, more) => (nodesById[id] = makeNode(id, more));
-    return { menu: (options) => RED.contextMenu.show(options), getNodes: () => nodesById, window, canvas, captured, popupStates, shown, hidden, menuOptions, selection, resize, sanitized, emit, addNode, selected, revealed, sideTab: () => sideTab, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
+    return { menu: (options) => RED.contextMenu.show(options), getNodes: () => nodesById, window, canvas, captured, popupStates, shown, hidden, menuOptions, selection, resize, sanitized, emit, addNode, selected, revealed, sideTab: () => sideTab, actions, keys, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
 }
 
 const key = (text, init) => {
@@ -980,6 +984,10 @@ describe('claude-agent sidebar panel', () => {
         const p = setup();
         assert.equal(p.sideTab().id, 'claude-agent');
         assert.equal(p.sideTab().enableOnEdit, true);
+        assert.equal(p.sideTab().action, 'claude-agent:show-agent-tab');
+        assert.equal(p.keys['claude-agent:show-agent-tab'], 'ctrl-g a');
+        p.actions['claude-agent:show-agent-tab']();
+        assert.ok(p.shown.includes('claude-agent'));
     });
 
     it('shows one line of text when no node was clicked', () => {
