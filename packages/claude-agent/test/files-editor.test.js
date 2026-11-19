@@ -57,6 +57,16 @@ describe('Files script block', () => {
         assert.equal(context.isNew({ ...item, time: 102 }), true);
     });
 
+    it('has the round 2 corrections: focus, ring, filters, new mark, touch labels, auto full screen', () => {
+        assert.match(html, /show-files-tab', \(\) => \{ RED\.sidebar\.show\('claude-agent-files'\); setTimeout/);
+        assert.match(html, /show-agent-tab', \(\) => \{ RED\.sidebar\.show\('claude-agent'\); setTimeout/);
+        assert.match(html, /\.caf \.caf-icon:focus-visible\{outline:2px solid/);
+        assert.match(html, /\.caf \.caf-filters select\{flex:1 1 auto;min-width:fit-content\}/);
+        assert.match(html, /tabButton\.toggleClass\('caf-tabnew', total > 0\)/);
+        assert.match(html, /@media \(hover:none\)\{\.caf \.caf-icon \.caf-label\{display:inline !important\}/);
+        assert.match(html, /getBoundingClientRect\(\)\.height < 120/);
+    });
+
     it('has the Files shortcuts, the sort, the Escape rule and the copy link text', () => {
         assert.match(html, /RED\.keyboard\.add\('\*', 'ctrl-g f', 'claude-agent:show-files-tab'\)/);
         assert.match(html, /RED\.keyboard\.add\('\*', 'ctrl-g a', 'claude-agent:show-agent-tab'\)/);
