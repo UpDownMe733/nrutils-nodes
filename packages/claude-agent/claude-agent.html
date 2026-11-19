@@ -1060,7 +1060,7 @@
 .caf-narrow.caf-open .caf-left,.caf-narrow:not(.caf-open) .caf-pane{display:none}
 .caf-row{display:flex;flex-direction:column;justify-content:center;box-sizing:border-box;min-height:44px;padding:4px 8px 4px 14px;position:relative;cursor:pointer;border-bottom:1px solid var(--red-ui-secondary-border-color)}
 .caf-row:hover,.caf-row:focus-visible{background:var(--red-ui-secondary-background)}
-.caf-row:focus-visible,.caf-filters input:focus-visible{outline:2px solid var(--red-ui-form-input-focus-color);outline-offset:-2px}
+.caf-row:focus-visible,.caf-filters input:focus{outline:2px solid var(--red-ui-form-input-focus-color);outline-offset:-2px}
 .caf-body iframe:focus{outline:2px solid var(--red-ui-form-input-focus-color);outline-offset:-2px}
 .caf-row.caf-on{background:var(--red-ui-list-item-background-selected);box-shadow:inset 3px 0 var(--red-ui-text-color-link)}
 .caf-line1{display:flex;align-items:center;gap:6px;min-width:0}
@@ -1073,11 +1073,12 @@
 .caf-filters{flex:none;display:flex;flex-wrap:wrap;gap:4px;padding-bottom:6px}
 .caf .caf-filters input,.caf .caf-filters select{flex:1 1 60px;min-width:0;width:auto;box-sizing:border-box;height:28px;margin:0;font-size:12px}
 .caf .caf-filters input{flex:1 1 100%}
+.caf-none{padding:12px 8px 6px;color:var(--red-ui-secondary-text-color)}
 .caf-store{flex:none;padding:8px;font-size:11px;color:var(--red-ui-secondary-text-color)}
 .caf-head{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-bottom:6px}
 .caf-top{flex:1 1 100%;display:flex;align-items:center;gap:6px;min-width:0}
 .caf-title{flex:1;min-width:0;font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.caf-head select{flex:1 1 90px;min-width:auto;width:auto;box-sizing:border-box;height:32px;margin:0}
+.caf-head select{flex:0 1 auto;min-width:auto;width:auto;box-sizing:border-box;height:32px;margin:0}
 .caf-narrow .caf-head select,.caf-narrow .caf-bar select{flex-basis:100%}
 .caf .red-ui-button .caf-label{display:inline !important}
 .caf-head .red-ui-button{white-space:nowrap;box-sizing:border-box;height:32px;min-height:32px;min-width:32px;margin:0}
@@ -1424,6 +1425,7 @@
         }
         left.appendChild(list);
         const store = opts.all ? h('div', 'caf-store') : null;
+        if (store) store.setAttribute('aria-live', 'polite');
         if (store) left.appendChild(store);
         root.appendChild(left);
         root.appendChild(pane);
@@ -1490,10 +1492,12 @@
             line1.appendChild(h('span', '', item.title));
             if (item.shares) line1.appendChild(h('span', 'caf-chip', 'Shared'));
             r.appendChild(line1);
-            r.appendChild(h('div', 'caf-line2', 'Version ' + item.version + ' · ' + stampText(item.time) + ' · ' + sizeText(item.size) + (opts.all ? ' · ' + item.owner : '')));
+            const older = item.id === cur.id && cur.n !== item.version;
+            const versionText = older ? 'Version ' + cur.n + ' of ' + item.version : 'Version ' + item.version;
+            r.appendChild(h('div', 'caf-line2', versionText + ' · ' + stampText(item.time) + ' · ' + sizeText(item.size) + (opts.all ? ' · ' + item.owner : '')));
             const go = () => open(item.id);
             r.addEventListener('click', go);
-            r.setAttribute('aria-label', [item.title, TYPE_NAME[item.type.split('/')[0]], item.owner, 'Version ' + item.version, stampText(item.time), 'newest', isNew(item) && 'new'].filter(Boolean).join(', '));
+            r.setAttribute('aria-label', [item.title, TYPE_NAME[item.type.split('/')[0]], item.owner, versionText, stampText(item.time), !older && 'newest', isNew(item) && 'new'].filter(Boolean).join(', '));
             r.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
                 const next = e.key === 'ArrowDown' ? r.nextElementSibling : e.key === 'ArrowUp' ? r.previousElementSibling : null;
@@ -1512,6 +1516,17 @@
             if (seen) seen.disconnect();
             seen = null;
             for (const i of items) list.appendChild(row(i));
+            if (!items.length && all.length) {
+                list.appendChild(h('div', 'caf-none', 'No files.'));
+                const clear = btn('', 'Clear filters', 'red-ui-button-small');
+                clear.addEventListener('click', () => {
+                    Object.assign(filter, { q: '', owner: '', type: '', time: '' });
+                    q.value = '';
+                    render();
+                    q.focus();
+                });
+                list.appendChild(clear);
+            }
             if (opts.all) {
                 filter.owner = fillSelect(owners, [...new Set(all.map((i) => i.owner))], 'Agent', filter.owner);
                 filter.type = fillSelect(types, [...new Set(all.map((i) => i.type.split('/')[0]).filter(Boolean))], 'Type', filter.type, TYPE_NAME);
@@ -1671,17 +1686,18 @@
             if (address) top.after(agentLine(address, item.nodeId || (record.owner && record.owner.nodeId), () => setFull(false)));
             const pick = h('select');
             for (const x of versions) {
-                pick.appendChild(Object.assign(h('option', '', 'Version ' + x.n + ' · ' + dateText(x.time) + (x === versions[0] ? ' (newest)' : '')), { value: x.n }));
+                pick.appendChild(Object.assign(h('option', '', 'Version ' + x.n + ' · ' + stampText(x.time) + (x === versions[0] ? ' (newest)' : '')), { value: x.n }));
             }
             pick.value = v.n;
             pick.setAttribute('aria-label', 'Version');
-            pick.addEventListener('change', () => { cur.n = Number(pick.value); cur.compare = null; drawPane('pick'); });
+            pick.addEventListener('change', () => { cur.n = Number(pick.value); cur.compare = null; drawPane('pick'); render(); });
             head.appendChild(pick);
             const full = btn('fa-expand', 'Full screen', 'caf-fullbtn caf-icon');
             const closeFull = btn('fa-compress', 'Close full screen', 'caf-closefull caf-icon');
             const down = btn('fa-download', 'Download', 'caf-icon');
             const copy = btn('fa-link', 'Copy link', 'caf-icon');
             const tab = btn('fa-external-link', 'Open in new tab', 'caf-icon');
+            tab.querySelector('.caf-label').textContent = ' New tab';
             const compare = btn('fa-columns', 'Compare', 'caf-icon');
             const del = btn('fa-trash-o', 'Delete', 'caf-gap caf-icon');
             for (const e of [full, closeFull, down, copy, tab, compare, del]) head.appendChild(e);
@@ -1806,8 +1822,13 @@
         // The popup library adds the popup of a node after a tab change. The click must wait for it.
         const start = Date.now();
         const wait = () => {
-            if (document.getElementById('nru_popup.' + node.id + '.group')) window.caOpenPopup(node);
-            else if (Date.now() - start < 5000) requestAnimationFrame(wait);
+            const group = document.getElementById('nru_popup.' + node.id + '.group');
+            if (group) {
+                window.caOpenPopup(node);
+                // The focus goes into the popup, so the keyboard user does not stay on the canvas
+                const text = group.querySelector('textarea');
+                if (text) text.focus();
+            } else if (Date.now() - start < 5000) requestAnimationFrame(wait);
         };
         wait();
     }

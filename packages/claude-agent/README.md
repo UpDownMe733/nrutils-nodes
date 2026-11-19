@@ -248,7 +248,9 @@ The **Files** page shows the same list and viewer as the sidebar tab, at the siz
 - Open it with Ctrl+G Shift+F, or with the item **Files** in the main menu of the editor.
 - **Close** or Escape closes the page. Escape first ends **Full screen**. The keys of the editor do not act while the page is open.
 - Paste a view link or a ticket in the search box to open its file.
-- In the viewer, the agent line shows the agent address and **Show agent**. **Show agent** closes the page, shows the node on the canvas and opens its popup. A node that does not exist shows `Agent removed`.
+- In the viewer, the agent line shows the agent address and **Show agent**. **Show agent** closes the page, shows the node on the canvas and opens its popup and puts the focus in its message box. A node that does not exist shows `Agent removed`.
+- When the filters show no file, the list shows `No files.` and the button **Clear filters**. The button resets Search, Agent, Type and Time.
+- When the open version is not the newest, its row shows `Version 1 of 3`. The count of files in the footer is a live region, so a screen reader reads a change.
 
 ## Sidebar panel
 
