@@ -164,6 +164,11 @@ describe('Files script block', () => {
             assert.match(block, /\.caf-head select\{[^}]*min-width:auto/);
         });
 
+        it('moves the pane of a popup to the body in full screen and back, and ends it when the view is gone', () => {
+            assert.match(block, /if \(on && pane\.closest\('foreignObject'\)\) \{\s+pane\.replaceWith\(home\);\s+document\.body\.appendChild\(pane\);\s+\} else if \(!on && home\.parentNode\) \{\s+home\.replaceWith\(pane\);/);
+            assert.match(block, /else \{\s+view\.end\(\);\s+views\.delete\(view\);/);
+        });
+
         it('ends full screen before it shows the agent, and shows a text for a viewer that did not connect', () => {
             assert.match(block, /show\.addEventListener\('click', \(\) => \{ endFull\(\); showAgent\(nodeId\); \}\)/);
             assert.match(block, /fetch\(t\.url, \{ mode: 'no-cors' \}\)\.catch\([^\n]*The viewer did not answer/);

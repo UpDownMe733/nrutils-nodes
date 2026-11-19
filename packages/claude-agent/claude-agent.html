@@ -1206,7 +1206,10 @@
     function refresh() {
         for (const view of views) {
             if (view.root.isConnected) view.render();
-            else views.delete(view);
+            else {
+                view.end();
+                views.delete(view);
+            }
         }
         badges();
     }
@@ -1383,7 +1386,7 @@
         const pane = h('div', 'caf-pane');
         const filter = { q: '', owner: '', type: '', time: '', sort: 'time' };
         const cur = { id: null, n: null, compare: null, record: null, auto: false, link: false, scroll: false };
-        const view = { root, render, open, current: () => (cur.id ? { id: cur.id, n: cur.n } : null) };
+        const view = { root, render, open, end: () => setFull(false), current: () => (cur.id ? { id: cur.id, n: cur.n } : null) };
         let owners = null;
         let types = null;
         let time = null;
@@ -1536,7 +1539,9 @@
             if (opts.onChange) opts.onChange();
         }
 
-        // The pane of the open file fills the editor window. It stays in its place, so the frame does not reload.
+        // The pane of the open file fills the editor window. In the sidebar and on the page it stays in its place, so the frame does not reload.
+        // A popup is an SVG foreignObject: it clips a fixed layer and it lies under the editor header. There the pane goes to the body, and the frame loads again.
+        const home = document.createComment('caf-pane');
         function onEscape(e) {
             if (e.key !== 'Escape') return;
             e.stopPropagation();
@@ -1546,6 +1551,12 @@
         function setFull(on) {
             if (pane.classList.contains('caf-full') === on) return;
             pane.classList.toggle('caf-full', on);
+            if (on && pane.closest('foreignObject')) {
+                pane.replaceWith(home);
+                document.body.appendChild(pane);
+            } else if (!on && home.parentNode) {
+                home.replaceWith(pane);
+            }
             const auto = cur.auto;
             if (!on) cur.auto = false;
             document[on ? 'addEventListener' : 'removeEventListener']('keydown', onEscape, true);
