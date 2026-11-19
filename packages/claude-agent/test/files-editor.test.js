@@ -165,13 +165,14 @@ describe('Files script block', () => {
         });
 
         it('moves the pane of a popup to the body in full screen and back, and ends it when the view is gone', () => {
-            assert.match(block, /if \(on && pane\.closest\('foreignObject'\)\) \{\s+pane\.replaceWith\(home\);\s+document\.body\.appendChild\(pane\);\s+\} else if \(!on && home\.parentNode\) \{\s+home\.replaceWith\(pane\);/);
+            assert.match(block, /if \(on && pane\.closest\('foreignObject'\)\) \{\s+pane\.replaceWith\(home\);\s+document\.body\.appendChild\(pane\);/);
+            assert.match(block, /if \(home\.parentNode\) home\.replaceWith\(pane\);\s+else pane\.remove\(\);/);
             assert.match(block, /else \{\s+view\.end\(\);\s+views\.delete\(view\);/);
         });
 
-        it('ends full screen before it shows the agent, and shows a text for a viewer that did not connect', () => {
+        it('ends full screen before it shows the agent and when the popup is removed', () => {
             assert.match(block, /show\.addEventListener\('click', \(\) => \{ endFull\(\); showAgent\(nodeId\); \}\)/);
-            assert.match(block, /fetch\(t\.url, \{ mode: 'no-cors' \}\)\.catch\([^\n]*The viewer did not answer/);
+            assert.match(block, /gone = new MutationObserver\(\(\) => \{ if \(!home\.isConnected\) setFull\(false\)/);
         });
     });
 

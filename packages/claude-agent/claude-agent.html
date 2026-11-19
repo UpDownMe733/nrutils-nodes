@@ -1548,14 +1548,22 @@
             setFull(false);
         }
 
+        let gone = null;
+
         function setFull(on) {
             if (pane.classList.contains('caf-full') === on) return;
             pane.classList.toggle('caf-full', on);
             if (on && pane.closest('foreignObject')) {
                 pane.replaceWith(home);
                 document.body.appendChild(pane);
-            } else if (!on && home.parentNode) {
-                home.replaceWith(pane);
+                // The canvas removes the popup when it closes. The pane on the body must go with it.
+                gone = new MutationObserver(() => { if (!home.isConnected) setFull(false); });
+                gone.observe(document.body, { childList: true, subtree: true });
+            } else if (!on && gone) {
+                gone.disconnect();
+                gone = null;
+                if (home.parentNode) home.replaceWith(pane);
+                else pane.remove();
             }
             const auto = cur.auto;
             if (!on) cur.auto = false;
@@ -1618,8 +1626,6 @@
             f.title = title;
             f.src = t.url + '?embed=1&theme=' + themeName();
             f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-downloads');
-            // A browser shows a face with no text in a frame that did not connect. The user gets a text.
-            fetch(t.url, { mode: 'no-cors' }).catch(() => f.isConnected && f.replaceWith(h('div', 'caf-note', 'The viewer did not answer. The view server is not reachable.')));
             return f;
         }
 
