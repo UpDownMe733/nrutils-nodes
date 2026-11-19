@@ -530,6 +530,10 @@ describe('the renderers', () => {
         assert.equal(viewer.versionText({ n: 3, newest: true, time: Date.UTC(2026, 10, 18, 12) }), 'Version 3 · 18 Nov 2026');
     });
 
+    it('ends the version line of an older version with " · A newer version exists"', () => {
+        assert.equal(viewer.versionText({ n: 1, newest: false, time: Date.UTC(2026, 10, 18, 12) }), 'Version 1 · 18 Nov 2026 · A newer version exists');
+    });
+
     it('resolves a relative link inside the artifact only', () => {
         assert.equal(viewer.resolve('docs/a.md', 'b.png'), 'docs/b.png');
         assert.equal(viewer.resolve('docs/a.md', '../img/c.png'), 'img/c.png');

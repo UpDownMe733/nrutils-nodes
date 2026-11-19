@@ -34,9 +34,10 @@
         return (n / 1024 / 1024).toFixed(1) + ' MB';
     }
 
-    // The version line of the top bar, for example "Version 3 · 18 Nov 2026"
+    // The version line of the top bar, for example "Version 3 · 18 Nov 2026".
+    // An older version also tells that a newer version exists.
     function versionText(m) {
-        return 'Version ' + m.n + ' · ' + date(m.time);
+        return 'Version ' + m.n + ' · ' + date(m.time) + (m.newest === false ? ' · A newer version exists' : '');
     }
 
     function date(ms) {
