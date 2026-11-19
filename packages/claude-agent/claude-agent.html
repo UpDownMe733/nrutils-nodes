@@ -1805,10 +1805,17 @@
         page.layer = layer;
     }
 
+    // The editor under the page gets no focus, also with Tab from the viewer frame. A dialog or the clipboard field is outside the editor.
+    function editorInert(on) {
+        const editor = document.getElementById('red-ui-editor');
+        if (editor) editor.inert = on;
+    }
+
     // target: { id, n } of a file to open, or {} for the list
     function openPage(target) {
         if (!page.layer) buildPage();
         page.layer.style.display = '';
+        editorInert(true);
         if (target && target.id) page.view.open(target.id, target.n);
         else if (!pageOpen() || !page.view.current()) page.view.render();
         setHash();
@@ -1818,6 +1825,7 @@
     function closePage() {
         if (!pageOpen()) return;
         page.layer.style.display = 'none';
+        editorInert(false);
         tabHash();
         if (RED.view && RED.view.focus) RED.view.focus();
     }
@@ -1858,7 +1866,6 @@
             start = null;
             setTimeout(() => { if (target) openPage(target); else setHash(); }, 0);
         });
-        document.addEventListener('focusin', (e) => { if (pageOpen() && !page.layer.contains(e.target)) page.layer.focus(); });
         RED.events.on('workspace:change', () => setTimeout(() => { setHash(); if (pageOpen() && !page.layer.contains(document.activeElement)) page.layer.focus(); }, 0));
         window.addEventListener('hashchange', () => {
             const target = parseHash(location.hash);
