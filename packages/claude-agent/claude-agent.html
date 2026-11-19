@@ -1626,6 +1626,21 @@
             f.title = title;
             f.src = t.url + '?embed=1&theme=' + themeName();
             f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-downloads');
+            // A browser shows a face with no text in a frame that did not connect. The viewer posts "loaded" when it runs.
+            const origin = new URL(t.url, location.href).origin;
+            let note = null;
+            const onMessage = (e) => {
+                if (e.source !== f.contentWindow || e.origin !== origin || !e.data || e.data.type !== 'loaded') return;
+                window.removeEventListener('message', onMessage);
+                clearTimeout(timer);
+                if (note) note.remove();
+            };
+            const timer = setTimeout(() => {
+                if (!f.isConnected) return window.removeEventListener('message', onMessage);
+                note = h('div', 'caf-note', 'The viewer did not answer. The view server is not reachable.');
+                f.after(note);
+            }, 8000);
+            window.addEventListener('message', onMessage);
             return f;
         }
 

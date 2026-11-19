@@ -170,8 +170,10 @@ describe('Files script block', () => {
             assert.match(block, /else \{\s+view\.end\(\);\s+views\.delete\(view\);/);
         });
 
-        it('ends full screen before it shows the agent and when the popup is removed', () => {
+        it('ends full screen before it shows the agent and when the popup is removed, and shows a text when the viewer sends no loaded message', () => {
             assert.match(block, /show\.addEventListener\('click', \(\) => \{ endFull\(\); showAgent\(nodeId\); \}\)/);
+            assert.match(block, /e\.source !== f\.contentWindow \|\| e\.origin !== origin[^\n]*'loaded'/);
+            assert.match(block, /f\.after\(note\)/);
             assert.match(block, /gone = new MutationObserver\(\(\) => \{ if \(!home\.isConnected\) setFull\(false\)/);
         });
     });
