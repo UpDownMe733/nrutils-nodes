@@ -172,6 +172,11 @@ function assetList() {
 // The dead link page: one page and status 404 for a forged, an expired or a deleted link, so that it does not tell
 // which case it is. The colours are those of viewer.css. The theme comes from the URL, else from the browser.
 const DEAD_TEXT = 'This link does not work. It may have expired. Ask the sender for a new link.';
+// The dead link page tells the editor that the view server answered, as the viewer page does. Only data, no command.
+// The CSP allows this one static script by its hash, so the page needs no nonce and no 'unsafe-inline'.
+const DEAD_SCRIPT = "if (parent !== window) parent.postMessage({ type: 'loaded' }, '*')";
+const DEAD_CSP = "default-src 'none'; script-src 'sha256-" + crypto.createHash('sha256').update(DEAD_SCRIPT).digest('base64') +
+    "'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
 function deadPage(theme) {
     const light = '--bg:#ffffff;--text:#202020;--text2:#646464;color-scheme:light';
     const dark = '--bg:#1b1b23;--text:#f0f0f0;--text2:#aaaaaa;color-scheme:dark';
@@ -181,7 +186,7 @@ function deadPage(theme) {
         'font:14px/1.5 "Helvetica Neue",Arial,Helvetica,sans-serif}' +
         'h1{font-size:18px;margin:0 0 8px}p{margin:0;color:var(--text2)}';
     return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
-        '<title>Link not valid</title><style>' + css + '</style></head><body><h1>Link not valid</h1><p>' + DEAD_TEXT + '</p></body></html>';
+        '<title>Link not valid</title><style>' + css + '</style><script>' + DEAD_SCRIPT + '</script></head><body><h1>Link not valid</h1><p>' + DEAD_TEXT + '</p></body></html>';
 }
 
 // The script at the end of an HTML file in the frame of the viewer page. It tells the page the path of each page
@@ -240,7 +245,7 @@ function handler(opts) {
     function notFound(res, html) {
         if (html) {
             const theme = html.get('theme');
-            res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'");
+            res.setHeader('Content-Security-Policy', DEAD_CSP);
             send(res, 404, 'text/html; charset=utf-8', deadPage(/^(light|dark)$/.test(theme || '') ? theme : ''));
         }
         else send(res, 404, 'text/plain; charset=utf-8', 'Not found');

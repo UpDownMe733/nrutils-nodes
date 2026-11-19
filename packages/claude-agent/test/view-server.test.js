@@ -251,7 +251,16 @@ describe('the view server', () => {
         }
         assert.match(dead.body.toString(), /<title>Link not valid<\/title>.*<h1>Link not valid<\/h1><p>This link does not work\. It may have expired\. Ask the sender for a new link\.<\/p>/);
         assert.match(dead.body.toString(), /prefers-color-scheme: dark/);
-        assert.match(dead.headers['content-security-policy'], /^default-src 'none'; style-src 'unsafe-inline'/);
+        const csp = dead.headers['content-security-policy'];
+        assert.match(csp, /^default-src 'none'; script-src 'sha256-[A-Za-z0-9+/]+=*'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'$/);
+        // The one script of the page tells the editor that the server answered. The CSP allows it by its hash only.
+        const scripts = [...dead.body.toString().matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+        assert.equal(scripts.length, 1);
+        assert.equal(csp.match(/'sha256-([^']+)'/)[1], crypto.createHash('sha256').update(scripts[0]).digest('base64'));
+        const sent = [];
+        const parent = { postMessage: (data, origin) => sent.push([data, origin]) };
+        vm.runInNewContext(scripts[0], { parent, window: {} });
+        assert.deepEqual(JSON.parse(JSON.stringify(sent)), [[{ type: 'loaded' }, '*']]);
         const dark = (await get(port, '/v/nonsense/?theme=dark')).body.toString();
         assert.match(dark, /--bg:#1b1b23/);
         assert.doesNotMatch(dark, /prefers-color-scheme|#ffffff/);
