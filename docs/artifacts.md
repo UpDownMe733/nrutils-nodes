@@ -1,6 +1,6 @@
 # Artifacts of the claude-agent node (design)
 
-Status: design. Nothing in this document is built yet.
+Status: parts 1 to 5, 7 and 8 of section 11 are built. Part 11 (the Files page) is in review. Parts 6, 9 and 10 are not built.
 
 An artifact is an output that an agent makes and gives to people: a document, code, an image, a PDF, a table, a diagram, an HTML page or application, or a file of any type.
 The operator reviews artifacts, shares them with people outside, and keeps them for a long time.
@@ -252,6 +252,28 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 - The page is never blank. When a type cannot show: "This file cannot show here." and Download.
 - A dead link shows one line: "This link does not work."
 - Theme: the editor theme from the URL. A share page follows `prefers-color-scheme`. The viewer page has its own copy of the colour values of the editor CSS variables, because it cannot read the editor.
+- A view link (`/v/`, with no `embed`) has a second line in the top bar: the agent address, for example "By nrutils-nodes/lead", and the link "All files". The link opens the Files page of the editor on this file and version (see "The Files page"). A share page has neither.
+  - `meta` of the view server gives `owner` (the address) and `editor` (the URL of the Files page). The share server gives neither.
+  - `editor` is `<origin><httpAdminRoot>#files/<id>/<n>`. The origin is the editor origin that the view server knows (the same list as for `frame-ancestors`, section 6) whose host is the host of the request, else the newest known origin. With no known origin, `meta` has no `editor` and the page shows no link.
+  - The link opens in the same browser tab. The editor asks for the login when the browser has none.
+
+### The Files page
+
+The operator keeps the sidebars off, or holds only a view link. Then no place shows which agent has a file. The Files page is the sidebar Files view (`build({ all: true })`, section "The list") at the full size of the editor window. It is one more view of the same code, not a new list.
+
+- **Open:**
+  - the URL `<editor>/#files`, for a bookmark or a browser tab of its own (a second screen);
+  - the URL `<editor>/#files/<id>/<n>`, which also opens that version (the "All files" link of a view link);
+  - the key Ctrl+G Shift+F and the item "Files" in the main menu of the editor (action `claude-agent:show-files-page`).
+  - Node-RED reads only `#flow/`, `#node/` and `#group/`, and then sets `#flow/<tab>`. Thus the node reads the hash when its script loads, before the flows load. While the page is open, the hash is `#files` or `#files/<id>/<n>`, so a reload keeps the page. A `hashchange` to `#files…` opens it in an open editor.
+- **Layout:** a layer over the whole editor window, the same as `caf-full`. The list at the left, the viewer at the right; less than 500 px wide, the list only. The page never scrolls sideways at 200 % zoom. The canvas does not reload.
+- **Focus:** the search field gets the focus when the page opens. The page is opened on purpose, so this does not break the rule "the search field never gets the focus on its own". Arrows move in the list. Enter opens the file.
+- **Search:** title, name, agent address (it has the tab name) and type name, as in the sidebar. A pasted view link or ticket finds its file: the editor reads the id and the version from the first part of the ticket (section 6), with no request. That version opens.
+- **Rows:** the same rows as the sidebar: the agent address is always on line 2. The text for the screen reader starts with the title, then the type in words, the agent, the version, the time, then "newest" or "older version", then "new" when the row is new.
+- **Show agent:** a button in the viewer header of the Files page and of the sidebar: it closes the page, shows the tab of the node, selects the node and opens its popup. When the node no longer exists, the button shows "Agent removed" and does nothing.
+- **Close:** Escape and the button "Close" (top right) show the canvas and set the hash of the active tab. The keys of the editor do not act while the page is open, except Escape.
+- The badges, the "new" marks and the actions (versions, compare, download, copy link, delete) are those of the sidebar. The page adds no filter: the users asked for one search box and "newest first", which the sidebar already has.
+- No new route and no new data: the page uses the admin API of section 4 with the login of the editor.
 
 ## 9. Settings
 
@@ -298,6 +320,12 @@ Three users gave their needs: an operator who watches many agents, a new user, a
 | All actions work with one finger, 44 px targets, a visible text label, no hover, no right click. | small screen | section 8 |
 | Plain words: not "artifact", "publish", "slug", "revision" or a hash. Use words such as "file", "new version", "shared link". "Shared" shows in words. | new | section 8 |
 | A comment on a thing goes back to the agent as a task. | watcher (nice to have) | later part 10 |
+| With the sidebars off, or with only a view link, find any file and its agent. One search box and "newest first" are enough. | no sidebars, watcher, power, keyboard | the Files page, section 8 |
+| The place is in the editor and also in a browser tab of its own: a bookmark, a second screen, 200 % zoom with no sideways scroll. | all four | the URL `#files` |
+| A view link shows the agent and leads to all files and to the other versions of the file. | no sidebars, watcher, keyboard | the top bar of a view link, section 8 |
+| A pasted link finds its file. | power, keyboard | the search of the Files page |
+| Go from a file to its agent in one click. | no sidebars, watcher, power, keyboard | "Show agent" |
+| An outside person never sees an agent name or other files. The place to find files is for the operator only. | outside | the share page has no `owner` and no "All files" |
 
 ## 11. The build order
 
@@ -313,6 +341,7 @@ Three users gave their needs: an operator who watches many agents, a new user, a
 | 8 | CSV, TSV and JSON renderers | S | — |
 | 9 | Later: syntax colours, Mermaid | S + M | new dependencies |
 | 10 | Later: a comment on a version goes to the inbox of its agent as a message | S | the MQTT inbox of the node |
+| 11 | The Files page: (a) `meta` with `owner` and `editor`, and the agent line and "All files" in the top bar of a view link (artifact-viewer-dev, S); (b) the page, the hash, the key, the menu item, the link search and "Show agent" in the editor (claude-agent-dev, M) | S + M | (a) and (b) can be built at the same time |
 
 Sizes: S is less than 150 lines with tests, M 150 to 400, L more than 400.
 
