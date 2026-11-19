@@ -119,7 +119,8 @@ describe('Files script block', () => {
             assert.match(block, /Agent removed/);
             assert.match(block, /getElementById\('red-ui-editor'\)[\s\S]*?editor\.inert = on/);
             assert.doesNotMatch(block, /addEventListener\('focusin'/);
-            assert.match(block, /The link did not copy\.', 'error'\);\s*copy\.focus\(\);/);
+            assert.match(block, /if \(link && RED\.clipboard\.copyText[\s\S]*?The link did not copy\.', 'error'\);\s*copy\.focus\(\);/);
+            assert.match(block, /e\.target !== document\.body[\s\S]*?e\.stopPropagation\(\);[\s\S]*?closePage\(\);[\s\S]*?page\.layer\.focus\(\);[\s\S]*?\}, true\);/);
             assert.match(html, /View &gt; Files<\/b>[\s\S]*?Ctrl\+G Shift\+F[\s\S]*?#files[\s\S]*?Show agent<\/b>[\s\S]*?<b>Close<\/b>[\s\S]*?Escape ends full screen first/);
             assert.doesNotMatch(block, /innerHTML/);
         });
