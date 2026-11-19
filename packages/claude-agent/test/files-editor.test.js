@@ -220,6 +220,6 @@ describe('Files script block', () => {
     });
 
     it('Show agent opens the popup after the popup library has added it to the new tab', () => {
-        assert.match(html, /RED\.view\.reveal\(node\.id\);[^]*?getElementById\('nru_popup\.' \+ node\.id \+ '\.group'\)\) window\.caOpenPopup\(node\);[^]*?requestAnimationFrame\(wait\)/);
+        assert.match(html, /RED\.view\.reveal\(node\.id\);[^]*?getElementById\('nru_popup\.' \+ node\.id \+ '\.group'\);[^]*?if \(group\) \{\n\s+window\.caOpenPopup\(node\);[^]*?requestAnimationFrame\(wait\)/);
     });
 });
