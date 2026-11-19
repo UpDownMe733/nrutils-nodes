@@ -901,7 +901,7 @@
         side.body = make('div', '', 'ca-side-body');
         side.body.appendChild(make('div', EMPTY_TEXT, 'ca-side-empty'));
         keepEvents(side.body);
-        RED.actions.add('claude-agent:show-agent-tab', () => RED.sidebar.show('claude-agent'), { label: 'Show the Claude agent tab' });
+        RED.actions.add('claude-agent:show-agent-tab', () => { RED.sidebar.show('claude-agent'); setTimeout(() => side.body.querySelector('input, select, button, [tabindex="0"]')?.focus()); }, { label: 'Show the Claude agent tab' });
         RED.keyboard.add('*', 'ctrl-g a', 'claude-agent:show-agent-tab');
         RED.sidebar.addTab({ id: 'claude-agent', name: 'Claude agent', iconClass: 'fa fa-comments-o', content: $(side.body), enableOnEdit: true, action: 'claude-agent:show-agent-tab' });
         RED.events.on('view:selection-changed', (selection) => {
@@ -1085,6 +1085,10 @@
 .caf-full{position:fixed;inset:0;z-index:1500;box-sizing:border-box;padding:8px;background:var(--red-ui-primary-background)}
 .caf-full .caf-fullbtn{display:none}
 .caf-full .caf-closefull{display:inline-block}
+.caf .caf-icon:focus-visible{outline:2px solid var(--red-ui-form-input-focus-color);outline-offset:1px}
+.caf .caf-filters select{flex:1 1 auto;min-width:fit-content}
+.caf-tabnew{position:relative}
+.caf-tabnew::after{content:'';position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:3px;background:var(--red-ui-text-color-link);pointer-events:none}
 .caf-head .caf-icon{padding:0;height:28px;min-height:28px;min-width:28px}
 .caf .caf-icon .caf-label{display:none !important}
 .caf-full .caf-icon .caf-label{display:inline !important}
@@ -1093,6 +1097,7 @@
 .caf-bar{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-bottom:6px}
 .caf-bar select{flex:1 1 90px;min-width:0;width:auto;box-sizing:border-box;height:32px;margin:0}
 .caf-bar .red-ui-button{flex:none;white-space:nowrap;box-sizing:border-box;height:32px;min-height:32px;min-width:32px;margin:0}
+@media (hover:none){.caf .caf-icon .caf-label{display:inline !important}.caf-head .caf-icon{padding:0 8px}}
 @media (pointer:coarse){.caf-head .red-ui-button,.caf-bar .red-ui-button{height:44px;min-height:44px;min-width:44px}.caf .caf-filters input,.caf .caf-filters select{height:44px}.caf-head .caf-icon,.caf-full .caf-head .caf-icon{height:44px;min-height:44px;min-width:44px}}
 .caf-body{flex:1;min-height:0;display:flex;gap:6px;flex-direction:row}
 .caf-body iframe{flex:1;min-width:0;min-height:240px;width:100%;border:1px solid var(--red-ui-secondary-border-color);border-radius:4px;background:#fff}
@@ -1263,6 +1268,8 @@
         for (const old of document.querySelectorAll('.caf-nodebadge')) old.remove();
         const count = {};
         for (const i of state.items.values()) if (isNew(i)) count[i.nodeId] = (count[i.nodeId] || 0) + 1;
+        const total = Object.values(count).reduce((a, b) => a + b, 0);
+        if (tabOptions && tabOptions.tabButton) tabOptions.tabButton.toggleClass('caf-tabnew', total > 0).attr('aria-label', total ? 'Files, ' + total + ' new' : 'Files');
         for (const [id, n] of Object.entries(count)) {
             const node = window.RED && RED.nodes.node(id);
             const g = node && document.getElementById(id);
@@ -1331,7 +1338,7 @@
         const list = h('div', 'caf-list');
         const pane = h('div', 'caf-pane');
         const filter = { q: '', owner: '', type: '', time: '', sort: 'time' };
-        const cur = { id: null, n: null, compare: null, record: null };
+        const cur = { id: null, n: null, compare: null, record: null, auto: false };
         const view = { root, render, open };
         let owners = null;
         let types = null;
@@ -1469,9 +1476,12 @@
         function setFull(on) {
             if (pane.classList.contains('caf-full') === on) return;
             pane.classList.toggle('caf-full', on);
+            const auto = cur.auto;
+            if (!on) cur.auto = false;
             document[on ? 'addEventListener' : 'removeEventListener']('keydown', onEscape, true);
             const target = pane.querySelector(on ? '.caf-closefull' : '.caf-fullbtn');
             if (target) target.focus();
+            if (!on && auto) close();
         }
 
         async function open(id, n) {
@@ -1558,6 +1568,10 @@
 
             const body = h('div', 'caf-body');
             pane.appendChild(body);
+            if (focus === 'start' && pane.offsetParent && !pane.classList.contains('caf-full') && body.getBoundingClientRect().height < 120) {
+                cur.auto = true;
+                setFull(true);
+            }
             const t = await frames(v.n);
             if (id !== cur.id || v.n !== cur.n) return;
             if (!t) body.appendChild(h('div', 'caf-note', 'This file cannot show here.'));
@@ -1660,6 +1674,8 @@
         return line;
     }
 
+    let filesBody = null;
+    let tabOptions = null;
     window.caFiles = { build, chatLine, seenNode, addStyle };
 
     if (window.RED && RED.comms) {
@@ -1667,14 +1683,17 @@
         load();
         for (const type of ['flows:loaded', 'nodes:add', 'nodes:change']) RED.events.on(type, () => setTimeout(badges, 0));
         for (const type of ['flows:loaded', 'nodes:remove']) RED.events.on(type, () => setTimeout(prune, 0));
-        RED.actions.add('claude-agent:show-files-tab', () => RED.sidebar.show('claude-agent-files'), { label: 'Show the Files tab' });
+        RED.actions.add('claude-agent:show-files-tab', () => { RED.sidebar.show('claude-agent-files'); setTimeout(() => filesBody?.querySelector('input, select, button, [tabindex="0"]')?.focus()); }, { label: 'Show the Files tab' });
         RED.keyboard.add('*', 'ctrl-g f', 'claude-agent:show-files-tab');
         if (RED.sidebar && RED.sidebar.addTab) {
             addStyle();
             const body = h('div');
+            filesBody = body;
             body.style.cssText = 'position:absolute;inset:0;padding:6px;box-sizing:border-box;display:flex';
             body.appendChild(build({ all: true }).root);
-            RED.sidebar.addTab({ id: 'claude-agent-files', name: 'Files', iconClass: 'fa fa-folder-open-o', content: $(body), enableOnEdit: true, action: 'claude-agent:show-files-tab' });
+            tabOptions = { id: 'claude-agent-files', name: 'Files', iconClass: 'fa fa-folder-open-o', content: $(body), enableOnEdit: true, action: 'claude-agent:show-files-tab' };
+            RED.sidebar.addTab(tabOptions);
+            badges();
         }
     }
 })();
@@ -1888,7 +1907,7 @@
     <p>Each run has the tool <code>publish({ path, name, title, entry, note })</code>. The agent gives a file or a folder to the people with it. <code>path</code> must be in the work root. The same <code>name</code> from the same node makes a new version. A publish of equal content makes no new version.</p>
     <p>The node reads the files with the rights of the agent: <code>tar</code> reads them. With a launcher, <code>claudeAgent.agentExec</code> in <code>settings.js</code> runs <code>tar</code>. A symbolic link, a name outside the folder, and more than <code>claudeAgent.artifacts.maxBytes</code> (100 MB) or <code>maxFiles</code> (2000) stop the publish with an error. Each publish gives an event of the kind <code>artifact</code>. A delete moves a file or a version to the bin. The node removes its files after 30 days. See the README.</p>
 
-    <p>Each publish makes a file. The <b>Files</b> tab of the popup lists the files of the node. The <b>Files</b> tab of the sidebar lists the files of all agents, with a search box, the filters Agent and Type, and a sort. A file with an image of 1 MB or less shows a thumbnail. A click on a file opens the viewer. <b>Full screen</b>, <b>Download</b>, <b>Copy link</b>, <b>Compare</b> and <b>Delete</b> act on the shown version. <b>Close full screen</b> ends full screen, and Escape does too when the focus is not in the file. Ctrl+G F shows the Files tab. Ctrl+G A shows the Claude agent tab. After <b>Delete</b>, <b>Undo</b> shows for 10 seconds. A new file gives a line in the chat and a badge on the node. See the README.</p>
+    <p>Each publish makes a file. The <b>Files</b> tab of the popup lists the files of the node. The <b>Files</b> tab of the sidebar lists the files of all agents, with a search box, the filters Agent and Type, and a sort. A file with an image of 1 MB or less shows a thumbnail. A click on a file opens the viewer. <b>Full screen</b>, <b>Download</b>, <b>Copy link</b>, <b>Compare</b> and <b>Delete</b> act on the shown version. <b>Close full screen</b> ends full screen, and Escape does too when the focus is not in the file. Ctrl+G F shows the Files tab. Ctrl+G A shows the Claude agent tab. After <b>Delete</b>, <b>Undo</b> shows for 10 seconds. A new file gives a line in the chat, a badge on the node and a dot on the Files tab button. On a touch screen the buttons show their names. A file opens in full screen when the sidebar is too small for a preview. Ctrl+G F and Ctrl+G A move the focus into the tab. See the README.</p>
 
     <h3>MQTT inbox</h3>
     <p>The popup shows the text of the agent as markdown: headings, lists, tables, code, links and emphasis. A link opens in a new tab. An image or other remote file does not show. The text of the operator and of a question stays plain text. The Agents tab shows an inbox message as a closed card on the left (the sender, the time and the first 3 lines) and a message that the agent sent with <code>send</code> as a card on the right (the receiver, the time and the first 3 lines). A click on a longer card opens the full text in the card, and a second click closes it. The badge of the tab counts the received messages that came while it was not shown. The Chat tab shows none of them. The Timeline tab shows the full text too. A keep-alive turn has no bubble: the life cycle line shows it.</p>

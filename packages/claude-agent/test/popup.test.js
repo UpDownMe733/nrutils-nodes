@@ -138,7 +138,7 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const resize = () => observed.forEach((o) => o.fn([{ target: o.target }]));
     const DOMPurify = { sanitize: (html, config) => { sanitized.push(config); return html.replace(/<script.*?<\/script>/g, ''); } };
     const window = { popupStates };
-    vm.runInNewContext(script, { document, RED, DOMPurify, window, $: (e) => e, Date: FakeDate, setInterval, clearInterval, ResizeObserver, MouseEvent: class { constructor(type, init) { this.type = type; Object.assign(this, init); } }, ...extra });
+    vm.runInNewContext(script, { document, RED, DOMPurify, window, $: (e) => e, Date: FakeDate, setInterval, clearInterval, setTimeout: () => 0, ResizeObserver, MouseEvent: class { constructor(type, init) { this.type = type; Object.assign(this, init); } }, ...extra });
     const getDef = () => def;
     const answers = { 'get-log': state, 'new-chat': {} };
     const makeNode = (id, more = {}) => ({
