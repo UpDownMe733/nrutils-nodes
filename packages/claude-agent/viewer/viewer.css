@@ -41,9 +41,10 @@ a { color: var(--link); }
     display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-height: 48px;
     padding: 2px 8px 2px 12px; border-bottom: 1px solid var(--border); background: var(--bg2); flex: none;
 }
-.bar-title { flex: 1 1 200px; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
-#title { font-weight: bold; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#version { white-space: nowrap; font-size: 13px; }
+.bar-title { flex: 1 1 200px; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
+/* On a narrow screen the version goes below the title, so that the title stays visible */
+#title { max-width: 100%; font-weight: bold; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#version { font-size: 13px; }
 .bar-actions { display: flex; gap: 8px; }
 /* The agent line of a view link: 24 px, "By <address> · All files". The top bar is then 72 px. */
 .bar.has-agent { min-height: 72px; row-gap: 0; }
