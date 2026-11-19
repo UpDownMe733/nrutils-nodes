@@ -239,7 +239,7 @@ Each publish of an agent makes a file in the **Files** tab of the popup and in t
 - **Delete** asks once. Then the line `Deleted. Undo` shows for 10 seconds. **Undo** restores the file.
 - A new file gives a line in the chat. A click on the line opens the file. A new file has a dot in the list. A node with new files shows a badge with the count, until you open its Files tab. The Files tab button has a dot while any file is new. The editor keeps this in the browser.
 - The viewer follows the theme of the editor.
-- The viewer page of an older version says `A newer version exists` in its top bar. This is also true for a view link and a share page.
+- The viewer page of an older version says `A newer version exists` in its top bar. This is also true for a view link.
 
 ### Files page
 

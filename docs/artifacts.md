@@ -220,7 +220,7 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 
 - Width 500 px or more: the list at the left (40 %), the viewer at the right.
 - Less than 500 px: the list only. A tap shows the viewer at full width, with "‹ Files" at the top left.
-- The viewer header: title, "Version 3 (newest) ▾", then the buttons Full screen, Download, Copy link, New tab, Share, Compare and Delete. "New tab" has the accessible name "Open in new tab". At 1280 px the header is one line. There is no More menu. Delete is at the end, after a gap. The agent address is below the title.
+- The viewer header: title, "Version 3 (newest) ▾", then the buttons Full screen, Download, Copy link, New tab, Share (part 6, not built yet), Compare and Delete. "New tab" has the accessible name "Open in new tab". At 1280 px the header is one line. There is no More menu. Delete is at the end, after a gap. The agent address is below the title.
   Each button has a visible label. Its height is 44 px on a coarse pointer (touch) and 32 px on a fine pointer (mouse). The buttons of the compare bar have the same heights. No action is on hover only. On a narrow screen the buttons wrap to a second row.
 
 ### The actions
