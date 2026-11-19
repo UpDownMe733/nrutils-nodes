@@ -1492,10 +1492,12 @@
             line1.appendChild(h('span', '', item.title));
             if (item.shares) line1.appendChild(h('span', 'caf-chip', 'Shared'));
             r.appendChild(line1);
-            r.appendChild(h('div', 'caf-line2', (item.id === cur.id && cur.n !== item.version ? 'Version ' + cur.n + ' of ' + item.version : 'Version ' + item.version) + ' · ' + stampText(item.time) + ' · ' + sizeText(item.size) + (opts.all ? ' · ' + item.owner : '')));
+            const older = item.id === cur.id && cur.n !== item.version;
+            const versionText = older ? 'Version ' + cur.n + ' of ' + item.version : 'Version ' + item.version;
+            r.appendChild(h('div', 'caf-line2', versionText + ' · ' + stampText(item.time) + ' · ' + sizeText(item.size) + (opts.all ? ' · ' + item.owner : '')));
             const go = () => open(item.id);
             r.addEventListener('click', go);
-            r.setAttribute('aria-label', [item.title, TYPE_NAME[item.type.split('/')[0]], item.owner, 'Version ' + item.version, stampText(item.time), 'newest', isNew(item) && 'new'].filter(Boolean).join(', '));
+            r.setAttribute('aria-label', [item.title, TYPE_NAME[item.type.split('/')[0]], item.owner, versionText, stampText(item.time), !older && 'newest', isNew(item) && 'new'].filter(Boolean).join(', '));
             r.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
                 const next = e.key === 'ArrowDown' ? r.nextElementSibling : e.key === 'ArrowUp' ? r.previousElementSibling : null;

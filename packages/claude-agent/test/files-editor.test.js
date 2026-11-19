@@ -215,6 +215,7 @@ describe('Files script block', () => {
         assert.match(html, /textContent = ' New tab'/);
         assert.match(html, /btn\('fa-external-link', 'Open in new tab'/);
         assert.match(html, /'Version ' \+ cur\.n \+ ' of ' \+ item\.version/);
+        assert.match(html, /versionText, stampText\(item\.time\), !older && 'newest'/);
         assert.match(html, /store\.setAttribute\('aria-live', 'polite'\)/);
         assert.match(html, /window\.caOpenPopup\(node\);[^]*?group\.querySelector\('textarea'\)[^]*?text\.focus\(\)/);
     });
