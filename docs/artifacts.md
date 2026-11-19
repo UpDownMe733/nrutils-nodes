@@ -207,20 +207,20 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 
 - A row is 44 px high minimum.
   - Line 1: type icon, title (one line, with an ellipsis).
-  - Line 2, in the secondary colour: "Version 3 · 2 min ago". The sidebar list adds the agent name.
+  - Line 2, in the secondary colour: "Version 3 · 14:07 · 120 KB", with the agent address in the sidebar. The time is the clock time for today and "18 Nov 14:07" for an earlier day.
 - An image of 1 MB or less shows a 48 px thumbnail in its row. The thumbnail loads from the `/thumb` route of the view server (section 6) only when the row shows on the screen.
-- An unseen item has an accent dot at the left. A shared item has the chip "Shared". A deleted item shows "Deleted. Undo" for 10 s, then it goes.
-- Filters, in the sidebar only: a search field (title), then Agent, Type, Time (Today, 7 days, 30 days, All). The search field never gets the focus on its own.
-- The sidebar Files view only (never the popup) has one line below the list: "Files use 1.2 GB". One decimal, the unit B, KB, MB or GB, no label, no limit, no bar.
+- A new item has an accent dot at the left. An item is new when its server time is later than the newest time that the user saw for its node, and the user did not open it. The editor keeps both in `localStorage` (per browser). Opening the Files list of a node sets the time. The badge on the node counts the same items. A shared item has the chip "Shared". A deleted item shows "Deleted. Undo" for 10 s, then it goes.
+- Filters, in the sidebar only: a search field (title, name, agent address, type name), then Agent, Type, Time (Today, 7 days, 30 days, All) and Sort (Newest, Largest, Name). The popup list has the search field only when the node has more than 8 files. The search field never gets the focus on its own.
+- The sidebar Files view only (never the popup) has one line below the list: "11 files · 894.2 KB", or "3 of 11 files · 894.2 KB" when a filter is on. One decimal, the unit B, KB, MB or GB, no label, no limit, no bar.
   - Look: the secondary text colour and the small font of the editor, aligned left, 8 px padding. The line stays at the bottom and does not scroll with the list.
-  - It shows the size of the whole store, also when a filter is on. Files in the bin count until the purge.
+  - The size is the size of the whole store, also when a filter is on. Files in the bin count until the purge.
   - It updates on the comms topic `claude-agent/artifacts`, with no poll.
 
 ### The layout
 
 - Width 500 px or more: the list at the left (40 %), the viewer at the right.
 - Less than 500 px: the list only. A tap shows the viewer at full width, with "‹ Files" at the top left.
-- The viewer header: title, "Version 3 (newest) ▾", then the buttons Full screen, Download, Share and More. More holds Compare and Delete.
+- The viewer header: title, "Version 3 (newest) ▾", then the buttons Full screen, Download, Copy link, Share, Compare and Delete. There is no More menu. Delete is at the end, after a gap. The agent address is below the title.
   Each button has a visible label. Its height is 44 px on a coarse pointer (touch) and 32 px on a fine pointer (mouse). The buttons of the compare bar have the same heights. No action is on hover only. On a narrow screen the buttons wrap to a second row.
 
 ### The actions
@@ -228,7 +228,9 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 - **Open:** one click on the row. The editor theme goes in the URL.
 - **Versions:** a list, newest first: "Version 3 · newest · 18 Nov 14:02". One tap opens an older version.
 - **Compare:** "Compare with", with the version before as the default. Side by side on a wide screen, stacked on a narrow screen.
-- **Full screen:** the viewer page opens in a new browser tab. The viewer page has no Close button. On a share link, `window.close()` does nothing.
+- **Full screen:** the pane gets the class `caf-full` and fills the editor window. The pane does not move, so the frame does not reload. It keeps the version list, Compare and Copy link. Close and Escape end it. Open in new tab opens the viewer page in a browser tab. The viewer page has no Close button. On a share link, `window.close()` does nothing.
+- **Copy link:** at a click only, the editor asks for a new view ticket and copies the view URL with no `embed` and no theme. It says: "Link copied. Anyone with this link can open this version for 12 hours."
+- **Keys:** Ctrl+G F shows the Files tab and Ctrl+G A shows the Claude agent tab.
 - **Download:** one click, on the download URL of the view server (section 6). The file name is `<title>-v3.<ext>`. A folder downloads as `<title>-v3.zip`.
 - **Share:** a panel in the viewer area. It shows "Anyone with the link can open it." and two choices:
   - "This version (3)" (default) or "Always the newest version". While the second choice is selected, the warning of section 7 shows as one line of text below the choices, in the warning colour of the editor. It is not a dialog, and it does not block "Create link".

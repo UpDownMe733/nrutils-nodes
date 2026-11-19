@@ -231,13 +231,13 @@ The status line shows the state, the turns, the tokens used and the context size
 
 ## Files
 
-Each publish of an agent makes a file in the **Files** tab of the popup and in the **Files** tab of the sidebar. The sidebar tab shows the files of all agents. It has a search box and the filters Agent and Type. At the bottom it shows `Files use` and the size of the store. The popup tab shows the files of its node.
+Each publish of an agent makes a file in the **Files** tab of the popup and in the **Files** tab of the sidebar. The sidebar tab shows the files of all agents. It has a search box (title, name, agent and type) and the filters Agent, Type and time, and a sort (Newest, Largest, Name). At the bottom it shows the count of files and the size of the store, for example `11 files · 894.2 KB`. The popup tab shows the files of its node. It has a search box when the node has more than 8 files. Ctrl+G F shows the sidebar tab. Ctrl+G A shows the Claude agent tab.
 
 - A file with an image of 1 MB or less shows a thumbnail of 48 px in the list. Other files show the icon of their type.
 - A click on a file opens it in the viewer. On a narrow popup the viewer replaces the list. **Files** at the top goes back.
-- The version list shows the versions. **Full screen** and **Download** act on the shown version. **More** has **Compare** and **Delete**.
+- The version list shows the versions. **Full screen**, **Download**, **Copy link**, **Compare** and **Delete** act on the shown version. **Full screen** fills the editor window. **Close** and Escape end it. **Copy link** makes a new link at each click. Anyone with the link can open that version for 12 hours.
 - **Delete** asks once. Then the line `Deleted. Undo` shows for 10 seconds. **Undo** restores the file.
-- A new file gives a line in the chat. A click on the line opens the file. A node with a new file shows a badge with the count, until you open its Files tab.
+- A new file gives a line in the chat. A click on the line opens the file. A new file has a dot in the list. A node with new files shows a badge with the count, until you open its Files tab. The editor keeps this in the browser.
 - The viewer follows the theme of the editor.
 
 ## Sidebar panel

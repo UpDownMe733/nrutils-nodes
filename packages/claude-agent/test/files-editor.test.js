@@ -29,12 +29,43 @@ describe('Files script block', () => {
         assert.equal(sizeText(5 * 1024 * 1024), '5.0 MB');
     });
 
-    it('ago gives a short age', () => {
-        const ago = fn('ago');
-        assert.equal(ago(Date.now()), 'just now');
-        assert.equal(ago(Date.now() - 5 * 60000), '5 min ago');
-        assert.equal(ago(Date.now() - 3 * 3600000), '3 h ago');
-        assert.equal(ago(Date.now() - 2 * 86400000), '2 d ago');
+    it('stampText gives the clock time for today and the date for an earlier day', () => {
+        const source = ['clockText', 'dateText', 'stampText'].map((n) => new RegExp('^    function ' + n + '\\([^)]*\\) \\{[\\s\\S]*?^    \\}$', 'm').exec(block)[0]).join('\n');
+        const context = vm.createContext({ Date, String });
+        vm.runInContext(source, context);
+        const today = new Date();
+        today.setHours(9, 5, 0, 0);
+        assert.equal(context.stampText(today.getTime()), '09:05');
+        assert.match(context.stampText(Date.now() - 3 * 864e5), /^\d{1,2} \w+ \d\d:\d\d$/);
+    });
+
+    it('isNew compares the server time with the stored time and the opened files', () => {
+        const store = {};
+        const context = vm.createContext({
+            JSON, SEEN_KEY: 's', OPENED_KEY: 'o',
+            localStorage: { getItem: (k) => store[k] || null, setItem: (k, v) => { store[k] = v; } }
+        });
+        const source = (n) => new RegExp('^    function ' + n + '\\([^)]*\\) \\{[\\s\\S]*?^    \\}$', 'm').exec(block)[0];
+        vm.runInContext(['stored', 'isNew'].map(source).join('\n'), context);
+        const item = { id: 'a', nodeId: 'n', time: 100 };
+        assert.equal(context.isNew(item), true);
+        store.s = JSON.stringify({ n: 100 });
+        assert.equal(context.isNew(item), false);
+        assert.equal(context.isNew({ ...item, time: 101 }), true);
+        store.o = JSON.stringify({ a: 101 });
+        assert.equal(context.isNew({ ...item, time: 101 }), false);
+        assert.equal(context.isNew({ ...item, time: 102 }), true);
+    });
+
+    it('has the Files shortcuts, the sort, the Escape rule and the copy link text', () => {
+        assert.match(html, /RED\.keyboard\.add\('\*', 'ctrl-g f', 'claude-agent:show-files-tab'\)/);
+        assert.match(html, /RED\.keyboard\.add\('\*', 'ctrl-g a', 'claude-agent:show-agent-tab'\)/);
+        assert.match(html, /action: 'claude-agent:show-files-tab'/);
+        assert.match(html, /action: 'claude-agent:show-agent-tab'/);
+        assert.match(block, /\['size', 'Largest'\]/);
+        assert.match(block, /e\.stopPropagation\(\);\n\s+setFull\(false\)/);
+        assert.match(block, /Anyone with this link can open this version for 12 hours/);
+        assert.doesNotMatch(block, /caf-menu|'More'/);
     });
 
     it('itemOf shows the newest open version and hides a deleted file', () => {
