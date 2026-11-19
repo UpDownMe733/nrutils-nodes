@@ -1481,7 +1481,12 @@
             document[on ? 'addEventListener' : 'removeEventListener']('keydown', onEscape, true);
             const target = pane.querySelector(on ? '.caf-closefull' : '.caf-fullbtn');
             if (target) target.focus();
-            if (!on && auto) close();
+            if (!on && auto) {
+                const id = cur.id;
+                close();
+                const row = list.querySelector('[data-id="' + id + '"]');
+                if (row) row.focus();
+            }
         }
 
         async function open(id, n) {
