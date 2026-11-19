@@ -1736,7 +1736,13 @@
         if (!node) return;
         closePage();
         RED.view.reveal(node.id);
-        setTimeout(() => window.caOpenPopup && window.caOpenPopup(node));
+        // The popup library adds the popup of a node after a tab change. The click must wait for it.
+        const start = Date.now();
+        const wait = () => {
+            if (document.getElementById('nru_popup.' + node.id + '.group')) window.caOpenPopup(node);
+            else if (Date.now() - start < 5000) requestAnimationFrame(wait);
+        };
+        wait();
     }
 
     // The Files page: the view of the sidebar in a layer over the editor. It is built at the first open and kept.

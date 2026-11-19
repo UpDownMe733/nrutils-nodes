@@ -147,4 +147,8 @@ describe('Files script block', () => {
         assert.match(block, /if \(\/\^image\\\/\/\.test\(item\.type\)\) watch\(icon, item\)/);
         assert.match(block, /t\.url \+ 'thumb'/);
     });
+
+    it('Show agent opens the popup after the popup library has added it to the new tab', () => {
+        assert.match(html, /RED\.view\.reveal\(node\.id\);[^]*?getElementById\('nru_popup\.' \+ node\.id \+ '\.group'\)\) window\.caOpenPopup\(node\);[^]*?requestAnimationFrame\(wait\)/);
+    });
 });
