@@ -206,6 +206,19 @@ describe('Files script block', () => {
         assert.match(block, /t\.url \+ 'thumb'/);
     });
 
+    it('has the round 3 corrections: ring, clear filters, one line header, open version, live count, popup focus', () => {
+        assert.match(html, /\.caf-filters input:focus\{outline:2px solid/);
+        assert.doesNotMatch(html, /\.caf-filters input:focus-visible/);
+        assert.match(html, /!items\.length && all\.length[^]*?'No files\.'[^]*?btn\('', 'Clear filters'[^]*?Object\.assign\(filter, \{ q: '', owner: '', type: '', time: '' \}\)/);
+        assert.match(html, /\.caf-head select\{flex:0 1 auto;/);
+        assert.match(html, /'Version ' \+ x\.n \+ ' · ' \+ stampText\(x\.time\)/);
+        assert.match(html, /textContent = ' New tab'/);
+        assert.match(html, /btn\('fa-external-link', 'Open in new tab'/);
+        assert.match(html, /'Version ' \+ cur\.n \+ ' of ' \+ item\.version/);
+        assert.match(html, /store\.setAttribute\('aria-live', 'polite'\)/);
+        assert.match(html, /window\.caOpenPopup\(node\);[^]*?group\.querySelector\('textarea'\)[^]*?text\.focus\(\)/);
+    });
+
     it('Show agent opens the popup after the popup library has added it to the new tab', () => {
         assert.match(html, /RED\.view\.reveal\(node\.id\);[^]*?getElementById\('nru_popup\.' \+ node\.id \+ '\.group'\)\) window\.caOpenPopup\(node\);[^]*?requestAnimationFrame\(wait\)/);
     });
