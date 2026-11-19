@@ -64,6 +64,7 @@ describe('Files script block', () => {
         assert.match(html, /\.caf \.caf-filters select\{flex:1 1 auto;min-width:fit-content\}/);
         assert.match(html, /tabButton\.toggleClass\('caf-tabnew', total > 0\)/);
         assert.match(html, /@media \(hover:none\)\{\.caf \.caf-icon \.caf-label\{display:inline !important\}/);
+        assert.match(html, /if \(!on && auto\) \{\n\s+const id = cur\.id;\n\s+close\(\);\n\s+const row = list\.querySelector/);
         assert.match(html, /pane\.offsetParent && !pane\.classList\.contains\('caf-full'\) && body\.getBoundingClientRect\(\)\.height < 120/);
     });
 
