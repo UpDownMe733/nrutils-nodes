@@ -1979,7 +1979,7 @@
         tabHash();
         const back = page.back;
         page.back = null;
-        if (back && back.isConnected && !page.layer.contains(back) && back.focus) back.focus();
+        if (back && back !== document.body && back !== document.documentElement && back.isConnected && !page.layer.contains(back) && back.focus) back.focus();
         else if (RED.view && RED.view.focus) RED.view.focus();
     }
 

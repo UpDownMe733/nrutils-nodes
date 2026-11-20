@@ -266,8 +266,10 @@ describe('Files script block', () => {
         const el = (name, connected = true) => ({ isConnected: connected, focus: () => log.push(name) });
         const layer = { style: {}, contains: (e) => e === inside };
         const inside = el('inside');
+        const body = el('body');
+        const documentElement = el('html');
         const context = vm.createContext({
-            page: { view: {} }, document: { activeElement: null }, RED: { view: { focus: () => log.push('canvas') } },
+            page: { view: {} }, document: { activeElement: null, body, documentElement }, RED: { view: { focus: () => log.push('canvas') } },
             pageOpen: () => !!context.page.layer && layer.style.display !== 'none', buildPage() { context.page.layer = layer; }, editorInert() {}, setHash() {}, focusSearch() {}, tabHash() {}
         });
         vm.runInContext(src('openPage') + '\n' + src('closePage'), context);
@@ -287,5 +289,7 @@ describe('Files script block', () => {
         assert.equal(run(el('gone', false)), 'canvas');
         assert.equal(run(inside), 'canvas');
         assert.equal(run(null), 'canvas');
+        assert.equal(run(body), 'canvas');
+        assert.equal(run(documentElement), 'canvas');
     });
 });
