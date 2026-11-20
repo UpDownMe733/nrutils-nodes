@@ -1942,6 +1942,7 @@
     // target: { id, n } of a file to open, or {} for the list
     function openPage(target) {
         if (!page.layer) buildPage();
+        if (!pageOpen()) page.back = document.activeElement;
         page.layer.style.display = '';
         editorInert(true);
         if (target && target.id) page.view.open(target.id, target.n, true);
@@ -1974,7 +1975,10 @@
         page.layer.style.display = 'none';
         editorInert(false);
         tabHash();
-        if (RED.view && RED.view.focus) RED.view.focus();
+        const back = page.back;
+        page.back = null;
+        if (back && back.isConnected && !page.layer.contains(back) && back.focus) back.focus();
+        else if (RED.view && RED.view.focus) RED.view.focus();
     }
 
     // The chat line of a new file: icon, title, "New file" or "Version 3", time. A click opens it in Files.

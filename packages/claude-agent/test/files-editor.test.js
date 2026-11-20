@@ -259,4 +259,31 @@ describe('Files script block', () => {
     it('the Files button stays above the shade of the header', () => {
         assert.match(html, /li:has\(> \.caf-headbtn\)\{position:relative;z-index:6\}/);
     });
+
+    it('Close and Escape give the focus back to the element that had it, else to the canvas', () => {
+        const src = (n) => new RegExp('^    function ' + n + '\\([^)]*\\) \\{[\\s\\S]*?^    \\}$', 'm').exec(block)[0];
+        const log = [];
+        const el = (name, connected = true) => ({ isConnected: connected, focus: () => log.push(name) });
+        const layer = { style: { display: 'none' }, contains: (e) => e === inside };
+        const inside = el('inside');
+        const context = vm.createContext({
+            page: { layer, view: {} }, document: { activeElement: null }, RED: { view: { focus: () => log.push('canvas') } },
+            pageOpen: () => layer.style.display !== 'none', buildPage() {}, editorInert() {}, setHash() {}, focusSearch() {}, tabHash() {}
+        });
+        vm.runInContext(src('openPage') + '\n' + src('closePage'), context);
+        const run = (active, after) => {
+            log.length = 0;
+            context.document.activeElement = active;
+            context.openPage();
+            context.document.activeElement = inside;
+            context.openPage();
+            if (after) after();
+            context.closePage();
+            return log.join();
+        };
+        assert.equal(run(el('tray')), 'tray');
+        assert.equal(run(el('gone', false)), 'canvas');
+        assert.equal(run(inside), 'canvas');
+        assert.equal(run(null), 'canvas');
+    });
 });
