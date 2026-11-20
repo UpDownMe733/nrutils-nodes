@@ -119,6 +119,7 @@ describe('Files script block', () => {
             assert.match(block, /page\.search\.select\(\)/);
             assert.match(block, /'red-ui-header-button-claude-agent-files'[\s\S]*?invoke\('claude-agent:show-files-page'\)[\s\S]*?deploy\.before\(files\)[\s\S]*?\.red-ui-header-toolbar'\)\.prepend\(files\)/);
             assert.match(block, /max-width:480px\)\{#red-ui-header \.caf-headbtn span\{[^}]*clip:rect/);
+            assert.match(block, /max-width:480px\)\{#red-ui-header #red-ui-header-logo\{width:auto !important;min-width:0\}/);
             assert.doesNotMatch(block, /caf-headbtn[^\n]*aria-label/);
             assert.match(html, /<b>Files<\/b> button left of <b>Deploy<\/b>, with Alt\+Shift\+F/);
             assert.match(block, /RED\.events\.on\('flows:loaded'[\s\S]*?openPage\(target\)/);
