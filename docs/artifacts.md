@@ -308,6 +308,8 @@ The operator found the View menu hard. All 6 users (power-developer, without-sid
 
 User study round 8 (2026-11-20, build f2e594a, 6 users). Each user found the page: 5 saw the button at once, and 2 used a key (one user did both). Corrections: the button under the header shade of an edit tray (4 users); Alt+Shift+F in an agent popup; an empty Search with a filtered list after a new open (3 users); Ctrl+G Shift+F in the open page. Not taken: a 44 px height (the header is 40 px); a page link in the popup.
 
+User study rounds 9 to 11 (2026-11-20, builds 1f5d4b4 to a702a74). Round 9 (6 users): 6 of 6 earlier findings are corrected, and the focus goes back to the opener in each case. 5 users are satisfied. Corrections for small-screen and keyboard-low-vision: the narrow header rules (320 px, and 375 px at 200 % zoom); the one-column layout up to 900 px; the Tab menu at the left edge. Rounds 10 and 11: keyboard-low-vision is satisfied. Not taken: the width of the main menu, of its submenus and of the List flows dialog (`#red-ui-search`) under 400 px, and 40 px Deploy and menu buttons on touch (they are 30 px, which passes WCAG 2.5.8). These are Node-RED core sizes, the same without the Files button. small-screen names the List flows dialog as important.
+
 #### Opinions on the Files page (2026-11-19)
 
 | Who | Opinion | What it changed |
