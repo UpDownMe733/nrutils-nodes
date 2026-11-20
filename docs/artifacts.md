@@ -290,17 +290,17 @@ The operator keeps the sidebars off, or holds only a view link. Then no place sh
 
 The operator found the View menu hard. All 6 users (power-developer, without-sidebars, keyboard-low-vision, team-watcher, newcomer, small-screen) look first for a button in the top bar near Deploy. Two of them want one key. All 6 keep the menu item, Ctrl+G Shift+F and `#files`, and want no second copy and no reload.
 
-- **Button:** `<li><a id="red-ui-header-button-claude-agent-files" class="button caf-headbtn" href="#">` with the icon `fa-folder-open-o` and the word "Files". It goes directly left of the `li` of `#red-ui-header-button-deploy`, in the init of the node. When Deploy is not there, it goes first in `.red-ui-header-toolbar`. A click calls the action `claude-agent:show-files-page`. It is a link, so Enter and Space work. No tooltip and no count. It has a focus ring. On touch it is 40 px high (the full header) and more than 44 px wide. Less than 480 px wide, a visually-hidden clip hides the word, so the word stays the name of the link. Header colours only.
+- **Button:** `<li><a id="red-ui-header-button-claude-agent-files" class="button caf-headbtn" href="#">` with the icon `fa-folder-open-o` and the word "Files". It goes directly left of the `li` of `#red-ui-header-button-deploy`, in the init of the node. When Deploy is not there, it goes first in `.red-ui-header-toolbar`. A click calls the action `claude-agent:show-files-page`. It is a link, so Enter and Space work. No tooltip and no count. It has a focus ring. On touch it is 40 px high (the full header) and 44 px or more wide. Less than 480 px wide, a visually-hidden clip hides the word, so the word stays the name of the link. Header colours only.
 - **Key:** Alt+Shift+F, the same action. Node-RED 5.0.9 does not use it. `RED.keyboard` reads the key code, so it works on a Mac.
-- **Page already open:** no second layer and no new render. The search text, the filters, the open file and the scroll stay. The focus goes to Search and its text is selected. The page layer stops each keydown, so its own keydown handler gets Alt+Shift+F. A change of the key in Settings > Keyboard has no effect inside the page. The page covers the header, so the button cannot get the focus then.
+- **Page already open:** no second layer and no new render (`buildPage()` makes the list one time). The search text, the filters, the open file and the scroll stay. The focus goes to Search and its text is selected. The page layer stops each keydown, so its own keydown handler gets Alt+Shift+F. A change of the key in Settings > Keyboard has no effect inside the page. The page covers the header, so the button cannot get the focus then.
 - No new route and no new link address: the button calls an action that exists.
 - **Not taken:** a count on the button (the sidebar tab has the dot); an "open full page" link in the sidebar tab (one user; the header button is in view there too); Ctrl+K (the browser uses it).
 
 | Who | Opinion | What it changed |
 |---|---|---|
 | popup-ux-designer | design | the button, its place and its sizes; the key; the open-page behaviour |
-| claude-agent-dev | OK | `openPage()` renders only when the page is closed; the header code goes in the init that exists, with the fallback |
-| code-reviewer | changes | the layer keydown handles Alt+Shift+F, because the layer stops the key before `RED.keyboard`; a visually-hidden clip in place of `display:none` and an `aria-label` |
+| claude-agent-dev | OK | `openPage()` never renders the list: `buildPage()` makes it at the first open; the header code goes in the init that exists, with the fallback |
+| code-reviewer | changes | the layer keydown handles Alt+Shift+F, because the layer stops the key before `RED.keyboard`; a visually-hidden clip hides the word, so the link needs no `aria-label` (not `display:none`) |
 
 #### Opinions on the Files page (2026-11-19)
 
