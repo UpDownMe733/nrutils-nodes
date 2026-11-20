@@ -113,6 +113,14 @@ describe('Files script block', () => {
             assert.match(block, /const startHash = location\.hash;/);
             assert.match(block, /RED\.keyboard\.add\('\*', 'ctrl-g shift-f', 'claude-agent:show-files-page'\)/);
             assert.match(block, /RED\.menu\.addItem\('menu-item-view-menu', \{ id: 'menu-item-claude-agent-files', label: 'Files page'/);
+            assert.match(block, /RED\.keyboard\.add\('\*', 'alt-shift-f', 'claude-agent:show-files-page'\)/);
+            assert.match(block, /else if \(!pageOpen\(\)\) page\.view\.render\(\);[\s\S]*?focusSearch\(\);/);
+            assert.match(block, /e\.altKey && e\.shiftKey && e\.code === 'KeyF'[\s\S]*?focusSearch\(\)/);
+            assert.match(block, /page\.search\.select\(\)/);
+            assert.match(block, /'red-ui-header-button-claude-agent-files'[\s\S]*?invoke\('claude-agent:show-files-page'\)[\s\S]*?deploy\.before\(files\)[\s\S]*?\.red-ui-header-toolbar'\)\.prepend\(files\)/);
+            assert.match(block, /max-width:480px\)\{#red-ui-header \.caf-headbtn span\{[^}]*clip:rect/);
+            assert.doesNotMatch(block, /caf-headbtn[^\n]*aria-label/);
+            assert.match(html, /<b>Files<\/b> button left of <b>Deploy<\/b>, with Alt\+Shift\+F/);
             assert.match(block, /RED\.events\.on\('flows:loaded'[\s\S]*?openPage\(target\)/);
             assert.match(block, /RED\.events\.on\('workspace:change'/);
             assert.match(block, /RED\.nodes\.node\(nodeId\)/);
@@ -163,7 +171,7 @@ describe('Files script block', () => {
             assert.match(html, /part\(root, 'text'\)\.setAttribute\('aria-label', hint\)/);
             assert.match(block, /page\.view\.open\(target\.id, target\.n, true\)/);
             assert.match(block, /if \(focus === 'start' && !cur\.link\)/);
-            assert.match(block, /page\.search\.focus\(\);\n    \}/);
+            assert.match(block, /page\.search\.focus\(\);\n        page\.search\.select\(\);\n    \}/);
             assert.match(block, /scrollIntoView\(\{ block: 'nearest' \}\)/);
             assert.match(block, /\[\[owners, 'Agent'\], \[types, 'Type'\], \[time, 'Time'\], \[sort, 'Sort'\]\]/);
             assert.match(block, /pick\.setAttribute\('aria-label', 'Version'\)/);
