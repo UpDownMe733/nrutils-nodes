@@ -1,6 +1,6 @@
 # Artifacts of the claude-agent node (design)
 
-Status: parts 1 to 5, 7 and 8 of section 11 are built. Part 11 (the Files page) is in build. Parts 6, 9 and 10 are not built.
+Status: parts 1 to 5, 7, 8 and 11 of section 11 are built. Parts 6, 9 and 10 are not built.
 
 An artifact is an output that an agent makes and gives to people: a document, code, an image, a PDF, a table, a diagram, an HTML page or application, or a file of any type.
 The operator reviews artifacts, shares them with people outside, and keeps them for a long time.
@@ -268,6 +268,7 @@ The operator keeps the sidebars off, or holds only a view link. Then no place sh
   - the URL `<editor>/#files`, for a bookmark or a browser tab of its own (a second screen);
   - the URL `<editor>/#files/<id>/<n>`, which also opens that version and sets the Agent filter to the owner of the file (the "All files" link of a view link). A link of version 1 opens version 1: the version list marks the newest;
   - the key Ctrl+G Shift+F and the item "Files page" in the View menu of the editor (`RED.menu`; the sidebar tab already has the item "Files"; action `claude-agent:show-files-page`). The build proves that `RED.keyboard` reads "ctrl-g shift-f". When it does not, the key is Ctrl+G Ctrl+F.
+  - the button "Files" in the header of the editor, directly left of Deploy, and the key Alt+Shift+F (see "Direct open").
   - Node-RED reads only `#flow/`, `#node/` and `#group/`, and it sets `#flow/<tab>` while the flows load. Thus the node keeps `location.hash` when its script loads, and opens the page after `flows:loaded`.
   - While the page is open, the hash is `#files` or `#files/<id>/<n>`, so a reload keeps the page. The node sets the hash again after `flows:loaded` and after each change of the workspace. A `hashchange` to `#files…` opens the page in an open editor.
 - **Strict input:** the id must match `^[0-9a-f]{16}$` and the version must be an integer. The node checks the hash and a pasted ticket with these patterns before it uses a value in an API path or in the page. A value that does not match is ignored.
@@ -284,6 +285,22 @@ The operator keeps the sidebars off, or holds only a view link. Then no place sh
 - The badges, the "new" marks and the actions (versions, compare, download, copy link, delete) are those of the sidebar. The page adds no filter: the users asked for one search box and "newest first", which the sidebar already has. Equal times sort by title, then by id.
 - No new route and no new data: the page uses the admin API of section 4 with the login of the editor.
 - **Proof:** pictures from a git worktree in the sandbox with a test Node-RED: the page, a reload on `#files/<id>/<n>`, and the login on that URL with `adminAuth`.
+
+#### Direct open (2026-11-20)
+
+The operator found the View menu hard. All 6 users (power-developer, without-sidebars, keyboard-low-vision, team-watcher, newcomer, small-screen) look first for a button in the top bar near Deploy. Two of them want one key. All 6 keep the menu item, Ctrl+G Shift+F and `#files`, and want no second copy and no reload.
+
+- **Button:** `<li><a id="red-ui-header-button-claude-agent-files" class="button caf-headbtn" href="#">` with the icon `fa-folder-open-o` and the word "Files". It goes directly left of the `li` of `#red-ui-header-button-deploy`, in the init of the node. When Deploy is not there, it goes first in `.red-ui-header-toolbar`. A click calls the action `claude-agent:show-files-page`. It is a link, so Enter and Space work. No tooltip and no count. It has a focus ring. On touch it is 40 px high (the full header) and more than 44 px wide. Less than 480 px wide, a visually-hidden clip hides the word, so the word stays the name of the link. Header colours only.
+- **Key:** Alt+Shift+F, the same action. Node-RED 5.0.9 does not use it. `RED.keyboard` reads the key code, so it works on a Mac.
+- **Page already open:** no second layer and no new render. The search text, the filters, the open file and the scroll stay. The focus goes to Search and its text is selected. The page layer stops each keydown, so its own keydown handler gets Alt+Shift+F. A change of the key in Settings > Keyboard has no effect inside the page. The page covers the header, so the button cannot get the focus then.
+- No new route and no new link address: the button calls an action that exists.
+- **Not taken:** a count on the button (the sidebar tab has the dot); an "open full page" link in the sidebar tab (one user; the header button is in view there too); Ctrl+K (the browser uses it).
+
+| Who | Opinion | What it changed |
+|---|---|---|
+| popup-ux-designer | design | the button, its place and its sizes; the key; the open-page behaviour |
+| claude-agent-dev | OK | `openPage()` renders only when the page is closed; the header code goes in the init that exists, with the fallback |
+| code-reviewer | changes | the layer keydown handles Alt+Shift+F, because the layer stops the key before `RED.keyboard`; a visually-hidden clip in place of `display:none` and an `aria-label` |
 
 #### Opinions on the Files page (2026-11-19)
 
