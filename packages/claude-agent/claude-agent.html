@@ -705,7 +705,7 @@
         }
         // The key of the Files page must work here too: RED.keyboard does not get the key.
         div.addEventListener('keydown', (e) => {
-            if (window.caFiles && window.caFiles.filesKey(e)) {
+            if (e.altKey && e.shiftKey && !e.ctrlKey && e.code === 'KeyF') {
                 e.preventDefault();
                 RED.actions.invoke('claude-agent:show-files-page');
             }
@@ -1107,7 +1107,7 @@
 @media (pointer:coarse){#red-ui-header .caf-headbtn{height:40px;min-width:44px}}
 @media (max-width:480px){#red-ui-header #red-ui-header-logo{width:auto !important;min-width:0}
 #red-ui-header .caf-headbtn span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}}
-@media (max-width:400px){#red-ui-header .red-ui-deploy-button-content > span:last-child{display:none}}
+@media (max-width:400px){#red-ui-header .red-ui-deploy-button-content > span:last-child{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}}
 .caf-pageclose{height:32px}
 .caf-pagebody{flex:1;min-height:0;display:flex;padding:8px;box-sizing:border-box}
 .caf-showagent{background:none;border:0;padding:0;font:inherit;color:var(--red-ui-text-color-link);cursor:pointer}

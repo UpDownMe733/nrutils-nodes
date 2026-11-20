@@ -118,7 +118,7 @@ describe('Files script block', () => {
             assert.match(block, /if \(filesKey\(e\)\) \{\s*e\.preventDefault\(\);\s*return focusSearch\(\)/);
             assert.match(block, /page\.search\.select\(\)/);
             assert.match(block, /'red-ui-header-button-claude-agent-files'[\s\S]*?invoke\('claude-agent:show-files-page'\)[\s\S]*?deploy\.before\(files\)[\s\S]*?\.red-ui-header-toolbar'\)\.prepend\(files\)/);
-            assert.match(block, /#red-ui-header-logo\{width:auto !important;min-width:0\}\n#red-ui-header \.caf-headbtn span\{[^}]*clip:rect[^\n]*\n@media \(max-width:400px\)\{#red-ui-header \.red-ui-deploy-button-content > span:last-child\{display:none\}\}/);
+            assert.match(block, /#red-ui-header-logo\{width:auto !important;min-width:0\}\n#red-ui-header \.caf-headbtn span\{[^}]*clip:rect[^\n]*\n@media \(max-width:400px\)\{#red-ui-header \.red-ui-deploy-button-content > span:last-child\{[^}]*clip:rect/);
             assert.match(block, /max-width:480px\)\{#red-ui-header #red-ui-header-logo\{width:auto !important;min-width:0\}/);
             assert.doesNotMatch(block, /caf-headbtn[^\n]*aria-label/);
             assert.match(html, /<b>Files<\/b> button left of <b>Deploy<\/b>, with Alt\+Shift\+F/);
@@ -252,7 +252,7 @@ describe('Files script block', () => {
     });
 
     it('the key works in the popup, and Escape closes the page with preventDefault', () => {
-        assert.match(html, /keydown', \(e\) => \{\s*if \(window\.caFiles && window\.caFiles\.filesKey\(e\)\) \{\s*e\.preventDefault\(\);\s*RED\.actions\.invoke\('claude-agent:show-files-page'\)/);
+        assert.match(html, /keydown', \(e\) => \{\s*if \(e\.altKey && e\.shiftKey && !e\.ctrlKey && e\.code === 'KeyF'\) \{\s*e\.preventDefault\(\);\s*RED\.actions\.invoke\('claude-agent:show-files-page'\)/);
         assert.match(html, /Escape'\) \{\s*e\.preventDefault\(\);\s*return closePage\(\)/);
     });
 
