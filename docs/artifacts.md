@@ -296,7 +296,7 @@ The operator found the View menu hard. All 6 users (power-developer, without-sid
 - No new route and no new link address: the button calls an action that exists.
 - **Narrow header:** Node-RED gives the logo an inline width of 207 px, so its toolbar did not fit at 375 px before the Files button. Less than 480 px wide, the logo gets its natural width. Less than 400 px wide, Deploy shows only its icon: a visually-hidden clip keeps its word as its name. The menu button stays in view at 320 px.
 - **Edit tray:** the `li` of the button is above `#red-ui-header-shade`. The button thus works while an edit tray is open. The page opens over the tray. Close and Escape put the focus back on the element that had it before the open, when it still exists; else on the canvas.
-- **One key test:** the page layer, each agent popup and the sidebar panel stop the keys before `RED.keyboard`, so each calls `filesKey(e)`. It is true for Alt+Shift+F. In the page layer only, it is also true for Shift+F 2 s or less after Ctrl+G. In a popup and the sidebar, Ctrl+G keeps its browser action.
+- **Keys where the editor gets none:** the page layer, each agent popup and the sidebar panel stop the keys before `RED.keyboard`. Thus each one tests the key itself. The page layer calls `filesKey(e)`: Alt+Shift+F, or Shift+F 2 s or less after Ctrl+G. A popup and the sidebar accept only Alt+Shift+F, so Ctrl+G keeps its browser action there.
 - **Escape** in Search does not clear the search text. Thus after a new open, the search text and the filter agree.
 - **Not taken:** a count on the button (the sidebar tab has the dot); an "open full page" link in the sidebar tab (one user; the header button is in view there too); Ctrl+K (the browser uses it).
 
