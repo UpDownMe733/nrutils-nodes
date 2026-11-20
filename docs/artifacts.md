@@ -218,8 +218,8 @@ The look and the behaviour come from the popup UX designer, from the needs of se
 
 ### The layout
 
-- Width 500 px or more: the list at the left (40 %), the viewer at the right.
-- Less than 500 px: the list only. A tap shows the viewer at full width, with "‹ Files" at the top left.
+- Width 900 px or more: the list at the left (40 %), the viewer at the right.
+- Less than 900 px: the list only. A tap shows the viewer at full width, with "‹ Files" at the top left.
 - The viewer header: title, "Version 3 (newest) ▾", then the buttons Full screen, Download, Copy link, New tab, Share (part 6, not built yet), Compare and Delete. "New tab" has the accessible name "Open in new tab". At 1280 px the header is one line. There is no More menu. Delete is at the end, after a gap. The agent address is below the title.
   Each button has a visible label. Its height is 44 px on a coarse pointer (touch) and 32 px on a fine pointer (mouse). The buttons of the compare bar have the same heights. No action is on hover only. On a narrow screen the buttons wrap to a second row.
 
@@ -273,7 +273,7 @@ The operator keeps the sidebars off, or holds only a view link. Then no place sh
   - While the page is open, the hash is `#files` or `#files/<id>/<n>`, so a reload keeps the page. The node sets the hash again after `flows:loaded` and after each change of the workspace. A `hashchange` to `#files…` opens the page in an open editor.
 - **Strict input:** the id must match `^[0-9a-f]{16}$` and the version must be an integer. The node checks the hash and a pasted ticket with these patterns before it uses a value in an API path or in the page. A value that does not match is ignored.
 - **Build:** the page view is built one time, at the first open, and kept. `build()` adds to the list of views and never removes one.
-- **Layout:** a layer over the whole editor window, the same as `caf-full`. The list at the left, the viewer at the right; less than 500 px wide, the list only. The page never scrolls sideways at 200 % zoom. The canvas does not reload.
+- **Layout:** a layer over the whole editor window, the same as `caf-full`. The list at the left, the viewer at the right; less than 900 px wide, one column: the list full width, and an open file covers the list. The limit is the same as in the sidebar (section 8, "The layout"). The page never scrolls sideways at 200 % zoom. The canvas does not reload.
 - **Header:** a 48 px bar with the primary background and a 1 px bottom border in the secondary border colour. "Files" at the left, 16 px bold. The text button "Close" at the right: 32 px for the mouse, 44 px on touch. No count.
 - **Focus and keys:** the search field gets the focus at each open of the page. The page is opened on purpose, so this does not break the rule "the search field never gets the focus on its own". Arrows move in the list. Enter opens the file. The open row scrolls into view (`block: nearest`). Each select has an `aria-label`: Agent, Type, Time, Sort, Version. The focus stays in the page (a focus trap). The layer stops each keydown, so the keys of the editor do not act.
 - **Escape:** one handler for the page. Escape closes the innermost layer first: the full-screen viewer, then the page. The page keeps "Full screen".
@@ -294,7 +294,7 @@ The operator found the View menu hard. All 6 users (power-developer, without-sid
 - **Key:** Alt+Shift+F, the same action. Node-RED 5.0.9 does not use it. `RED.keyboard` reads the key code, so it works on a Mac.
 - **Page already open:** no second layer and no new render (`buildPage()` makes the list one time). The search text, the filters, the open file and the scroll stay. The focus goes to Search and its text is selected. The page layer stops each keydown, so its own keydown handler gets Alt+Shift+F. A change of the key in Settings > Keyboard has no effect inside the page. The page covers the header, so the button cannot get the focus then.
 - No new route and no new link address: the button calls an action that exists.
-- **Narrow header:** Node-RED gives the logo an inline width of 207 px, so its toolbar did not fit at 375 px before the Files button. Less than 480 px wide, the logo gets its natural width. Less than 400 px wide, Deploy shows only its icon: a visually-hidden clip keeps its word as its name. The menu button stays in view at 320 px.
+- **Narrow header:** Node-RED gives the logo an inline width of 207 px, so its toolbar did not fit at 375 px before the Files button. Less than 480 px wide, the logo gets its natural width. Less than 400 px wide, Deploy shows only its icon: a visually-hidden clip keeps its word as its name. Less than 400 px wide, `#red-ui-header-tabs` can shrink (`min-width:0`, `overflow:hidden`), and the toolbar has no left margin and a 4 px gap. The header thus fits 320 px with no zoom-out on touch, and the menu button stays in view at 375 px with 200 % zoom (188 CSS px).
 - **Edit tray:** the `li` of the button is above `#red-ui-header-shade`. The button thus works while an edit tray is open. The page opens over the tray. Close and Escape put the focus back on the element that had it before the open, when it still exists and it is not the page body; else on the canvas. The first open also keeps that element.
 - **Keys where the editor gets none:** the page layer, each agent popup and the sidebar panel stop the keys before `RED.keyboard`. Thus each one tests the key itself. The page layer calls `filesKey(e)`: Alt+Shift+F, or Shift+F 2 s or less after Ctrl+G. A popup and the sidebar accept only Alt+Shift+F, so Ctrl+G keeps its browser action there.
 - **Escape** in Search does not clear the search text. Thus after a new open, the search text and the filter agree.
