@@ -246,7 +246,7 @@ Each publish of an agent makes a file in the **Files** tab of the popup and in t
 The **Files** page shows the same list and viewer as the sidebar tab, at the size of the editor window. Use it with the sidebar closed, or on a second screen.
 
 - Open it with the URL `<editor>/#files`, or with `<editor>/#files/<id>/<n>` to open version `<n>` of a file. A reload keeps the page.
-- Open it with the **Files** button left of **Deploy**, or with Alt+Shift+F. Ctrl+G Shift+F and **View > Files page** in the main menu of the editor open it also. Alt+Shift+F in the open page moves the focus to the search box and selects its text.
+- Open it with the **Files** button left of **Deploy**, or with Alt+Shift+F. Ctrl+G Shift+F and **View > Files page** in the main menu of the editor open it also. Alt+Shift+F works in the popup of an agent and in an open edit tray. Ctrl+G Shift+F works in the open page. Alt+Shift+F in the open page moves the focus to the search box and selects its text.
 - **Close** or Escape closes the page. Escape first ends **Full screen**. The keys of the editor do not act while the page is open.
 - Paste a view link or a ticket in the search box to open its file.
 - In the viewer, the agent line shows the agent address and **Show agent**. **Show agent** closes the page, shows the node on the canvas and opens its popup and puts the focus in its message box. A node that does not exist shows `Agent removed`.

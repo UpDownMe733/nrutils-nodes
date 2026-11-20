@@ -115,7 +115,7 @@ describe('Files script block', () => {
             assert.match(block, /RED\.menu\.addItem\('menu-item-view-menu', \{ id: 'menu-item-claude-agent-files', label: 'Files page'/);
             assert.match(block, /RED\.keyboard\.add\('\*', 'alt-shift-f', 'claude-agent:show-files-page'\)/);
             assert.match(block, /page\.view\.open\(target\.id, target\.n, true\);\s+setHash\(\);\s+focusSearch\(\);/);
-            assert.match(block, /e\.altKey && e\.shiftKey && e\.code === 'KeyF'[\s\S]*?focusSearch\(\)/);
+            assert.match(block, /if \(filesKey\(e\)\) \{\s*e\.preventDefault\(\);\s*return focusSearch\(\)/);
             assert.match(block, /page\.search\.select\(\)/);
             assert.match(block, /'red-ui-header-button-claude-agent-files'[\s\S]*?invoke\('claude-agent:show-files-page'\)[\s\S]*?deploy\.before\(files\)[\s\S]*?\.red-ui-header-toolbar'\)\.prepend\(files\)/);
             assert.match(block, /#red-ui-header-logo\{width:auto !important;min-width:0\}\n#red-ui-header \.caf-headbtn span\{[^}]*clip:rect[^\n]*\n@media \(max-width:400px\)\{#red-ui-header \.red-ui-deploy-button-content > span:last-child\{display:none\}\}/);
@@ -237,5 +237,26 @@ describe('Files script block', () => {
 
     it('Show agent opens the popup after the popup library has added it to the new tab', () => {
         assert.match(html, /RED\.view\.reveal\(node\.id\);[^]*?getElementById\('nru_popup\.' \+ node\.id \+ '\.group'\);[^]*?if \(group\) \{\n\s+window\.caOpenPopup\(node\);[^]*?requestAnimationFrame\(wait\)/);
+    });
+
+    it('filesKey accepts Alt+Shift+F and Shift+F in 2 s after Ctrl+G', () => {
+        const context = vm.createContext({ Infinity });
+        vm.runInContext('let chordAt = -Infinity;\n' + /^    function filesKey\([^)]*\) \{[\s\S]*?^    \}$/m.exec(block)[0], context);
+        const k = (init) => context.filesKey({ key: 'F', code: 'KeyF', timeStamp: 0, preventDefault() {}, ...init });
+        assert.equal(k({ altKey: true, shiftKey: true }), true);
+        assert.equal(k({ shiftKey: true }), false);
+        assert.equal(k({ ctrlKey: true, key: 'g', code: 'KeyG', timeStamp: 100 }), false);
+        assert.equal(k({ shiftKey: true, timeStamp: 1000 }), true);
+        k({ ctrlKey: true, key: 'g', code: 'KeyG', timeStamp: 100 });
+        assert.equal(k({ shiftKey: true, timeStamp: 2500 }), false);
+    });
+
+    it('the key works in the popup, and Escape closes the page with preventDefault', () => {
+        assert.match(html, /keydown', \(e\) => \{\s*if \(window\.caFiles && window\.caFiles\.filesKey\(e\)\) \{\s*e\.preventDefault\(\);\s*RED\.actions\.invoke\('claude-agent:show-files-page'\)/);
+        assert.match(html, /Escape'\) \{\s*e\.preventDefault\(\);\s*return closePage\(\)/);
+    });
+
+    it('the Files button stays above the shade of the header', () => {
+        assert.match(html, /li:has\(> \.caf-headbtn\)\{position:relative;z-index:6\}/);
     });
 });

@@ -111,9 +111,10 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const selection = [];
     let sideTab;
     const actions = {};
+    const invoked = [];
     const keys = {};
     const RED = {
-        actions: { add: (name, fn) => { actions[name] = fn; } },
+        actions: { add: (name, fn) => { actions[name] = fn; }, invoke: (name) => invoked.push(name) },
         keyboard: { add: (scope, key, action) => { keys[action] = key; } },
         events: { on: (type, fn) => (handlers[type] = handlers[type] || []).push(fn) },
         nodes: { registerType: (name, d) => { def = d; }, node: (id) => nodesById[id], eachNode: (fn) => Object.values(nodesById).forEach(fn), workspace: (id) => ({ id, label: 'Flow ' + id }) },
@@ -162,7 +163,7 @@ function setup(extra = {}, state = { events: [], runs: [], session: { cacheTtl: 
     const rebuild = () => def.nru_popupInit.call(node);
     const emit = (type, ...args) => (handlers[type] || []).forEach((fn) => fn(...args));
     const addNode = (id, more) => (nodesById[id] = makeNode(id, more));
-    return { menu: (options) => RED.contextMenu.show(options), getNodes: () => nodesById, window, canvas, captured, popupStates, shown, hidden, menuOptions, selection, resize, sanitized, emit, addNode, selected, revealed, sideTab: () => sideTab, actions, keys, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
+    return { menu: (options) => RED.contextMenu.show(options), getNodes: () => nodesById, window, canvas, captured, popupStates, shown, hidden, menuOptions, selection, resize, sanitized, emit, addNode, selected, revealed, sideTab: () => sideTab, actions, invoked, keys, text, calls, getDef, document, div, head, clock, notes, node, answers, receive, part, rebuild };
 }
 
 const key = (text, init) => {
@@ -171,6 +172,17 @@ const key = (text, init) => {
     text.listeners.keydown.forEach((fn) => fn(e));
     return () => prevented;
 };
+describe('claude-agent popup Files key', () => {
+    it('Alt+Shift+F in the popup opens the Files page', () => {
+        const p = setup();
+        p.window.caFiles = { filesKey: (e) => e.altKey && e.shiftKey && e.code === 'KeyF' };
+        const fire = (init) => { let n = 0; p.div.listeners.keydown.forEach((fn) => fn({ stopPropagation() {}, preventDefault() { n++; }, ...init })); return n; };
+        assert.equal(fire({ altKey: true, shiftKey: true, code: 'KeyF' }), 1);
+        assert.deepEqual(p.invoked, ['claude-agent:show-files-page']);
+        fire({ code: 'KeyF' });
+        assert.equal(p.invoked.length, 1);
+    });
+});
 const starts = (calls) => calls.filter((c) => c.type === 'start');
 
 describe('claude-agent popup message box', () => {
