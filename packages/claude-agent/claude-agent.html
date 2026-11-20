@@ -1950,7 +1950,7 @@
         focusSearch();
     }
 
-    // True for the key of the Files page: Alt+Shift+F, or Shift+F in 2 s after Ctrl+G. The page and the popups stop the keys of the editor: they call this.
+    // True for the key of the Files page in the page layer: Alt+Shift+F, or Shift+F in 2 s after Ctrl+G. A popup accepts only Alt+Shift+F.
     let chordAt = -Infinity;
     function filesKey(e) {
         if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return false;
@@ -1998,7 +1998,7 @@
 
     let filesBody = null;
     let tabOptions = null;
-    window.caFiles = { build, chatLine, seenNode, addStyle, openPage, closePage, filesKey };
+    window.caFiles = { build, chatLine, seenNode, addStyle, openPage, closePage };
 
     if (window.RED && RED.comms) {
         RED.comms.subscribe(API, (topic, msg) => onRecord(msg));
