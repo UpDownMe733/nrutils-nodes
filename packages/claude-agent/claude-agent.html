@@ -1941,8 +1941,10 @@
 
     // target: { id, n } of a file to open, or {} for the list
     function openPage(target) {
+        const was = pageOpen();
+        const back = document.activeElement;
         if (!page.layer) buildPage();
-        if (!pageOpen()) page.back = document.activeElement;
+        if (!was) page.back = back;
         page.layer.style.display = '';
         editorInert(true);
         if (target && target.id) page.view.open(target.id, target.n, true);

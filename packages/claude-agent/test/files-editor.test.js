@@ -264,15 +264,17 @@ describe('Files script block', () => {
         const src = (n) => new RegExp('^    function ' + n + '\\([^)]*\\) \\{[\\s\\S]*?^    \\}$', 'm').exec(block)[0];
         const log = [];
         const el = (name, connected = true) => ({ isConnected: connected, focus: () => log.push(name) });
-        const layer = { style: { display: 'none' }, contains: (e) => e === inside };
+        const layer = { style: {}, contains: (e) => e === inside };
         const inside = el('inside');
         const context = vm.createContext({
-            page: { layer, view: {} }, document: { activeElement: null }, RED: { view: { focus: () => log.push('canvas') } },
-            pageOpen: () => layer.style.display !== 'none', buildPage() {}, editorInert() {}, setHash() {}, focusSearch() {}, tabHash() {}
+            page: { view: {} }, document: { activeElement: null }, RED: { view: { focus: () => log.push('canvas') } },
+            pageOpen: () => !!context.page.layer && layer.style.display !== 'none', buildPage() { context.page.layer = layer; }, editorInert() {}, setHash() {}, focusSearch() {}, tabHash() {}
         });
         vm.runInContext(src('openPage') + '\n' + src('closePage'), context);
         const run = (active, after) => {
             log.length = 0;
+            context.page.layer = null;
+            layer.style.display = '';
             context.document.activeElement = active;
             context.openPage();
             context.document.activeElement = inside;
