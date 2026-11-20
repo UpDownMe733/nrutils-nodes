@@ -294,9 +294,9 @@ The operator found the View menu hard. All 6 users (power-developer, without-sid
 - **Key:** Alt+Shift+F, the same action. Node-RED 5.0.9 does not use it. `RED.keyboard` reads the key code, so it works on a Mac.
 - **Page already open:** no second layer and no new render (`buildPage()` makes the list one time). The search text, the filters, the open file and the scroll stay. The focus goes to Search and its text is selected. The page layer stops each keydown, so its own keydown handler gets Alt+Shift+F. A change of the key in Settings > Keyboard has no effect inside the page. The page covers the header, so the button cannot get the focus then.
 - No new route and no new link address: the button calls an action that exists.
-- **Narrow header:** Node-RED gives the logo an inline width of 207 px, so its toolbar did not fit at 375 px before the Files button. Less than 480 px wide, the logo gets its natural width. Less than 400 px wide, Deploy shows only its icon. The menu button stays in view at 320 px.
-- **Edit tray:** the `li` of the button is above `#red-ui-header-shade`. The button thus works while an edit tray is open. The page opens over the tray, and Close goes back to it.
-- **One key test:** `filesKey(e)` is true for Alt+Shift+F, and for Shift+F 2 s or less after Ctrl+G. The page layer and each agent popup stop the keys before `RED.keyboard`, so both call it.
+- **Narrow header:** Node-RED gives the logo an inline width of 207 px, so its toolbar did not fit at 375 px before the Files button. Less than 480 px wide, the logo gets its natural width. Less than 400 px wide, Deploy shows only its icon: a visually-hidden clip keeps its word as its name. The menu button stays in view at 320 px.
+- **Edit tray:** the `li` of the button is above `#red-ui-header-shade`. The button thus works while an edit tray is open. The page opens over the tray. Close and Escape put the focus back on the element that had it before the open, when it still exists; else on the canvas.
+- **One key test:** the page layer, each agent popup and the sidebar panel stop the keys before `RED.keyboard`, so each calls `filesKey(e)`. It is true for Alt+Shift+F. In the page layer only, it is also true for Shift+F 2 s or less after Ctrl+G. In a popup and the sidebar, Ctrl+G keeps its browser action.
 - **Escape** in Search does not clear the search text. Thus after a new open, the search text and the filter agree.
 - **Not taken:** a count on the button (the sidebar tab has the dot); an "open full page" link in the sidebar tab (one user; the header button is in view there too); Ctrl+K (the browser uses it).
 
@@ -306,7 +306,7 @@ The operator found the View menu hard. All 6 users (power-developer, without-sid
 | claude-agent-dev | OK | `openPage()` never renders the list: `buildPage()` makes it at the first open; the header code goes in the init that exists, with the fallback |
 | code-reviewer | changes | the layer keydown handles Alt+Shift+F, because the layer stops the key before `RED.keyboard`; a visually-hidden clip hides the word, so the link needs no `aria-label` (not `display:none`) |
 
-User study round 8 (2026-11-20, build f2e594a, 6 users). Each user found the page: 5 saw the button at once, 2 used a key. Corrections: the button under the header shade of an edit tray (4 users); Alt+Shift+F in an agent popup; an empty Search with a filtered list after a new open (3 users); Ctrl+G Shift+F in the open page. Not taken: a 44 px height (the header is 40 px); a page link in the popup.
+User study round 8 (2026-11-20, build f2e594a, 6 users). Each user found the page: 5 saw the button at once, and 2 used a key (one user did both). Corrections: the button under the header shade of an edit tray (4 users); Alt+Shift+F in an agent popup; an empty Search with a filtered list after a new open (3 users); Ctrl+G Shift+F in the open page. Not taken: a 44 px height (the header is 40 px); a page link in the popup.
 
 #### Opinions on the Files page (2026-11-19)
 
