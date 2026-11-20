@@ -118,7 +118,8 @@ describe('Files script block', () => {
             assert.match(block, /if \(filesKey\(e\)\) \{\s*e\.preventDefault\(\);\s*return focusSearch\(\)/);
             assert.match(block, /page\.search\.select\(\)/);
             assert.match(block, /'red-ui-header-button-claude-agent-files'[\s\S]*?invoke\('claude-agent:show-files-page'\)[\s\S]*?deploy\.before\(files\)[\s\S]*?\.red-ui-header-toolbar'\)\.prepend\(files\)/);
-            assert.match(block, /#red-ui-header-logo\{width:auto !important;min-width:0\}\n#red-ui-header \.caf-headbtn span\{[^}]*clip:rect[^\n]*\n@media \(max-width:400px\)\{#red-ui-header \.red-ui-deploy-button-content > span:last-child\{[^}]*clip:rect/);
+            assert.match(block, /#red-ui-header-logo\{width:auto !important;min-width:0\}\n#red-ui-header \.caf-headbtn span\{[^}]*clip:rect[^\n]*\n@media \(max-width:400px\)\{#red-ui-header > #red-ui-header-tabs\{min-width:0;overflow:hidden\}\n#red-ui-header ul\.red-ui-header-toolbar\{margin:0 4px 0 0;gap:4px\}\n#red-ui-header \.red-ui-deploy-button-content > span:last-child\{[^}]*clip:rect/);
+            assert.match(block, /const WIDE = 900;/);
             assert.match(block, /max-width:480px\)\{#red-ui-header #red-ui-header-logo\{width:auto !important;min-width:0\}/);
             assert.doesNotMatch(block, /caf-headbtn[^\n]*aria-label/);
             assert.match(html, /<b>Files<\/b> button left of <b>Deploy<\/b>, with Alt\+Shift\+F/);
