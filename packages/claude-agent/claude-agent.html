@@ -703,6 +703,13 @@
         for (const type of ['mousedown', 'mouseup', 'click', 'dblclick', 'touchstart', 'touchend', 'keydown', 'keyup', 'keypress', 'wheel', 'contextmenu']) {
             div.addEventListener(type, (e) => e.stopPropagation());
         }
+        // The key of the Files page must work here too: RED.keyboard does not get the key.
+        div.addEventListener('keydown', (e) => {
+            if (window.caFiles && window.caFiles.filesKey(e)) {
+                e.preventDefault();
+                RED.actions.invoke('claude-agent:show-files-page');
+            }
+        });
     }
 
     // Build the view of a node in div: the popup (key is the node id) or the sidebar panel (key is 'side').
@@ -1095,9 +1102,12 @@
 .caf-pagetitle{font-size:16px;font-weight:bold}
 #red-ui-header .caf-headbtn{gap:6px;padding:0 8px;font-size:14px}
 #red-ui-header .caf-headbtn i{font-size:16px}
+#red-ui-header .red-ui-header-toolbar > li:has(> .caf-headbtn){position:relative;z-index:6}
 #red-ui-header .caf-headbtn:focus-visible{outline:2px solid var(--red-ui-form-input-focus-color);outline-offset:1px}
 @media (pointer:coarse){#red-ui-header .caf-headbtn{height:40px;min-width:44px}}
-@media (max-width:480px){#red-ui-header .caf-headbtn span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}}
+@media (max-width:480px){#red-ui-header #red-ui-header-logo{width:auto !important;min-width:0}
+#red-ui-header .caf-headbtn span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}}
+@media (max-width:400px){#red-ui-header .red-ui-deploy-button-content > span:last-child{display:none}}
 .caf-pageclose{height:32px}
 .caf-pagebody{flex:1;min-height:0;display:flex;padding:8px;box-sizing:border-box}
 .caf-showagent{background:none;border:0;padding:0;font:inherit;color:var(--red-ui-text-color-link);cursor:pointer}
@@ -1891,8 +1901,11 @@
         // One handler for the page. The full-screen viewer ends first: its handler stops Escape before it gets here.
         layer.addEventListener('keydown', (e) => {
             e.stopPropagation();
-            if (e.key === 'Escape') return closePage();
-            if (e.altKey && e.shiftKey && e.code === 'KeyF') {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                return closePage();
+            }
+            if (filesKey(e)) {
                 e.preventDefault();
                 return focusSearch();
             }
@@ -1936,6 +1949,21 @@
         focusSearch();
     }
 
+    // True for the key of the Files page: Alt+Shift+F, or Shift+F in 2 s after Ctrl+G. The page and the popups stop the keys of the editor: they call this.
+    let chordAt = -Infinity;
+    function filesKey(e) {
+        if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return false;
+        const f = e.code === 'KeyF';
+        const chord = e.timeStamp - chordAt < 2000;
+        chordAt = -Infinity;
+        if (e.ctrlKey && e.code === 'KeyG') {
+            chordAt = e.timeStamp;
+            e.preventDefault();
+            return false;
+        }
+        return f && e.shiftKey && ((e.altKey && !e.ctrlKey) || (chord && !e.altKey && !e.ctrlKey));
+    }
+
     function focusSearch() {
         page.search.focus();
         page.search.select();
@@ -1966,7 +1994,7 @@
 
     let filesBody = null;
     let tabOptions = null;
-    window.caFiles = { build, chatLine, seenNode, addStyle, openPage, closePage };
+    window.caFiles = { build, chatLine, seenNode, addStyle, openPage, closePage, filesKey };
 
     if (window.RED && RED.comms) {
         RED.comms.subscribe(API, (topic, msg) => onRecord(msg));
@@ -2231,7 +2259,7 @@
     <p>Each run has the tool <code>publish({ path, name, title, entry, note })</code>. The agent gives a file or a folder to the people with it. <code>path</code> must be in the work root. The same <code>name</code> from the same node makes a new version. A publish of equal content makes no new version.</p>
     <p>The node reads the files with the rights of the agent: <code>tar</code> reads them. With a launcher, <code>claudeAgent.agentExec</code> in <code>settings.js</code> runs <code>tar</code>. A symbolic link, a name outside the folder, and more than <code>claudeAgent.artifacts.maxBytes</code> (100 MB) or <code>maxFiles</code> (2000) stop the publish with an error. Each publish gives an event of the kind <code>artifact</code>. A delete moves a file or a version to the bin. The node removes its files after 30 days. See the README.</p>
 
-    <p>Each publish makes a file. The <b>Files</b> tab of the popup lists the files of the node. The <b>Files</b> tab of the sidebar lists the files of all agents, with a search box, the filters Agent, Type and time, and a sort. When the filters show no file, <b>Clear filters</b> resets them. A file with an image of 1 MB or less shows a thumbnail. A click on a file opens the viewer. <b>Full screen</b>, <b>Download</b>, <b>Copy link</b>, <b>New tab</b>, <b>Compare</b> and <b>Delete</b> act on the shown version. <b>New tab</b> opens the viewer page in a browser tab. The viewer page of an older version says <i>A newer version exists</i>. <b>Close full screen</b> ends full screen, and Escape does too when the focus is not in the file. Ctrl+G F shows the Files tab. Ctrl+G A shows the Claude agent tab. After <b>Delete</b>, <b>Undo</b> shows for 10 seconds. A new file gives a line in the chat, a badge on the node and a dot on the Files tab button. On a touch screen the buttons show their names. A file opens in full screen when the sidebar is too small for a preview. Ctrl+G F and Ctrl+G A move the focus into the tab. The <b>Files</b> page shows the same list and viewer at the size of the editor. Open it with the <b>Files</b> button left of <b>Deploy</b>, with Alt+Shift+F, with <b>View &gt; Files page</b>, with Ctrl+G Shift+F, or with the URL hash <code>#files</code>. <b>Show agent</b> closes the page and opens the popup of the agent. <b>Close</b> closes the page. Escape ends full screen first, then closes the page. See the README.</p>
+    <p>Each publish makes a file. The <b>Files</b> tab of the popup lists the files of the node. The <b>Files</b> tab of the sidebar lists the files of all agents, with a search box, the filters Agent, Type and time, and a sort. When the filters show no file, <b>Clear filters</b> resets them. A file with an image of 1 MB or less shows a thumbnail. A click on a file opens the viewer. <b>Full screen</b>, <b>Download</b>, <b>Copy link</b>, <b>New tab</b>, <b>Compare</b> and <b>Delete</b> act on the shown version. <b>New tab</b> opens the viewer page in a browser tab. The viewer page of an older version says <i>A newer version exists</i>. <b>Close full screen</b> ends full screen, and Escape does too when the focus is not in the file. Ctrl+G F shows the Files tab. Ctrl+G A shows the Claude agent tab. After <b>Delete</b>, <b>Undo</b> shows for 10 seconds. A new file gives a line in the chat, a badge on the node and a dot on the Files tab button. On a touch screen the buttons show their names. A file opens in full screen when the sidebar is too small for a preview. Ctrl+G F and Ctrl+G A move the focus into the tab. The <b>Files</b> page shows the same list and viewer at the size of the editor. Open it with the <b>Files</b> button left of <b>Deploy</b>, with Alt+Shift+F (it works in the popup and in an edit tray), with <b>View &gt; Files page</b>, with Ctrl+G Shift+F (it also works in the open page), or with the URL hash <code>#files</code>. <b>Show agent</b> closes the page and opens the popup of the agent. <b>Close</b> closes the page. Escape ends full screen first, then closes the page. See the README.</p>
 
     <h3>MQTT inbox</h3>
     <p>The popup shows the text of the agent as markdown: headings, lists, tables, code, links and emphasis. A link opens in a new tab. An image or other remote file does not show. The text of the operator and of a question stays plain text. The Agents tab shows an inbox message as a closed card on the left (the sender, the time and the first 3 lines) and a message that the agent sent with <code>send</code> as a card on the right (the receiver, the time and the first 3 lines). A click on a longer card opens the full text in the card, and a second click closes it. The badge of the tab counts the received messages that came while it was not shown. The Chat tab shows none of them. The Timeline tab shows the full text too. A keep-alive turn has no bubble: the life cycle line shows it.</p>
