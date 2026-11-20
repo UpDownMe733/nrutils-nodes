@@ -114,7 +114,7 @@ describe('Files script block', () => {
             assert.match(block, /RED\.keyboard\.add\('\*', 'ctrl-g shift-f', 'claude-agent:show-files-page'\)/);
             assert.match(block, /RED\.menu\.addItem\('menu-item-view-menu', \{ id: 'menu-item-claude-agent-files', label: 'Files page'/);
             assert.match(block, /RED\.keyboard\.add\('\*', 'alt-shift-f', 'claude-agent:show-files-page'\)/);
-            assert.match(block, /else if \(!pageOpen\(\)\) page\.view\.render\(\);[\s\S]*?focusSearch\(\);/);
+            assert.match(block, /page\.view\.open\(target\.id, target\.n, true\);\s+setHash\(\);\s+focusSearch\(\);/);
             assert.match(block, /e\.altKey && e\.shiftKey && e\.code === 'KeyF'[\s\S]*?focusSearch\(\)/);
             assert.match(block, /page\.search\.select\(\)/);
             assert.match(block, /'red-ui-header-button-claude-agent-files'[\s\S]*?invoke\('claude-agent:show-files-page'\)[\s\S]*?deploy\.before\(files\)[\s\S]*?\.red-ui-header-toolbar'\)\.prepend\(files\)/);

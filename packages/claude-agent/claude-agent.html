@@ -1932,7 +1932,6 @@
         page.layer.style.display = '';
         editorInert(true);
         if (target && target.id) page.view.open(target.id, target.n, true);
-        else if (!pageOpen()) page.view.render();
         setHash();
         focusSearch();
     }
