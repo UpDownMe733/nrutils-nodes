@@ -118,7 +118,7 @@ describe('Files script block', () => {
             assert.match(block, /e\.altKey && e\.shiftKey && e\.code === 'KeyF'[\s\S]*?focusSearch\(\)/);
             assert.match(block, /page\.search\.select\(\)/);
             assert.match(block, /'red-ui-header-button-claude-agent-files'[\s\S]*?invoke\('claude-agent:show-files-page'\)[\s\S]*?deploy\.before\(files\)[\s\S]*?\.red-ui-header-toolbar'\)\.prepend\(files\)/);
-            assert.match(block, /#red-ui-header #red-ui-header-tabs\{flex:1 1 0;min-width:0;overflow:hidden\}\n#red-ui-header \.caf-headbtn span\{[^}]*clip:rect/);
+            assert.match(block, /#red-ui-header-logo\{width:auto !important;min-width:0\}\n#red-ui-header \.caf-headbtn span\{[^}]*clip:rect[^\n]*\n@media \(max-width:400px\)\{#red-ui-header \.red-ui-deploy-button-content > span:last-child\{display:none\}\}/);
             assert.match(block, /max-width:480px\)\{#red-ui-header #red-ui-header-logo\{width:auto !important;min-width:0\}/);
             assert.doesNotMatch(block, /caf-headbtn[^\n]*aria-label/);
             assert.match(html, /<b>Files<\/b> button left of <b>Deploy<\/b>, with Alt\+Shift\+F/);
