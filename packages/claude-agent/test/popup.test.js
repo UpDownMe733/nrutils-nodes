@@ -175,11 +175,11 @@ const key = (text, init) => {
 describe('claude-agent popup Files key', () => {
     it('Alt+Shift+F in the popup opens the Files page', () => {
         const p = setup();
-        p.window.caFiles = { filesKey: (e) => e.altKey && e.shiftKey && e.code === 'KeyF' };
         const fire = (init) => { let n = 0; p.div.listeners.keydown.forEach((fn) => fn({ stopPropagation() {}, preventDefault() { n++; }, ...init })); return n; };
         assert.equal(fire({ altKey: true, shiftKey: true, code: 'KeyF' }), 1);
         assert.deepEqual(p.invoked, ['claude-agent:show-files-page']);
         fire({ code: 'KeyF' });
+        fire({ ctrlKey: true, shiftKey: true, code: 'KeyF' });
         assert.equal(p.invoked.length, 1);
     });
 });

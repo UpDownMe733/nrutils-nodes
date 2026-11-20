@@ -118,7 +118,7 @@ describe('Files script block', () => {
             assert.match(block, /if \(filesKey\(e\)\) \{\s*e\.preventDefault\(\);\s*return focusSearch\(\)/);
             assert.match(block, /page\.search\.select\(\)/);
             assert.match(block, /'red-ui-header-button-claude-agent-files'[\s\S]*?invoke\('claude-agent:show-files-page'\)[\s\S]*?deploy\.before\(files\)[\s\S]*?\.red-ui-header-toolbar'\)\.prepend\(files\)/);
-            assert.match(block, /#red-ui-header-logo\{width:auto !important;min-width:0\}\n#red-ui-header \.caf-headbtn span\{[^}]*clip:rect[^\n]*\n@media \(max-width:400px\)\{#red-ui-header \.red-ui-deploy-button-content > span:last-child\{display:none\}\}/);
+            assert.match(block, /#red-ui-header-logo\{width:auto !important;min-width:0\}\n#red-ui-header \.caf-headbtn span\{[^}]*clip:rect[^\n]*\n@media \(max-width:400px\)\{#red-ui-header \.red-ui-deploy-button-content > span:last-child\{[^}]*clip:rect/);
             assert.match(block, /max-width:480px\)\{#red-ui-header #red-ui-header-logo\{width:auto !important;min-width:0\}/);
             assert.doesNotMatch(block, /caf-headbtn[^\n]*aria-label/);
             assert.match(html, /<b>Files<\/b> button left of <b>Deploy<\/b>, with Alt\+Shift\+F/);
@@ -252,11 +252,38 @@ describe('Files script block', () => {
     });
 
     it('the key works in the popup, and Escape closes the page with preventDefault', () => {
-        assert.match(html, /keydown', \(e\) => \{\s*if \(window\.caFiles && window\.caFiles\.filesKey\(e\)\) \{\s*e\.preventDefault\(\);\s*RED\.actions\.invoke\('claude-agent:show-files-page'\)/);
+        assert.match(html, /keydown', \(e\) => \{\s*if \(e\.altKey && e\.shiftKey && !e\.ctrlKey && e\.code === 'KeyF'\) \{\s*e\.preventDefault\(\);\s*RED\.actions\.invoke\('claude-agent:show-files-page'\)/);
         assert.match(html, /Escape'\) \{\s*e\.preventDefault\(\);\s*return closePage\(\)/);
     });
 
     it('the Files button stays above the shade of the header', () => {
         assert.match(html, /li:has\(> \.caf-headbtn\)\{position:relative;z-index:6\}/);
+    });
+
+    it('Close and Escape give the focus back to the element that had it, else to the canvas', () => {
+        const src = (n) => new RegExp('^    function ' + n + '\\([^)]*\\) \\{[\\s\\S]*?^    \\}$', 'm').exec(block)[0];
+        const log = [];
+        const el = (name, connected = true) => ({ isConnected: connected, focus: () => log.push(name) });
+        const layer = { style: { display: 'none' }, contains: (e) => e === inside };
+        const inside = el('inside');
+        const context = vm.createContext({
+            page: { layer, view: {} }, document: { activeElement: null }, RED: { view: { focus: () => log.push('canvas') } },
+            pageOpen: () => layer.style.display !== 'none', buildPage() {}, editorInert() {}, setHash() {}, focusSearch() {}, tabHash() {}
+        });
+        vm.runInContext(src('openPage') + '\n' + src('closePage'), context);
+        const run = (active, after) => {
+            log.length = 0;
+            context.document.activeElement = active;
+            context.openPage();
+            context.document.activeElement = inside;
+            context.openPage();
+            if (after) after();
+            context.closePage();
+            return log.join();
+        };
+        assert.equal(run(el('tray')), 'tray');
+        assert.equal(run(el('gone', false)), 'canvas');
+        assert.equal(run(inside), 'canvas');
+        assert.equal(run(null), 'canvas');
     });
 });
