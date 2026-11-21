@@ -105,7 +105,7 @@ function makeFlow(workRoot, mqttPort, deadPort) {
         inject('i-busy-stop', '', 'busy', { agent: ['{"cmd":"stop"}', 'json'] }),
         ...agentWithInjects('sender', ['send peer hello', 'send Team+B/peer again'], { broker: 'broker' }),
         ...agentWithInjects('reporter', ['report peer final'], { broker: 'broker' }),
-        ...['timeout', 'turns', 'cost', 'sdk', 'close', 'quiet'].flatMap((k) => agentWithInjects('v' + k, [], { broker: 'broker', ...(k === 'timeout' && { timeoutMin: 0.01 }) })),
+        ...['timeout', 'turns', 'cost', 'sdk', 'close', 'quiet', 'stop'].flatMap((k) => agentWithInjects('v' + k, [], { broker: 'broker', ...(k === 'timeout' && { timeoutMin: 0.01 }) })),
         ...agentWithInjects('offline', ['send peer hello'], { broker: 'deadbroker' }),
         agent('', [[], [], []], { id: 'noname', broker: 'broker' }),
         // The message mode with an inbox
@@ -448,6 +448,13 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
             fs.rmSync(notePath('vclose'), { force: true });
             fs.rmSync(sessionPath('vclose'), { force: true });
         });
+        it('a stop by the operator tells the asker', async () => {
+            await ask('vstop', 'wait');
+            const run = await waitFor(async () => (await editor('vstop', 'get-log')).runs[0], 10000, 'the run');
+            await editor('vstop', 'control', { cmd: 'stop', runId: run.runId });
+            const got = await waitFor(async () => told('vstop')[0], 10000, 'the stop message');
+            assert.match(got.text, /ended with no answer: stopped, at /);
+        });
         it('a report sender gets no end message', async () => {
             await ask('vquiet', 'maxturns', { report: true });
             await waitFor(async () => eventsOf('vquiet').some((e) => e.kind === 'error'), 10000, 'the error');
@@ -516,6 +523,6 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
 
     it('Node-RED logged no error', () => {
         // The errors of the runs in 'an end with no answer' are expected
-        assert.doesNotMatch(log, /\[error\] \[claude-agent:(?!V)/);
+        assert.doesNotMatch(log, /\[error\] \[claude-agent:(?!V(?:timeout|turns|cost|sdk|close|quiet|stop)\])/);
     });
 });

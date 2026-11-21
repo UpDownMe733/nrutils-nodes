@@ -316,14 +316,16 @@ const registerNode = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, n
         return new Promise((resolve, reject) => broker.publish({ topic: inboxTopic(target), payload, qos: 1 }, (err) => (err ? reject(err) : resolve())));
     }
 
-    // The run or the session ended with no answer: tell each agent that waits for one. The message is a report, so it opens no item.
-    function notifyAskers(code) {
-        if (!broker || !broker.connected) return askers.clear();
+    // A run or the session ended with no answer: tell each agent that waits for one.
+    // jobs: the jobs of the run. With no jobs, all waiting agents hear of it. The message is a report, so it opens no item.
+    function notifyAskers(code, jobs) {
+        const targets = jobs ? new Set(jobs.map((job) => job.from).filter((from) => askers.has(from))) : new Set(askers);
+        for (const target of targets) askers.delete(target);
+        if (!broker || !broker.connected) return;
         const text = `${address} ended with no answer: ${code}, at ${new Date().toISOString()}.`;
-        for (const target of [...askers]) {
+        for (const target of targets) {
             publishTo(target, { from: address, text, report: true }).catch((err) => node.warn(`no end message to ${target}: ${err.message}`));
         }
-        askers.clear();
     }
 
     function sendTool(sdk, run) {
@@ -468,7 +470,7 @@ const registerNode = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, n
 
     function fail(run, err) {
         if (!end(run)) return;
-        notifyAskers(err.reason || 'sdk_error');
+        notifyAskers(err.reason || 'sdk_error', run.jobs);
         event(run, 'error', err.message, { reason: err.reason || 'sdk_error', tokenCount: run.tokens || 0, weightedCount: run.weighted || 0, costUsd: run.cost || 0 });
         for (const { msg, done } of run.jobs) {
             msg.agent = { runId: run.id, sessionId: run.sessionId, tokens: run.tokens, weighted: run.weighted || 0, reason: err.reason || 'sdk_error' };
@@ -480,6 +482,7 @@ const registerNode = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, n
     // The operator stopped the run. This is not an error.
     function stop(run) {
         if (!end(run)) return;
+        notifyAskers('stopped', run.jobs);
         event(run, 'state', 'stopped', { tokenCount: run.tokens || 0, weightedCount: run.weighted || 0, costUsd: run.cost || 0 });
         for (const job of run.jobs) job.done();
         afterEnd({ fill: 'grey', shape: 'ring', text: 'stopped' });
@@ -733,6 +736,7 @@ const registerNode = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, n
         closing = true;
         clearTimeout(lifeTimer);
         for (const run of [...runs.values()]) fail(run, failure('node_closed', 'node closed'));
+        notifyAskers('node_closed', queue);
         for (const job of queue.splice(0)) {
             job.msg.agent = { reason: 'node_closed' };
             job.done(failure('node_closed', 'node closed'));
