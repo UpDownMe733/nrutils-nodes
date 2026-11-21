@@ -105,6 +105,7 @@ function makeFlow(workRoot, mqttPort, deadPort) {
         inject('i-busy-stop', '', 'busy', { agent: ['{"cmd":"stop"}', 'json'] }),
         ...agentWithInjects('sender', ['send peer hello', 'send Team+B/peer again'], { broker: 'broker' }),
         ...agentWithInjects('reporter', ['report peer final'], { broker: 'broker' }),
+        ...['timeout', 'turns', 'cost', 'sdk', 'close'].flatMap((k) => agentWithInjects('v' + k, [], { broker: 'broker', ...(k === 'timeout' && { timeoutMin: 0.01 }) })),
         ...agentWithInjects('offline', ['send peer hello'], { broker: 'deadbroker' }),
         agent('', [[], [], []], { id: 'noname', broker: 'broker' }),
         // The message mode with an inbox
@@ -419,6 +420,39 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
         await ended('reporter', 2);
         assert.equal(prompts('reporter').at(-1), CLOSE_PROMPT, 'the timer end closes at once');
         fs.rmSync(notePath('reporter'), { force: true });
+    });
+
+    describe('an end with no answer', () => {
+        const cap = (id) => id[0].toUpperCase() + id.slice(1);
+        const told = (id) => brokerGot.filter((m) => m.topic === `agents/Team-X/agent/a-${id}/inbox`).map((m) => JSON.parse(m.payload));
+        const ask = (id, text, extra = {}) => publish(inbox(cap(id)), JSON.stringify({ from: 'Team-X/a-' + id, text, ...extra }));
+        const check = async (id, text, code) => {
+            await ask(id, text);
+            const got = await waitFor(async () => told(id)[0], 10000, 'the end message to the asker of ' + id);
+            assert.equal(got.from, 'Team-A/' + cap(id));
+            assert.equal(got.report, true);
+            assert.match(got.text, new RegExp(`^Team-A/${cap(id)} ended with no answer: ${code}, at \\d{4}-\\d\\d-\\d\\dT[\\d:.]+Z\\.$`));
+            assert.equal(told(id).length, 1);
+        };
+        it('a timeout tells the asker', () => check('vtimeout', 'wait', 'timeout'));
+        it('the turn limit tells the asker', () => check('vturns', 'maxturns', 'max_turns'));
+        it('the cost limit tells the asker', () => check('vcost', 'maxcost', 'max_cost'));
+        it('an SDK error tells the asker', () => check('vsdk', 'sdkfail', 'sdk_error'));
+        it('a session close tells the asker', async () => {
+            await ask('vclose', 'hello');
+            await waitFor(async () => eventsOf('vclose').some((e) => e.kind === 'result'), 10000, 'the first result');
+            await idle('vclose');
+            await fire();
+            await waitFor(async () => told('vclose')[0], 10000, 'the close message');
+            assert.match(told('vclose')[0].text, /ended with no answer: session_closed, at /);
+            fs.rmSync(notePath('vclose'), { force: true });
+            fs.rmSync(sessionPath('vclose'), { force: true });
+        });
+        it('a report sender gets no end message', async () => {
+            await ask('vturns', 'maxturns', { report: true });
+            await waitFor(async () => eventsOf('vturns').filter((e) => e.kind === 'error').length >= 2, 10000, 'the second error');
+            assert.equal(told('vturns').length, 1);
+        });
     });
 
     it('an answer from the agent clears the open item, and an inbox message starts a turn with a new output msg', async () => {

@@ -200,7 +200,10 @@ The `prompt` event of this turn has the message text with no label line, `source
 The agent gets the tool `send(to, text)`. `to` is `name` (same team) or `team/name`. With no connection to the
 broker, the tool gives an error text. Each send opens the item "waiting for `<to>`". An inbox message from that
 agent clears it. `send(to, text, report)`: with `report: true` the text is a report that expects no answer.
-The send opens no item, and the sender gets no keep-alive turn for it. A send also gives the event `sent` with `to` and the full text. The Agents tab shows it as a card on the right: the receiver, the time and the first 3 lines.
+The send opens no item, and the sender gets no keep-alive turn for it. The node keeps the address of each agent that sent it a message with no `report`. When a run ends with an error
+(`timeout`, `max_cost`, `max_turns`, `sdk_error`, `node_closed`) or the session closes, each such agent gets one inbox
+message from the node: the node address, the code (`session_closed` for a close) and the end time. This clears the item
+"waiting for". The message is a report. A send to an agent removes it from the list. A send also gives the event `sent` with `to` and the full text. The Agents tab shows it as a card on the right: the receiver, the time and the first 3 lines.
 The tab has a badge with the count of the received messages that came while the tab was not shown (`99+` above 99). Opening the tab clears it.
 
 ## Control messages

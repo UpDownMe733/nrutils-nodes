@@ -10,6 +10,8 @@
 //                   Then the agent gives a model response and the result "subagent done"
 //   shelljob        the same, with a background shell job. The results are "the shelljob works" and "shelljob done"
 //   maxturns        ends with the error result error_max_turns
+//   maxcost         ends with the error result error_max_budget_usd
+//   sdkfail         ends with the error result error_during_execution
 //   wait            gives no result: the run waits until somebody stops it
 //   slowdone        gives the result after one second
 //   twoturns        gives a second model response after half a second, and the result half a second later
@@ -110,7 +112,8 @@ async function answer(prompt) {
     if (prompt.split(' ')[0] === 'nologin') return noLogin();
     if (prompt.split(' ')[0] === 'silent') return write({ type: 'system', subtype: 'init', session_id: 'other-session', model });
     write({ type: 'system', subtype: 'init', session_id: sessionId, model });
-    const word = prompt.split(' ')[0];
+    // The text of an inbox message follows the label line
+    const word = (prompt.startsWith('Message from agent') ? prompt.split('\n').slice(1).join('\n') : prompt).split(' ')[0];
     if (prompt.startsWith('The session ends.')) {
         reply('I write the note.');
         return result(fs.existsSync('close-answer.txt') ? fs.readFileSync('close-answer.txt', 'utf8') : 'The note of the fake.');
@@ -135,6 +138,8 @@ async function answer(prompt) {
         return result(word + ' done');
     }
     if (word === 'maxturns') return result('', 'error_max_turns');
+    if (word === 'maxcost') return result('', 'error_max_budget_usd');
+    if (word === 'sdkfail') return result('', 'error_during_execution');
     if (word === 'big') return result('done');
     if (word === 'send' || word === 'report') {
         const [, to, ...text] = prompt.split(' ');

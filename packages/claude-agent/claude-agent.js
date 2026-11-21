@@ -149,6 +149,7 @@ const registerNode = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, n
     let lifeTimer = null;
     let keepAlives = 0;
     let context = 0;            // input tokens of the last model response of the main agent
+    const askers = new Set(); // the addresses of the agents that wait for an answer from the node
     const openItems = new Set(); // the addresses of the agents that the node waits for an answer from
     // The MQTT inbox: team = the label of the tab, name = the node name
     const broker = config.broker ? RED.nodes.getNode(config.broker) : null;
@@ -311,6 +312,20 @@ const registerNode = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, n
         });
     }
 
+    function publishTo(target, payload) {
+        return new Promise((resolve, reject) => broker.publish({ topic: inboxTopic(target), payload, qos: 1 }, (err) => (err ? reject(err) : resolve())));
+    }
+
+    // The run or the session ended with no answer: tell each agent that waits for one. The message is a report, so it opens no item.
+    function notifyAskers(code) {
+        if (!broker || !broker.connected) return askers.clear();
+        const text = `${address} ended with no answer: ${code}, at ${new Date().toISOString()}.`;
+        for (const target of [...askers]) {
+            publishTo(target, { from: address, text, report: true }).catch((err) => node.warn(`no end message to ${target}: ${err.message}`));
+        }
+        askers.clear();
+    }
+
     function sendTool(sdk, run) {
         const description = 'Send a text to the inbox of another agent. ' +
             'to is "name" for an agent of your team, or "team/name". An answer comes as a new message to you. ' +
@@ -321,8 +336,8 @@ const registerNode = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, n
             if (parts.length > 2) return error('to must be "name" or "team/name".');
             const target = parts.length === 1 ? `${address.split('/')[0]}/${clean(to)}` : parts.map(clean).join('/');
             if (!broker.connected) return error('the node has no connection to the MQTT broker. The message was not sent.');
-            await new Promise((resolve, reject) => broker.publish({ topic: inboxTopic(target), payload: { from: address, text }, qos: 1 },
-                (err) => (err ? reject(err) : resolve())));
+            await publishTo(target, report ? { from: address, text, report: true } : { from: address, text });
+            askers.delete(target);
             event(run, 'sent', text, { to: target });
             if (!report) {
                 openItems.add(target);
@@ -434,6 +449,7 @@ const registerNode = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, n
         if (run.ended) return;
         if (run.life === 'close') storeNote(run, payload);
         end(run);
+        if (run.life === 'close') notifyAskers('session_closed');
         const tokens = tokenText(run.tokens);
         event(run, 'result', `done, ${turnText(run.turns)}, ${tokens}, context ${sizeText(run.context)}`, { turns: run.turns, tokens, tokenCount: run.tokens || 0, weightedCount: run.weighted || 0, costUsd: run.cost || 0 });
         // Each input message of the run gets one output
@@ -452,6 +468,7 @@ const registerNode = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, n
 
     function fail(run, err) {
         if (!end(run)) return;
+        notifyAskers(err.reason || 'sdk_error');
         event(run, 'error', err.message, { reason: err.reason || 'sdk_error', tokenCount: run.tokens || 0, weightedCount: run.weighted || 0, costUsd: run.cost || 0 });
         for (const { msg, done } of run.jobs) {
             msg.agent = { runId: run.id, sessionId: run.sessionId, tokens: run.tokens, weighted: run.weighted || 0, reason: err.reason || 'sdk_error' };
@@ -660,6 +677,7 @@ const registerNode = NodeRedNodeBase.createNode('claude-agent', [nodeRedPopup, n
             return node.warn(`the inbox message is not the JSON { "from", "text" }: ${cut(payload.toString())}`);
         }
         openItems.delete(m.from);
+        if (!m.report) askers.add(m.from);
         enqueue({ _msgid: RED.util.generateId(), payload: m.text }, `${INBOX_LABEL(m.from)}\n${m.text}`, m.from, m.text);
     }
 
