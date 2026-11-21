@@ -105,7 +105,7 @@ function makeFlow(workRoot, mqttPort, deadPort) {
         inject('i-busy-stop', '', 'busy', { agent: ['{"cmd":"stop"}', 'json'] }),
         ...agentWithInjects('sender', ['send peer hello', 'send Team+B/peer again'], { broker: 'broker' }),
         ...agentWithInjects('reporter', ['report peer final'], { broker: 'broker' }),
-        ...['timeout', 'turns', 'cost', 'sdk', 'close'].flatMap((k) => agentWithInjects('v' + k, [], { broker: 'broker', ...(k === 'timeout' && { timeoutMin: 0.01 }) })),
+        ...['timeout', 'turns', 'cost', 'sdk', 'close', 'quiet'].flatMap((k) => agentWithInjects('v' + k, [], { broker: 'broker', ...(k === 'timeout' && { timeoutMin: 0.01 }) })),
         ...agentWithInjects('offline', ['send peer hello'], { broker: 'deadbroker' }),
         agent('', [[], [], []], { id: 'noname', broker: 'broker' }),
         // The message mode with an inbox
@@ -449,9 +449,9 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
             fs.rmSync(sessionPath('vclose'), { force: true });
         });
         it('a report sender gets no end message', async () => {
-            await ask('vturns', 'maxturns', { report: true });
-            await waitFor(async () => eventsOf('vturns').filter((e) => e.kind === 'error').length >= 2, 10000, 'the second error');
-            assert.equal(told('vturns').length, 1);
+            await ask('vquiet', 'maxturns', { report: true });
+            await waitFor(async () => eventsOf('vquiet').some((e) => e.kind === 'error'), 10000, 'the error');
+            assert.equal(told('vquiet').length, 0);
         });
     });
 
@@ -515,6 +515,7 @@ describe('the agent life cycle in a real Node-RED', { timeout: 90000 }, () => {
     });
 
     it('Node-RED logged no error', () => {
-        assert.doesNotMatch(log, /\[error\]/);
+        // The errors of the runs in 'an end with no answer' are expected
+        assert.doesNotMatch(log, /\[error\] \[claude-agent:(?!V)/);
     });
 });
